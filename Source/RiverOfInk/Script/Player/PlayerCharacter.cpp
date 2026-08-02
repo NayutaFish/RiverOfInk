@@ -15,8 +15,16 @@
 #include "EnhancedInputComponent.h"
 #include "Common/StateBase.h"
 #include "Player/PlayerState/PlayerState_Idle.h"
+#include "Player/PlayerState/PlayerState_Move.h"
+#include "Player/PlayerState/PlayerState_Attack1.h"
+#include "Player/PlayerState/PlayerState_Attack2.h"
+#include "Player/PlayerState/PlayerState_Dash.h"
+#include "Player/PlayerState/PlayerState_Skill1.h"
+#include "Player/PlayerState/PlayerState_Skill2.h"
 #include "UI/PlayerHealthWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -37,6 +45,35 @@ APlayerCharacter::APlayerCharacter()
 
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
+
+	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
+	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
+	CreateDefaultSubobject<UPlayerState_Idle>(TEXT("PlayerState_Idle"));
+	CreateDefaultSubobject<UPlayerState_Move>(TEXT("PlayerState_Move"));
+	CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1"));
+	CreateDefaultSubobject<UPlayerState_Attack2>(TEXT("PlayerState_Attack2"));
+	CreateDefaultSubobject<UPlayerState_Dash>(TEXT("PlayerState_Dash"));
+	CreateDefaultSubobject<UPlayerState_Skill1>(TEXT("PlayerState_Skill1"));
+	CreateDefaultSubobject<UPlayerState_Skill2>(TEXT("PlayerState_Skill2"));
+
+	// ── 模型与动画（纯 C++ 直接引用资产，不依赖蓝图）──
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		static ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshAsset(TEXT("/Game/RawContent/Character/Player/Mesh/SK_Hikari.SK_Hikari"));
+		if (MeshAsset.Succeeded())
+		{
+			MeshComp->SetSkeletalMeshAsset(MeshAsset.Object);
+		}
+
+		static ConstructorHelpers::FClassFinder<UAnimInstance> AnimBPAsset(TEXT("/Game/RawContent/Character/Player/AnimBP/ABP_Hikari.ABP_Hikari_C"));
+		if (AnimBPAsset.Succeeded())
+		{
+			MeshComp->SetAnimInstanceClass(AnimBPAsset.Class);
+		}
+
+		// 动画网格不参与碰撞（由胶囊体负责）
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 }
 
 void APlayerCharacter::BeginPlay()
