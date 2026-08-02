@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
+using System.IO;
 
 public class RiverOfInk : ModuleRules
 {
@@ -8,9 +9,12 @@ public class RiverOfInk : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
+
+		PublicIncludePaths.Add(ModuleDirectory);
+		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "Script"));
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
