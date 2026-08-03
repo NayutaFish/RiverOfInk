@@ -17,25 +17,25 @@ UPlayerInputComponent::UPlayerInputComponent()
 
 	// Input actions and key mappings are content assets. C++ only binds them.
 	static ConstructorHelpers::FObjectFinder<UInputAction> MoveXAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_MoveX.IA_Player_MoveX"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_MoveX.IA_Player_MoveX"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> MoveYAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_MoveY.IA_Player_MoveY"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_MoveY.IA_Player_MoveY"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> SprintAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Sprint.IA_Player_Sprint"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Sprint.IA_Player_Sprint"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> AttackAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Attack.IA_Player_Attack"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Attack.IA_Player_Attack"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> SecondaryAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Secondary.IA_Player_Secondary"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Secondary.IA_Player_Secondary"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> DashAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Dash.IA_Player_Dash"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Dash.IA_Player_Dash"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> Skill1Asset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill1.IA_Player_Skill1"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill1.IA_Player_Skill1"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> Skill2Asset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill2.IA_Player_Skill2"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill2.IA_Player_Skill2"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> Skill3Asset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill3.IA_Player_Skill3"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill3.IA_Player_Skill3"));
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> MappingContextAsset(
-		TEXT("/Game/Buleprint/GameSystem/Input/IMC_Player.IMC_Player"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IMC_Player.IMC_Player"));
 
 	MoveXAction = MoveXAsset.Object;
 	MoveYAction = MoveYAsset.Object;
@@ -61,25 +61,25 @@ void UPlayerInputComponent::LoadInputAssets()
 	// Re-apply the canonical assets at runtime so old BP_Hikari overrides cannot
 	// reintroduce the legacy IMC_Hikari context.
 	MoveXAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_MoveX.IA_Player_MoveX"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_MoveX.IA_Player_MoveX"));
 	MoveYAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_MoveY.IA_Player_MoveY"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_MoveY.IA_Player_MoveY"));
 	ShiftAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Sprint.IA_Player_Sprint"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Sprint.IA_Player_Sprint"));
 	LmbAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Attack.IA_Player_Attack"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Attack.IA_Player_Attack"));
 	RmbAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Secondary.IA_Player_Secondary"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Secondary.IA_Player_Secondary"));
 	SpaceAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Dash.IA_Player_Dash"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Dash.IA_Player_Dash"));
 	QAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill1.IA_Player_Skill1"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill1.IA_Player_Skill1"));
 	EAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill2.IA_Player_Skill2"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill2.IA_Player_Skill2"));
 	FAction = LoadObject<UInputAction>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IA_Player_Skill3.IA_Player_Skill3"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IA_Player_Skill3.IA_Player_Skill3"));
 	DefaultMappingContext = LoadObject<UInputMappingContext>(nullptr,
-		TEXT("/Game/Buleprint/GameSystem/Input/IMC_Player.IMC_Player"));
+		TEXT("/Game/Blueprint/GameSystem/Input/IMC_Player.IMC_Player"));
 	UE_LOG(LogRiverOfInk, Log, TEXT("Player input assets loaded: Context=%s MoveX=%s MoveY=%s."),
 		*GetNameSafe(DefaultMappingContext), *GetNameSafe(MoveXAction), *GetNameSafe(MoveYAction));
 }
@@ -111,7 +111,7 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 			LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			if (UInputMappingContext* LegacyContext = LoadObject<UInputMappingContext>(nullptr,
-				TEXT("/Game/Buleprint/GameSystem/Input/IMC_Hikari.IMC_Hikari")))
+				TEXT("/Game/Blueprint/GameSystem/Input/IMC_Hikari.IMC_Hikari")))
 			{
 				Subsystem->RemoveMappingContext(LegacyContext);
 			}

@@ -71,6 +71,9 @@ APlayerCharacter::APlayerCharacter()
 			MeshComp->SetAnimInstanceClass(AnimBPAsset.Class);
 		}
 
+		// 模型正面默认朝 +Y，旋转 -90 度使其对齐角色 +X（移动方向），随 bOrientRotationToMovement 转向
+		MeshComp->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
+
 		// 动画网格不参与碰撞（由胶囊体负责）
 		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}

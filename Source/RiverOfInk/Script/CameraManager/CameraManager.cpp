@@ -11,12 +11,16 @@ ACameraManager::ACameraManager()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
 
-	// ── 创建弹簧臂（Camera Boom），效果同旧项目 ──
+	// ── 显式根组件，避免引擎自动挑选场景组件作为根 ──
+	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	RootComponent = Root;
+
+	// ── 创建弹簧弓（Camera Boom），效果同旧项目 ──
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->SetUsingAbsoluteRotation(true);   // 弹簧臂自身不旋转（固定俯视角）
+	CameraBoom->SetUsingAbsoluteRotation(true);   // 弹簧臂自身保持固定旋转（俯视角）
 	CameraBoom->TargetArmLength = 800.f;          // 相机距离目标 800 单位
-	CameraBoom->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f)); // 俯视 60 度
+	CameraBoom->SetRelativeRotation(FRotator(-60.f, 45.f, 0.f)); // 俯视 60 度 + Yaw 45 度对齐 WASD 移动方向
 	CameraBoom->bDoCollisionTest = false;
 
 	// ── 创建摄像机 ──
