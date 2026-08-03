@@ -5,11 +5,22 @@
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
 #include "Engine/World.h"
+#include "UObject/ConstructorHelpers.h"
 
 ARiverOfInkGameMode::ARiverOfInkGameMode()
 {
-	// 纯 C++ 方案：直接使用 C++ 玩家类，不依赖任何蓝图
-	DefaultPawnClass = APlayerCharacter::StaticClass();
+	// 使用玩家蓝图（支持在蓝图 Class Defaults 中配置 MaxHealth 等参数）
+	static ConstructorHelpers::FClassFinder<APlayerCharacter> PlayerBlueprintAsset(
+		TEXT("/Game/Blueprint/GamePlay/Player/BP_PlayerCharacter.BP_PlayerCharacter_C"));
+	if (PlayerBlueprintAsset.Succeeded())
+	{
+		DefaultPawnClass = PlayerBlueprintAsset.Class;
+	}
+	else
+	{
+		// 蓝图缺失时回退到纯 C++ 类
+		DefaultPawnClass = APlayerCharacter::StaticClass();
+	}
 	// 自带的 PlayerController：鼠标全程显示
 	PlayerControllerClass = ARiverOfInkPlayerController::StaticClass();
 }

@@ -20,7 +20,7 @@ ARoguelikeRewardManager::ARoguelikeRewardManager()
 
 	// 关卡实例未手动赋值时，使用项目约定的奖励控件作为安全回退。
 	static ConstructorHelpers::FClassFinder<URoguelikeRewardWidget> RewardWidgetAsset(
-		TEXT("/Game/_Project/Blueprint/RogueLike/WBP_RoguelikeReward"));
+		TEXT("/Game/Blueprint/GameSystem/GameMode/Roguelike/WBP_RoguelikeReward"));
 	if (RewardWidgetAsset.Succeeded())
 	{
 		RewardWidgetClass = RewardWidgetAsset.Class;

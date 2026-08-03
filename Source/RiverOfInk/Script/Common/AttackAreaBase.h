@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "Core/GlobalStructs.h"
 #include "AttackAreaBase.generated.h"
+
+class APlayerCharacter;
 
 UENUM()
 enum class EAttackAreaDisappearReason : uint8
@@ -24,9 +26,9 @@ class RIVEROFINK_API AAttackAreaBase : public AActor
 public:
 	AAttackAreaBase();
 
-	/** 可视化根组件（不参与碰撞，检测全部走射线，无需配置任何碰撞通道） */
+	/** 碰撞根组件：命中检测全部走 Overlap，无需额外配置碰撞通道 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UBoxComponent> CollisionBox;
+	TObjectPtr<USphereComponent> CollisionSphere;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	float LifeTime = 1.0f;
@@ -34,9 +36,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	float Speed = 0.0f;
 
-	/** 射线检测最小距离：近战的基础检测范围；远程取每帧位移与它的较大值（避免高速漏检） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "1.0"))
-	float MinDetectRange = 100.0f;
+	/** 碰撞半径（近战的范围 / 子弹的体积） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "5.0"))
+	float Radius = 50.0f;
 
 	/** 伤害信息（编辑器手动赋值，Attacker 由代码填充为施放者） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
@@ -52,7 +54,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Filter")
 	bool bDetectObstacle = false;
 
-	/** 是否为近战攻击？true=伤害后不销毁，等 LifeTime 结束 */
+	/** 是否为近战攻击？true=伤害后不销毁，等 LifeTime 结束（持续与目标重叠不重复结算） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	bool bIsMeleeAttack = false;
 
@@ -74,11 +76,15 @@ protected:
 	bool IsValidTarget(AActor* Target);
 	virtual bool IsValidTarget_Implementation(AActor* Target);
 
+	UFUNCTION()
+	void OnCollisionOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
 private:
 	float ElapsedTime = 0.0f;
 
-	/** 每帧沿正方向发射射线，命中玩家/敌人且符合过滤条件时结算伤害 */
-	void PerformTargetScan(float DeltaTime);
+	/** 障碍物检测（射线，只查 WorldStatic，不依赖碰撞通道） */
+	void PerformObstacleScan(float DeltaTime);
 
 	/** 跟随的目标（非空则每帧同步位置） */
 	UPROPERTY()

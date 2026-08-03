@@ -11,17 +11,25 @@ AAttackAreaBase::AAttackAreaBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// 纯可视化根组件：不参与任何碰撞，检测全部走射线，无需配置碰撞通道
-	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
-	RootComponent = CollisionBox;
-	CollisionBox->SetBoxExtent(FVector(50.0f, 50.0f, 50.0f));
-	CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// 碰撞根组件：Overlap 检测命中，无需额外配置碰撞通道
+	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
+	RootComponent = CollisionSphere;
+	CollisionSphere->SetSphereRadius(Radius);
+	CollisionSphere->SetGenerateOverlapEvents(true);
+	CollisionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionSphere->SetCollisionObjectType(ECC_GameTraceChannel1);    // DamageArea
+	// 只与玩家/敌人胶囊体（Channel 2 / 3）Overlap，其余忽略
+	CollisionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Overlap);    // EnemyHitbox
+	CollisionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);    // PlayerHitbox
+	CollisionSphere->OnComponentBeginOverlap.AddDynamic(this, &AAttackAreaBase::OnCollisionOverlap);
 }
 
 void AAttackAreaBase::BeginPlay()
 {
 	Super::BeginPlay();
 	ElapsedTime = 0.0f;
+	CollisionSphere->SetSphereRadius(Radius);
 }
 
 void AAttackAreaBase::Tick(float DeltaTime)
@@ -31,27 +39,25 @@ void AAttackAreaBase::Tick(float DeltaTime)
 	// 障碍物检测（射线扫描前方，不依赖碰撞系统）
 	if (bDetectObstacle && Speed > 0.0f)
 	{
-		FHitResult Hit;
-		FVector Start = GetActorLocation();
-		FVector End = Start + GetActorForwardVector() * Speed * DeltaTime * 2.0f;
-
-		// 只检测 WorldStatic 对象，忽略 Character/Pawn
-		FCollisionObjectQueryParams ObjParams;
-		ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
-
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(this);
-		QueryParams.AddIgnoredActor(GetOwner());
-
-		if (GetWorld()->LineTraceSingleByObjectType(Hit, Start, End, ObjParams, QueryParams))
-		{
-			Disappear(EAttackAreaDisappearReason::HitObstacle);
-			return;
-		}
+		PerformObstacleScan(DeltaTime);
 	}
 
-	// 目标检测：每帧沿正方向发射一小段射线
-	PerformTargetScan(DeltaTime);
+	// 近战：持续检查重叠范围内是否仍有未结算目标（不会漏掉生成时已在范围内的目标）
+	if (bIsMeleeAttack)
+	{
+		TArray<AActor*> Overlapping;
+		CollisionSphere->GetOverlappingActors(Overlapping);
+		for (AActor* Other : Overlapping)
+		{
+			if (!IsValid(Other) || HitActors.Contains(Other) || !IsValidTarget(Other))
+			{
+				continue;
+			}
+
+			HitActors.Add(Other);
+			ApplyDamage(Other);
+		}
+	}
 
 	ElapsedTime += DeltaTime;
 	if (ElapsedTime >= LifeTime)
@@ -72,47 +78,42 @@ void AAttackAreaBase::Tick(float DeltaTime)
 	}
 }
 
-void AAttackAreaBase::PerformTargetScan(float DeltaTime)
+void AAttackAreaBase::OnCollisionOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// 检测距离：至少覆盖本帧位移（高速子弹不漏检），近战用 MinDetectRange 保证基础范围
-	float ScanDistance = FMath::Max(Speed * DeltaTime, MinDetectRange);
-	if (ScanDistance <= KINDA_SMALL_NUMBER)
+	// 远程攻击（子弹）：首次撞到目标或障碍即结算并销毁
+	if (bIsMeleeAttack)
 	{
 		return;
 	}
 
+	if (!IsValid(OtherActor) || HitActors.Contains(OtherActor) || !IsValidTarget(OtherActor))
+	{
+		return;
+	}
+
+	HitActors.Add(OtherActor);
+	ApplyDamage(OtherActor);
+	Disappear(EAttackAreaDisappearReason::HitEnemy);
+}
+
+void AAttackAreaBase::PerformObstacleScan(float DeltaTime)
+{
+	FHitResult Hit;
 	FVector Start = GetActorLocation();
-	FVector End = Start + GetActorForwardVector() * ScanDistance;
+	FVector End = Start + GetActorForwardVector() * Speed * DeltaTime * 2.0f;
+
+	// 只检测 WorldStatic 对象，忽略 Character/Pawn
+	FCollisionObjectQueryParams ObjParams;
+	ObjParams.AddObjectTypesToQuery(ECC_WorldStatic);
 
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 	QueryParams.AddIgnoredActor(GetOwner());
-	QueryParams.bReturnPhysicalMaterial = false;
 
-	// 引擎内置 Pawn 通道即可命中玩家/敌人胶囊体，无需任何自定义碰撞配置
-	FHitResult Hit;
-	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Pawn, QueryParams))
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, Start, End, ObjParams, QueryParams))
 	{
-		return;
-	}
-
-	AActor* HitActor = Hit.GetActor();
-	if (!IsValid(HitActor) || HitActors.Contains(HitActor) || !IsValidTarget(HitActor))
-	{
-		return;
-	}
-
-	// 同一目标只结算一次伤害（近战攻击生命期内会持续扫描）
-	HitActors.Add(HitActor);
-
-	ApplyDamage(HitActor);
-
-	// 远程攻击（子弹/射弹）打到目标后立即销毁
-	// 近战攻击不销毁，等 LifeTime 自然结束
-	if (!bIsMeleeAttack)
-	{
-		UE_LOG(LogRiverOfInk, Log, TEXT("AttackArea: Hit enemy"));
-		Disappear(EAttackAreaDisappearReason::HitEnemy);
+		Disappear(EAttackAreaDisappearReason::HitObstacle);
 	}
 }
 
