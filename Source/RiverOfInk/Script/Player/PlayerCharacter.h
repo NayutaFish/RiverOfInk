@@ -182,23 +182,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	bool bCanDash = true;
 
-	/** 冲刺冷却：设置 bCanDash=false，time 秒后恢复 true */
+	/** 冲刺冷却：设置 bCanDash=false，固定 0.3 秒后恢复 true */
 	UFUNCTION(BlueprintCallable, Category = "State")
-	void StartDashCooldown(float Time);
+	void StartDashCooldown();
 
 	/** 是否可以进行普通攻击 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	bool bCanAttack1 = true;
 
-	/** Attack1 冷却：设置 bCanAttack1=false，time 秒后恢复 true */
+	/** Attack1 冷却：设置 bCanAttack1=false，固定 0.3 秒后恢复 true */
 	UFUNCTION(BlueprintCallable, Category = "State")
-	void StartAttack1Cooldown(float Time);
+	void StartAttack1Cooldown();
 
 	/** 是否可以进行 Attack2 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	bool bCanAttack2 = true;
 
-	/** Attack2 冷却：设置 bCanAttack2=false，time 秒后恢复 true */
+	/** Attack2 冷却：设置 bCanAttack2=false，固定 0.3 秒后恢复 true */
 	UFUNCTION(BlueprintCallable, Category = "State")
-	void StartAttack2Cooldown(float Time);
+	void StartAttack2Cooldown();
 };

@@ -62,7 +62,7 @@ void UPlayerState_Dash::OnExit_Implementation()
 	Player->bIsDashing = false;
 
 	// 冲刺冷却
-	Player->StartDashCooldown(0.3f);
+	Player->StartDashCooldown();
 
 	// 恢复朝向跟随移动
 	Player->GetCharacterMovement()->bOrientRotationToMovement = true;

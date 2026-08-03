@@ -391,32 +391,32 @@ void APlayerCharacter::Die()
 	Destroy();
 }
 
-void APlayerCharacter::StartDashCooldown(float Time)
+void APlayerCharacter::StartDashCooldown()
 {
 	bCanDash = false;
 	FTimerHandle Handle;
 	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		bCanDash = true;
-	}), Time, false);
+	}), 0.6f, false);
 }
 
-void APlayerCharacter::StartAttack1Cooldown(float Time)
+void APlayerCharacter::StartAttack1Cooldown()
 {
 	bCanAttack1 = false;
 	FTimerHandle Handle;
 	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		bCanAttack1 = true;
-	}), Time, false);
+	}), 0.3f, false);
 }
 
-void APlayerCharacter::StartAttack2Cooldown(float Time)
+void APlayerCharacter::StartAttack2Cooldown()
 {
 	bCanAttack2 = false;
 	FTimerHandle Handle;
 	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		bCanAttack2 = true;
-	}), Time, false);
+	}), 0.3f, false);
 }

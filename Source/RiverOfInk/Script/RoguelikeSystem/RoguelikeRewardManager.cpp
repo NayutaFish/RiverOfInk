@@ -270,6 +270,7 @@ void ARoguelikeRewardManager::CloseRewardUI()
 	{
 		FInputModeGameOnly InputMode;
 		PlayerController->SetInputMode(InputMode);
+		PlayerController->SetShowMouseCursor(false);
 		PlayerController->SetIgnoreMoveInput(false);
 		PlayerController->SetIgnoreLookInput(false);
 	}

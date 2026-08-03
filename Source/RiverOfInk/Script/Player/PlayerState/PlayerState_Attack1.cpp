@@ -92,7 +92,12 @@ void UPlayerState_Attack1::OnExit_Implementation()
 	}
 
 	// 退出攻击状态时启动攻击冷却
-	Player->StartAttack1Cooldown(0.3f);
+	Player->StartAttack1Cooldown();
+
+	// 清零移动输入记忆，避免下次进入攻击状态残留旧方向产生速度
+	bHadMoveInput = false;
+	MoveInputX = 0.0f;
+	MoveInputY = 0.0f;
 }
 
 void UPlayerState_Attack1::OnMoveX(float Value)
