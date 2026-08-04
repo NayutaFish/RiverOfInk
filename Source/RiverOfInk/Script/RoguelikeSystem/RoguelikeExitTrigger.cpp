@@ -16,7 +16,9 @@ ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 	TriggerBox->SetBoxExtent(FVector(220.0f, 220.0f, 120.0f));
 	TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-	TriggerBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	// PlayerCharacter uses the project's long-term PlayerHitbox channel.
+	// Keep this explicit instead of relying on the built-in Pawn channel.
+	TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
 	TriggerBox->SetGenerateOverlapEvents(true);
 	TriggerBox->ShapeColor = FColor(40, 220, 90, 180);
 }
@@ -27,6 +29,12 @@ void ARoguelikeExitTrigger::BeginPlay()
 
 	if (TriggerBox)
 	{
+		// Re-assert the project collision contract at runtime. The placed actor or
+		// a derived Blueprint can serialize an older response table over constructor defaults.
+		TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
+		TriggerBox->SetGenerateOverlapEvents(true);
 		TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
 	}
 
