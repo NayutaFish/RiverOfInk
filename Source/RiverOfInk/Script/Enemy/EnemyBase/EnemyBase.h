@@ -66,11 +66,19 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Enemy|State")
 	bool bIsDead = false;
 
+	/** 最近一次直接性伤害的攻击者（供击退等状态读取） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
+	TObjectPtr<AActor> LastAttacker;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Attack")
 	FTimerHandle AttackTimerHandle;
 
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyDeathSignature OnEnemyDeath;
+
+	/** 直接性受击事件（状态类可订阅，如击退） */
+	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
+	FOnTakeDirectDamageSignature OnTakeDirectDamage;
 
 	/** 攻击范围蓝图类（在蓝图中赋值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack")
@@ -141,6 +149,14 @@ public:
 	/** 旋转插值速度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AI", meta = (ClampMin = "0.0"))
 	float ChaseRotationSpeed = 360.0f;
+
+	/** 击退位移速度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AI", meta = (ClampMin = "0.0"))
+	float HitBackSpeed = 600.0f;
+
+	/** 击退持续时间（秒），结束后回到 Chase */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AI", meta = (ClampMin = "0.0", Units = "s"))
+	float HitBackDuration = 0.2f;
 
 	/** 缓存的玩家引用 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|AI")

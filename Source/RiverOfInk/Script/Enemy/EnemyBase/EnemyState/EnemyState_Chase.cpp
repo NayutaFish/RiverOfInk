@@ -2,6 +2,7 @@
 
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Attack.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -19,6 +20,9 @@ void UEnemyState_Chase::OnEnter_Implementation()
 	if (!Enemy) return;
 
 	bShouldMove = true;
+
+	// 订阅直接性受击事件，受击时切 HitBack
+	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Chase::OnTakeDirectDamage);
 
 	// 每 0.2s 检测一次距离，决定是否该移动
 	GetWorld()->GetTimerManager().SetTimer(ChaseTimerHandle, this,
@@ -39,8 +43,19 @@ void UEnemyState_Chase::OnExit_Implementation()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy) return;
 
+	// 取消订阅
+	Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Chase::OnTakeDirectDamage);
+
 	GetWorld()->GetTimerManager().ClearTimer(ChaseTimerHandle);
 	GetWorld()->GetTimerManager().ClearTimer(Enemy->AttackTimerHandle);
+}
+
+void UEnemyState_Chase::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+{
+	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
+	if (!Enemy || Enemy->bIsDead) return;
+
+	Enemy->SwitchState(UEnemyState_HitBack::StaticClass());
 }
 
 void UEnemyState_Chase::Update_Implementation(float DeltaTime)

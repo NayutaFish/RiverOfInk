@@ -11,6 +11,7 @@
 #include "Engine/World.h"
 #include "RiverOfInk.h"
 #include "TimerManager.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 
 AEnemyBase::AEnemyBase()
 {
@@ -38,6 +39,9 @@ void AEnemyBase::BeginPlay()
 
 	CurrentHealth = MaxHealth;
 	bIsDead = false;
+
+	// 显式进入初始 Idle 状态（敌人蓝图需挂载 EnemyState_Idle 组件）
+	SwitchState(UEnemyState_Idle::StaticClass());
 }
 
 void AEnemyBase::Tick(float DeltaTime)
@@ -75,6 +79,13 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo)
 	if (bIsDead || InInfo.DamageValue <= 0.0f)
 	{
 		return;
+	}
+
+	// 直接性伤害通报（供状态类订阅，如击退）
+	if (InInfo.bIsDirectDamage)
+	{
+		LastAttacker = InInfo.Attacker;
+		OnTakeDirectDamage.Broadcast(InInfo);
 	}
 
 	// 按伤害类型计算最终伤害（真实/必中伤害不减免）

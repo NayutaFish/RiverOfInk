@@ -153,8 +153,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|State")
 	bool bIsDead = false;
 
+	/** 最近一次直接性伤害的攻击者（供击退等状态读取） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|State")
+	TObjectPtr<AActor> LastAttacker;
+
 	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
 	FOnPlayerDeathSignature OnPlayerDeath;
+
+	/** 直接性受击事件（状态类可订阅，如击退） */
+	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
+	FOnTakeDirectDamageSignature OnTakeDirectDamage;
 
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void TakeDamage(const FTakeDamageInfo& InInfo);
@@ -175,8 +183,20 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	bool bIsDashing = false;
 
+	/** 击退位移速度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player|State", meta = (ClampMin = "0.0"))
+	float HitBackSpeed = 600.0f;
+
+	/** 击退持续时间（秒），结束后回到 Idle */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player|State", meta = (ClampMin = "0.0", Units = "s"))
+	float HitBackDuration = 0.2f;
+
 	UFUNCTION(BlueprintPure, Category = "State")
 	bool IsDashing() const { return bIsDashing; }
+
+	/** 是否处于直接性伤害无敌状态 */
+	UFUNCTION(BlueprintPure, Category = "State")
+	bool IsInvincible() const { return bIsInDirectDamageInvincible; }
 
 	/** 是否可以冲刺 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
@@ -201,4 +221,11 @@ public:
 	/** Attack2 冷却：设置 bCanAttack2=false，固定 0.3 秒后恢复 true */
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void StartAttack2Cooldown();
+
+private:
+	/** 受直接性伤害后的短暂无敌（0.5 秒），期间免疫直接性伤害 */
+	bool bIsInDirectDamageInvincible = false;
+
+	/** 直接性伤害无敌计时器 */
+	FTimerHandle InvincibleTimerHandle;
 };

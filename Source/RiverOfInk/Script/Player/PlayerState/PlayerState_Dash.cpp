@@ -47,8 +47,6 @@ void UPlayerState_Dash::OnEnter_Implementation()
 			Player->SwitchState(UPlayerState_Idle::StaticClass());
 		}
 	}), 0.12f, false);
-
-	UE_LOG(LogRiverOfInk, Log, TEXT("State: Dash"));
 }
 
 void UPlayerState_Dash::OnExit_Implementation()

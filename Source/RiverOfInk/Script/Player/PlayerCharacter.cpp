@@ -19,6 +19,7 @@
 #include "Player/PlayerState/PlayerState_Attack1.h"
 #include "Player/PlayerState/PlayerState_Attack2.h"
 #include "Player/PlayerState/PlayerState_Dash.h"
+#include "Player/PlayerState/PlayerState_HitBack.h"
 #include "Player/PlayerState/PlayerState_Skill1.h"
 #include "Player/PlayerState/PlayerState_Skill2.h"
 #include "UI/PlayerHealthWidget.h"
@@ -53,6 +54,7 @@ APlayerCharacter::APlayerCharacter()
 	CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1"));
 	CreateDefaultSubobject<UPlayerState_Attack2>(TEXT("PlayerState_Attack2"));
 	CreateDefaultSubobject<UPlayerState_Dash>(TEXT("PlayerState_Dash"));
+	CreateDefaultSubobject<UPlayerState_HitBack>(TEXT("PlayerState_HitBack"));
 	CreateDefaultSubobject<UPlayerState_Skill1>(TEXT("PlayerState_Skill1"));
 	CreateDefaultSubobject<UPlayerState_Skill2>(TEXT("PlayerState_Skill2"));
 
@@ -336,6 +338,24 @@ void APlayerCharacter::OnAttack()
 void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 {
 	if (bIsDead || InInfo.DamageValue <= 0.0f) return;
+
+	// 直接性伤害无敌：无敌期间直接跳过
+	if (InInfo.bIsDirectDamage && IsInvincible()) return;
+
+	// 直接性伤害通报（供状态类订阅，如击退）
+	if (InInfo.bIsDirectDamage)
+	{
+		LastAttacker = InInfo.Attacker;
+		OnTakeDirectDamage.Broadcast(InInfo);
+
+		// 受直接性伤害后进入 0.5 秒无敌
+		bIsInDirectDamageInvincible = true;
+		GetWorldTimerManager().ClearTimer(InvincibleTimerHandle);
+		GetWorldTimerManager().SetTimer(InvincibleTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			bIsInDirectDamageInvincible = false;
+		}), 0.5f, false);
+	}
 
 	// 按伤害类型计算最终伤害（真实/必中伤害不减免）
 	float FinalDamage = InInfo.DamageValue;

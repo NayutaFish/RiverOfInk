@@ -46,3 +46,6 @@ struct FTakeDamageInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
 	bool bIgnoreInvincible = false;
 };
+
+/** 直接性受击事件委托（玩家/敌人通用，状态类可订阅，如击退） */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTakeDirectDamageSignature, const FTakeDamageInfo&, DamageInfo);

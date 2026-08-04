@@ -2,6 +2,7 @@
 
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Attack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Common/AttackAreaBase.h"
 #include "Engine/World.h"
@@ -18,6 +19,9 @@ void UEnemyState_Attack::OnEnter_Implementation()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy) return;
 
+	// 订阅直接性受击事件，受击时切 HitBack
+	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Attack::OnTakeDirectDamage);
+
 	// 锁定当前朝向，攻击期间不旋转
 	LockedRotation = Enemy->GetActorRotation();
 
@@ -29,6 +33,12 @@ void UEnemyState_Attack::OnExit_Implementation()
 {
 	Super::OnExit_Implementation();
 
+	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
+	if (Enemy)
+	{
+		Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Attack::OnTakeDirectDamage);
+	}
+
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(AttackDelayHandle);
@@ -36,6 +46,13 @@ void UEnemyState_Attack::OnExit_Implementation()
 	}
 }
 
+void UEnemyState_Attack::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+{
+	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
+	if (!Enemy || Enemy->bIsDead) return;
+
+	Enemy->SwitchState(UEnemyState_HitBack::StaticClass());
+}
 void UEnemyState_Attack::ExecuteAttack()
 {
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());

@@ -66,8 +66,6 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 	// 0.3s 后检测是否需要切换状态
 	bHadMoveInput = false;
 	GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &UPlayerState_Attack2::OnAttackTimer, 0.3f, false);
-
-	UE_LOG(LogRiverOfInk, Log, TEXT("State: Attack2"));
 }
 
 void UPlayerState_Attack2::OnExit_Implementation()

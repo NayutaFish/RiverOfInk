@@ -55,8 +55,6 @@ void UPlayerState_Skill1::OnEnter_Implementation()
 	// 0.3s 后检测退出
 	bHadMoveInput = false;
 	GetWorld()->GetTimerManager().SetTimer(SkillTimerHandle, this, &UPlayerState_Skill1::OnSkillTimer, 0.3f, false);
-
-	UE_LOG(LogRiverOfInk, Log, TEXT("State: Skill1"));
 }
 
 void UPlayerState_Skill1::OnExit_Implementation()

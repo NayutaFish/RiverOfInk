@@ -5,6 +5,7 @@
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Player/PlayerState/PlayerState_Attack1.h"
 #include "Player/PlayerState/PlayerState_Attack2.h"
+#include "Player/PlayerState/PlayerState_HitBack.h"
 #include "Player/PlayerState/PlayerState_Skill1.h"
 #include "Input/PlayerInputComponent.h"
 #include "Player/PlayerCharacter.h"
@@ -18,6 +19,9 @@ void UPlayerState_Idle::OnEnter_Implementation()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
+	// 订阅直接性受击事件，受击时切 HitBack
+	Player->OnTakeDirectDamage.AddDynamic(this, &UPlayerState_Idle::OnTakeDirectDamage);
+
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (!Input) return;
 
@@ -26,8 +30,6 @@ void UPlayerState_Idle::OnEnter_Implementation()
 	Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Idle::OnLmb);
 	Input->OnRmbDelegate.AddUObject(this, &UPlayerState_Idle::OnRmb);
 	Input->OnQDelegate.AddUObject(this, &UPlayerState_Idle::OnQ);
-
-	UE_LOG(LogRiverOfInk, Log, TEXT("State: Idle"));
 }
 
 void UPlayerState_Idle::OnExit_Implementation()
@@ -37,6 +39,9 @@ void UPlayerState_Idle::OnExit_Implementation()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
+	// 取消订阅
+	Player->OnTakeDirectDamage.RemoveDynamic(this, &UPlayerState_Idle::OnTakeDirectDamage);
+
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (!Input) return;
 
@@ -45,6 +50,14 @@ void UPlayerState_Idle::OnExit_Implementation()
 	Input->OnLmbDelegate.RemoveAll(this);
 	Input->OnRmbDelegate.RemoveAll(this);
 	Input->OnQDelegate.RemoveAll(this);
+}
+
+void UPlayerState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || Player->bIsDead) return;
+
+	Player->SwitchState(UPlayerState_HitBack::StaticClass());
 }
 
 void UPlayerState_Idle::OnMoveInput(float Value)
