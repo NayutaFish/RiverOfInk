@@ -3,8 +3,10 @@
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 
 #include "Components/BoxComponent.h"
+#include "Engine/GameInstance.h"
 #include "Player/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
+#include "RoguelikeSystem/RoguelikeLevelFlowSubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 
 ARoguelikeExitTrigger::ARoguelikeExitTrigger()
@@ -38,7 +40,20 @@ void ARoguelikeExitTrigger::BeginPlay()
 		TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
 	}
 
-	if (ResolveRewardManager())
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>()
+		: nullptr;
+	const bool bIsPreparationLevel = LevelFlow
+		&& LevelFlow->GetCurrentMajorLevelId() == URoguelikeLevelFlowSubsystem::PreparationLevelId;
+
+	if (bIsPreparationLevel)
+	{
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Preparation exit does not require a reward manager; Major=%d."),
+			LevelFlow->GetCurrentMajorLevelId());
+	}
+	else if (ResolveRewardManager())
 	{
 		RewardManager->OnRewardApplied.AddDynamic(this, &ARoguelikeExitTrigger::HandleRewardApplied);
 	}
@@ -100,7 +115,7 @@ void ARoguelikeExitTrigger::ActivateExit()
 	}
 
 	bIsActivated = true;
-	UE_LOG(LogRoguelike, Log, TEXT("Roguelike exit activated; level transition is not implemented yet."));
+	UE_LOG(LogRoguelike, Log, TEXT("Roguelike exit activated; waiting for player overlap."));
 
 	// If the player was already standing inside the whitebox volume when the
 	// reward was chosen, no new BeginOverlap event is guaranteed to arrive.
@@ -112,8 +127,7 @@ void ARoguelikeExitTrigger::ActivateExit()
 		{
 			if (APlayerCharacter* Player = Cast<APlayerCharacter>(Actor))
 			{
-				bHasTriggered = true;
-				UE_LOG(LogRoguelike, Log, TEXT("Player was already inside roguelike exit: %s."), *Player->GetName());
+				HandlePlayerEntered(Player);
 				break;
 			}
 		}
@@ -140,6 +154,33 @@ void ARoguelikeExitTrigger::HandleBeginOverlap(
 		return;
 	}
 
+	HandlePlayerEntered(Player);
+}
+
+void ARoguelikeExitTrigger::HandlePlayerEntered(APlayerCharacter* Player)
+{
+	if (bHasTriggered || !IsValid(Player))
+	{
+		return;
+	}
+
 	bHasTriggered = true;
 	UE_LOG(LogRoguelike, Log, TEXT("Player entered roguelike exit: %s."), *Player->GetName());
+
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>()
+		: nullptr;
+	if (!LevelFlow)
+	{
+		UE_LOG(LogRoguelike, Error, TEXT("Exit cannot request level travel: level-flow subsystem is unavailable."));
+		return;
+	}
+
+	if (!LevelFlow->AdvanceToNextLevel())
+	{
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Exit did not transition. Major=%d MinorIndex=%d; outcome/restart remains external."),
+			LevelFlow->GetCurrentMajorLevelId(), LevelFlow->GetCurrentMinorLevelIndex());
+	}
 }

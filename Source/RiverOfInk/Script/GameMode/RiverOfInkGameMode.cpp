@@ -1,9 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "GameMode/RiverOfInkGameMode.h"
+#include "Engine/GameInstance.h"
 #include "GameMode/RiverOfInkPlayerController.h"
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
+#include "RoguelikeSystem/RoguelikeLevelFlowSubsystem.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -28,6 +30,14 @@ ARiverOfInkGameMode::ARiverOfInkGameMode()
 void ARiverOfInkGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>())
+		{
+			LevelFlow->EnsurePreparationExit();
+		}
+	}
 
 	// 生成纯 C++ 相机管理器（玩家生成后由它自动接管并跟随）
 	GetWorld()->SpawnActor<ACameraManager>(ACameraManager::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);

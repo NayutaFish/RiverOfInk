@@ -8,14 +8,15 @@
 #include "RoguelikeExitTrigger.generated.h"
 
 class UBoxComponent;
+class APlayerCharacter;
 class ARoguelikeRewardManager;
 
 /**
  * Whitebox exit trigger for the first post-reward flow slice.
  *
  * The trigger listens for a successfully applied reward, then accepts a player
- * overlap and reports it through LogRoguelike. Level travel is intentionally
- * not owned by this actor yet.
+ * overlap and delegates the actual level travel to the GameInstance-level
+ * level-flow subsystem. This actor does not own the level sequence.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API ARoguelikeExitTrigger : public AActor
@@ -63,4 +64,5 @@ protected:
 
 private:
 	bool ResolveRewardManager();
+	void HandlePlayerEntered(APlayerCharacter* Player);
 };
