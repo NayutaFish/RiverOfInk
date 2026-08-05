@@ -3,6 +3,7 @@
 #include "Common/AttackAreaBase.h"
 #include "RiverOfInk.h"
 #include "Core/GlobalStructs.h"
+#include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -168,6 +169,12 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			GetWorld(), HitSpark, SpawnLocation, SpawnRotation);
+	}
+
+	// 播放命中音效（名称对应 AudioDataAsset 配置，未配置时静默跳过）
+	if (!HitSoundName.IsEmpty())
+	{
+		FAudioManager::Play(HitSoundName);
 	}
 
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))

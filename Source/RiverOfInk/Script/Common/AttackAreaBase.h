@@ -63,6 +63,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
 	TObjectPtr<UNiagaraSystem> HitSpark;
 
+	/** 命中音效名称（对应 AudioDataAsset 配置表中的键名，默认 AttackHit） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
+	FString HitSoundName = TEXT("AttackHit");
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
