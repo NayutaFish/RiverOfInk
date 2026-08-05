@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Player/Skill/PlayerSkillTypes.h"
+#include "RoguelikeSystem/PlayerRuntimeData.h"
 #include "SkillComponent.generated.h"
 
 class AAttackAreaBase;
@@ -51,6 +52,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Skill|Upgrade")
 	void ApplySkillUpgrade(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType);
+
+	/** Copy skill slots and upgrade levels into the aggregate run snapshot. */
+	void CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
+
+	/** Apply skill slots and upgrade levels from the aggregate run snapshot. */
+	void ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Upgrade")
 	FSkillUpgradeState GetSkillUpgradeState(EPlayerSkillID SkillID) const;

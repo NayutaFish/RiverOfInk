@@ -11,7 +11,7 @@
 
 ARiverOfInkGameMode::ARiverOfInkGameMode()
 {
-	// 使用玩家蓝图（支持在蓝图 Class Defaults 中配置 MaxHealth 等参数）
+	// 使用玩家蓝图；MaxHealth 和抗性在其 HealthComponent 子对象中配置。
 	static ConstructorHelpers::FClassFinder<APlayerCharacter> PlayerBlueprintAsset(
 		TEXT("/Game/Blueprint/GamePlay/Player/BP_PlayerCharacter.BP_PlayerCharacter_C"));
 	if (PlayerBlueprintAsset.Succeeded())

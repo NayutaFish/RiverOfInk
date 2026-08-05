@@ -10,6 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
+#include "Common/HealthComponent.h"
 #include "Player/PlayerCharacter.h"
 
 TSharedRef<SWidget> UPlayerHealthWidget::RebuildWidget()
@@ -41,9 +42,10 @@ void UPlayerHealthWidget::NativeDestruct()
 void UPlayerHealthWidget::InitializeForPlayer(APlayerCharacter* InPlayer)
 {
 	ObservedPlayer = InPlayer;
-	if (IsValid(ObservedPlayer))
+	if (IsValid(ObservedPlayer) && IsValid(ObservedPlayer->GetHealthComponent()))
 	{
-		RefreshHealth(ObservedPlayer->MaxHealth, ObservedPlayer->CurrentHealth);
+		const UHealthComponent* HealthComponent = ObservedPlayer->GetHealthComponent();
+		RefreshHealth(HealthComponent->GetMaxHealth(), HealthComponent->GetCurrentHealth());
 	}
 }
 
