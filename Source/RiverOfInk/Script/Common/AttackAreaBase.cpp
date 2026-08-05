@@ -4,6 +4,8 @@
 #include "RiverOfInk.h"
 #include "Core/GlobalStructs.h"
 #include "Engine/World.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
 
@@ -153,6 +155,20 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 {
 	// 攻击者由代码填充（施放者），不依赖编辑器配置
 	DamageInfo.Attacker = GetOwner();
+
+	// 命中敌人时，在敌人位置生成命中特效，朝向=攻击者→受击者方向
+	if (HitSpark && Target)
+	{
+		FVector SpawnLocation = Target->GetActorLocation();
+		FVector Direction = Target->GetActorLocation() - GetActorLocation();
+		Direction.Z = 0.0f;
+		FRotator SpawnRotation = Direction.IsNearlyZero()
+			? Target->GetActorRotation()
+			: Direction.Rotation();
+
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			GetWorld(), HitSpark, SpawnLocation, SpawnRotation);
+	}
 
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{

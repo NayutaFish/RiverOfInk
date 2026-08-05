@@ -8,6 +8,7 @@
 #include "Core/GlobalStructs.h"
 #include "AttackAreaBase.generated.h"
 
+class UNiagaraSystem;
 class APlayerCharacter;
 
 UENUM()
@@ -57,6 +58,10 @@ public:
 	/** 是否为近战攻击？true=伤害后不销毁，等 LifeTime 结束（持续与目标重叠不重复结算） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	bool bIsMeleeAttack = false;
+
+	/** 命中特效（在敌人位置生成，朝向=攻击者→受击者方向） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
+	TObjectPtr<UNiagaraSystem> HitSpark;
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
