@@ -37,6 +37,31 @@ void USkillComponent::InitializeSkillSlots()
 	UE_LOG(LogSkill, Log, TEXT("Skill slots initialized: Slot 1 = TripleProjectile."));
 }
 
+void USkillComponent::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const
+{
+	OutRuntimeData.SkillSlots = SkillSlots;
+	OutRuntimeData.SkillUpgradeStates = SkillUpgradeStates;
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Skill runtime data captured: Owner=%s Slots=%d Upgrades=%d."),
+		*GetNameSafe(GetOwner()),
+		OutRuntimeData.SkillSlots.Num(),
+		OutRuntimeData.SkillUpgradeStates.Num());
+}
+
+void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
+{
+	SkillSlots = InRuntimeData.SkillSlots;
+	SkillUpgradeStates = InRuntimeData.SkillUpgradeStates;
+	LastCastTimes.Reset();
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Skill runtime data applied: Owner=%s Slots=%d Upgrades=%d."),
+		*GetNameSafe(GetOwner()),
+		SkillSlots.Num(),
+		SkillUpgradeStates.Num());
+}
+
 void USkillComponent::TryCastSkill1()
 {
 	TryCastSkillSlot(0);
@@ -185,7 +210,7 @@ float USkillComponent::GetCircularSlashCooldown() const
 bool USkillComponent::CanCastSkill() const
 {
 	return IsValid(OwnerCharacter)
-		&& !OwnerCharacter->bIsDead
+		&& !OwnerCharacter->IsDead()
 		&& OwnerCharacter->CanStartAction()
 		&& !OwnerCharacter->IsSprinting();
 }

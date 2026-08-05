@@ -6,7 +6,9 @@
 #include "Engine/GameInstance.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "Player/PlayerCharacter.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
+#include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 
 DEFINE_LOG_CATEGORY(LogRoguelikeLevelFlow);
@@ -310,6 +312,17 @@ bool URoguelikeLevelFlowSubsystem::RequestLevelTravel(
 			TEXT("Cannot request %s level travel: GameInstance is unavailable."),
 			TransitionReason);
 		return false;
+	}
+
+	if (UWorld* CurrentWorld = GameInstance->GetWorld())
+	{
+		if (APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(CurrentWorld, 0)))
+		{
+			if (URoguelikeRuntimeDataSubsystem* RuntimeData = GameInstance->GetSubsystem<URoguelikeRuntimeDataSubsystem>())
+			{
+				RuntimeData->CapturePlayerRuntimeData(Player);
+			}
+		}
 	}
 
 	UE_LOG(LogRoguelikeLevelFlow, Log,

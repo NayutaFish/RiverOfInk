@@ -55,7 +55,7 @@ void UPlayerState_Idle::OnExit_Implementation()
 void UPlayerState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player || Player->bIsDead) return;
+	if (!Player || Player->IsDead()) return;
 
 	Player->SwitchState(UPlayerState_HitBack::StaticClass());
 }

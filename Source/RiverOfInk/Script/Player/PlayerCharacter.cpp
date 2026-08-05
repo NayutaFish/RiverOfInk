@@ -5,12 +5,14 @@
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Common/AttackAreaBase.h"
+#include "Common/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Engine/World.h"
 #include "Player/Skill/SkillComponent.h"
+#include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "Input/PlayerInputComponent.h"
 #include "EnhancedInputComponent.h"
 #include "Common/StateBase.h"
@@ -24,6 +26,7 @@
 #include "Player/PlayerState/PlayerState_Skill2.h"
 #include "UI/PlayerHealthWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/GameInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -45,6 +48,7 @@ APlayerCharacter::APlayerCharacter()
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 
 	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
@@ -81,11 +85,116 @@ APlayerCharacter::APlayerCharacter()
 	}
 }
 
+bool APlayerCharacter::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const
+{
+	OutRuntimeData = FPlayerRuntimeData();
+	bool bCapturedAllComponents = true;
+
+	if (HealthComponent)
+	{
+		HealthComponent->CaptureRuntimeData(OutRuntimeData);
+	}
+	else
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Player runtime capture skipped HealthComponent: Player=%s."),
+			*GetName());
+		bCapturedAllComponents = false;
+	}
+
+	if (SkillComponent)
+	{
+		SkillComponent->CaptureRuntimeData(OutRuntimeData);
+	}
+	else
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Player runtime capture skipped SkillComponent: Player=%s."),
+			*GetName());
+		bCapturedAllComponents = false;
+	}
+
+	OutRuntimeData.Stats.WalkSpeed = FMath::Max(0.0f, WalkSpeed);
+	OutRuntimeData.Stats.SprintSpeed = FMath::Max(
+		OutRuntimeData.Stats.WalkSpeed,
+		SprintSpeed);
+
+	return bCapturedAllComponents;
+}
+
+bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
+{
+	bool bAppliedAllComponents = true;
+
+	if (HealthComponent)
+	{
+		HealthComponent->ApplyRuntimeData(InRuntimeData);
+	}
+	else
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Player runtime apply skipped HealthComponent: Player=%s."),
+			*GetName());
+		bAppliedAllComponents = false;
+	}
+
+	if (SkillComponent)
+	{
+		SkillComponent->ApplyRuntimeData(InRuntimeData);
+	}
+	else
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Player runtime apply skipped SkillComponent: Player=%s."),
+			*GetName());
+		bAppliedAllComponents = false;
+	}
+
+	WalkSpeed = FMath::Max(0.0f, InRuntimeData.Stats.WalkSpeed);
+	SprintSpeed = FMath::Max(WalkSpeed, InRuntimeData.Stats.SprintSpeed);
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	}
+
+	return bAppliedAllComponents;
+}
+
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	CurrentHealth = MaxHealth;
+
+	if (!HealthComponent)
+	{
+		UE_LOG(LogRiverOfInk, Error, TEXT("Player health initialization failed: HealthComponent is missing."));
+	}
+	else
+	{
+		HealthComponent->OnHealthChanged.AddDynamic(this, &APlayerCharacter::HandleHealthChanged);
+		HealthComponent->OnDeath.AddDynamic(this, &APlayerCharacter::HandleHealthDeath);
+		HealthComponent->OnTakeDirectDamage.AddDynamic(this, &APlayerCharacter::HandleHealthDirectDamage);
+		HealthComponent->InitializeHealth();
+	}
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+	// Defaults are initialized first. A later level-spawned Pawn restores the
+	// snapshot held by the GameInstance subsystem instead of replacing it with
+	// Blueprint defaults again.
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (URoguelikeRuntimeDataSubsystem* RuntimeData = GameInstance->GetSubsystem<URoguelikeRuntimeDataSubsystem>())
+		{
+			if (RuntimeData->HasPlayerRuntimeData())
+			{
+				RuntimeData->ApplyRegisteredPlayerRuntimeData(this);
+			}
+			else
+			{
+				RuntimeData->CapturePlayerRuntimeData(this);
+			}
+		}
+	}
 
 	// ── 默认进入 Idle 状态 ──
 	// 自动从角色身上挂载的组件中查找 Idle 状态
@@ -98,8 +207,13 @@ void APlayerCharacter::BeginPlay()
 
 	// ── 玩家生成完毕 ──
 	FEventBus::Publish<FPlayerSpawnedEvent>(FPlayerSpawnedEvent(this));
-	FEventBus::Publish<FPlayerHealthChangedEvent>(
-		FPlayerHealthChangedEvent(FMath::RoundToInt(MaxHealth), FMath::RoundToInt(CurrentHealth)));
+	if (HealthComponent)
+	{
+		FEventBus::Publish<FPlayerHealthChangedEvent>(
+			FPlayerHealthChangedEvent(
+				FMath::RoundToInt(HealthComponent->GetMaxHealth()),
+				FMath::RoundToInt(HealthComponent->GetCurrentHealth())));
+	}
 }
 
 void APlayerCharacter::PossessedBy(AController* NewController)
@@ -162,6 +276,38 @@ void APlayerCharacter::Tick(float DeltaTime)
 	{
 		CurrentState->Update(DeltaTime);
 	}
+}
+
+bool APlayerCharacter::IsDead() const
+{
+	return HealthComponent ? HealthComponent->IsDead() : bIsDead;
+}
+
+void APlayerCharacter::HandleHealthChanged(float InCurrentHealth, float InMaxHealth)
+{
+	FEventBus::Publish<FPlayerHealthChangedEvent>(
+		FPlayerHealthChangedEvent(FMath::RoundToInt(InMaxHealth), FMath::RoundToInt(InCurrentHealth)));
+}
+
+void APlayerCharacter::HandleHealthDeath(AActor* DeadActor)
+{
+	(void)DeadActor;
+	Die();
+}
+
+void APlayerCharacter::HandleHealthDirectDamage(const FTakeDamageInfo& InInfo)
+{
+	LastAttacker = InInfo.Attacker;
+	OnTakeDirectDamage.Broadcast(InInfo);
+
+	// Direct damage grants the player a short invincibility window. This is
+	// player-specific state, so it remains outside the reusable health pool.
+	bIsInDirectDamageInvincible = true;
+	GetWorldTimerManager().ClearTimer(InvincibleTimerHandle);
+	GetWorldTimerManager().SetTimer(InvincibleTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		bIsInDirectDamageInvincible = false;
+	}), 0.5f, false);
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -311,7 +457,7 @@ void APlayerCharacter::CancelAttack()
 
 void APlayerCharacter::OnAttack()
 {
-	if (bIsDead) return;
+	if (IsDead()) return;
 
 	// 左键同时播放攻击动画并生成伤害范围
 	BeginAttack();
@@ -337,62 +483,27 @@ void APlayerCharacter::OnAttack()
 
 void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 {
-	if (bIsDead || InInfo.DamageValue <= 0.0f) return;
+	if (IsDead() || !HealthComponent || InInfo.DamageValue <= 0.0f)
+	{
+		return;
+	}
 
 	// 直接性伤害无敌：无敌期间直接跳过
 	if (InInfo.bIsDirectDamage && IsInvincible()) return;
 
-	// 直接性伤害通报（供状态类订阅，如击退）
-	if (InInfo.bIsDirectDamage)
-	{
-		LastAttacker = InInfo.Attacker;
-		OnTakeDirectDamage.Broadcast(InInfo);
-
-		// 受直接性伤害后进入 0.5 秒无敌
-		bIsInDirectDamageInvincible = true;
-		GetWorldTimerManager().ClearTimer(InvincibleTimerHandle);
-		GetWorldTimerManager().SetTimer(InvincibleTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
-		{
-			bIsInDirectDamageInvincible = false;
-		}), 0.5f, false);
-	}
-
-	// 按伤害类型计算最终伤害（真实/必中伤害不减免）
-	float FinalDamage = InInfo.DamageValue;
-	switch (InInfo.DamageType)
-	{
-	case EDamageType::Physical:
-		FinalDamage = FMath::Max(InInfo.DamageValue * 0.05f, InInfo.DamageValue - PhysicalResistance);
-		break;
-	case EDamageType::Magic:
-		FinalDamage = FMath::Max(InInfo.DamageValue * 0.05f, (float)FMath::FloorToInt(InInfo.DamageValue * (1.0f - MagicResistance / 100.0f)));
-		break;
-	default:
-		break;
-	}
-
-	CurrentHealth = FMath::Max(0.0f, CurrentHealth - FinalDamage);
-	UE_LOG(LogRiverOfInk, Warning, TEXT("Player took damage: -%.0f (Health left: %.0f)"), FinalDamage, CurrentHealth);
-
-	if (CurrentHealth <= 0.0f)
-	{
-		if (InInfo.bCanCauseDeath)
-		{
-			Die();
-		}
-		else
-		{
-			CurrentHealth = 1.0f;
-		}
-	}
-	// 通告血量变化
-	FEventBus::Publish<FPlayerHealthChangedEvent>(
-		FPlayerHealthChangedEvent(FMath::RoundToInt(MaxHealth), FMath::RoundToInt(CurrentHealth)));
+	HealthComponent->TakeDamage(InInfo);
 }
 
 void APlayerCharacter::TestDie()
 {
-	Die();
+	if (HealthComponent)
+	{
+		HealthComponent->Die();
+	}
+	else
+	{
+		Die();
+	}
 }
 
 void APlayerCharacter::Die()
@@ -400,9 +511,6 @@ void APlayerCharacter::Die()
 	if (bIsDead) return;
 	bIsDead = true;
 	bIsSprinting = false;
-	CurrentHealth = 0.0f;
-	FEventBus::Publish<FPlayerHealthChangedEvent>(FPlayerHealthChangedEvent(
-		FMath::RoundToInt(MaxHealth), 0));
 	OnPlayerDeath.Broadcast(this);
 
 	// 通告玩家死亡（击杀者暂未知，传 nullptr）

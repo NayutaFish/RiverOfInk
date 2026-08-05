@@ -5,12 +5,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Core/GlobalStructs.h"
+#include "RoguelikeSystem/PlayerRuntimeData.h"
 #include "PlayerCharacter.generated.h"
 
 class UAnimMontage;
 class AAttackAreaBase;
 class UStateBase;
 class USkillComponent;
+class UHealthComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 
@@ -71,6 +73,22 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Skill")
 	TObjectPtr<USkillComponent> SkillComponent;
+
+	/** Owns player health, resistance, damage calculation, and health events. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Health")
+	TObjectPtr<UHealthComponent> HealthComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	/** Capture all component-owned runtime state into one value snapshot. */
+	bool CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
+
+	/** Apply one value snapshot to the newly initialized player and its components. */
+	bool ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
+
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	bool IsDead() const;
 
 	// ── 状态机 ──
 	/** 当前活跃状态组件 */
@@ -133,23 +151,10 @@ private:
 	// 取消当前攻击
 	void CancelAttack();
 
-public:
+	public:
 	virtual void Tick(float DeltaTime) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player|Stats", meta = (ClampMin = "1.0"))
-	float MaxHealth = 100.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Stats")
-	float CurrentHealth = 100.0f;
-
-	/** 物理抗性（物理伤害减免值，最终伤害不低于原伤害的5%） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player|Stats", meta = (ClampMin = "0"))
-	int32 PhysicalResistance = 0;
-
-	/** 魔法抗性（百分比减免，最终伤害不低于原伤害的5%） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player|Stats", meta = (ClampMin = "0", ClampMax = "100"))
-	int32 MagicResistance = 0;
-
+	/** Compatibility mirror; UHealthComponent is the health state source of truth. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|State")
 	bool bIsDead = false;
 
@@ -222,7 +227,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void StartAttack2Cooldown();
 
-private:
+	private:
+	UFUNCTION()
+	void HandleHealthChanged(float InCurrentHealth, float InMaxHealth);
+
+	UFUNCTION()
+	void HandleHealthDeath(AActor* DeadActor);
+
+	UFUNCTION()
+	void HandleHealthDirectDamage(const FTakeDamageInfo& InInfo);
+
 	/** 受直接性伤害后的短暂无敌（0.5 秒），期间免疫直接性伤害 */
 	bool bIsInDirectDamageInvincible = false;
 

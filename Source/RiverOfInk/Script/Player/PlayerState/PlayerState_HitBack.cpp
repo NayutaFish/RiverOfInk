@@ -66,7 +66,7 @@ void UPlayerState_HitBack::Update_Implementation(float DeltaTime)
 void UPlayerState_HitBack::OnHitBackEnd()
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player || Player->bIsDead) return;
+	if (!Player || Player->IsDead()) return;
 
 	Player->SwitchState(UPlayerState_Idle::StaticClass());
 }
