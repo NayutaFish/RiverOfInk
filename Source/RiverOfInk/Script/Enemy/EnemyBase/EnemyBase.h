@@ -70,6 +70,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
 	TObjectPtr<AActor> LastAttacker;
 
+	/** 最近一次伤害信息（供死亡事件携带） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
+	FTakeDamageInfo LastDamageInfo;
+
+	/** 最近一次伤害来源的攻击区域（供死亡事件携带） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
+	TObjectPtr<AAttackAreaBase> LastAttackArea;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Attack")
 	FTimerHandle AttackTimerHandle;
 
@@ -164,7 +172,7 @@ public:
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
-	void TakeDamage(const FTakeDamageInfo& InInfo);
+	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TestDie();

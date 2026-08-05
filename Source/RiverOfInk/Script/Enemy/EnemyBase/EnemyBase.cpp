@@ -74,12 +74,16 @@ void AEnemyBase::SwitchState(TSubclassOf<UStateBase> StateClass)
 	CurrentState->OnEnter();
 }
 
-void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo)
+void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea)
 {
 	if (bIsDead || InInfo.DamageValue <= 0.0f)
 	{
 		return;
 	}
+
+	// 缓存最近一次伤害信息与来源（供死亡事件携带）
+	LastDamageInfo = InInfo;
+	LastAttackArea = InAttackArea;
 
 	// 直接性伤害通报（供状态类订阅，如击退）
 	if (InInfo.bIsDirectDamage)
@@ -145,8 +149,8 @@ void AEnemyBase::Die()
 
 	OnEnemyDeath.Broadcast(this);
 
-	// 通告敌人死亡
-	FEventBus::Publish<FNonPlayerDiedEvent>(FNonPlayerDiedEvent(this));
+	// 通告敌人死亡（携带致死伤害信息与来源攻击区域）
+	FEventBus::Publish<FNonPlayerDiedEvent>(FNonPlayerDiedEvent(this, LastDamageInfo, LastAttackArea));
 
 	Destroy();
 }

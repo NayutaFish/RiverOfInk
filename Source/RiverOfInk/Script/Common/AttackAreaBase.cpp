@@ -179,7 +179,7 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{
-		Enemy->TakeDamage(DamageInfo);
+		Enemy->TakeDamage(DamageInfo, this);
 	}
 	else if (APlayerCharacter* Player = Cast<APlayerCharacter>(Target))
 	{

@@ -7,6 +7,7 @@
 
 class AActor;
 class AEnemyBase;
+class AAttackAreaBase;
 
 /**
  * 游戏内事件定义
@@ -94,10 +95,18 @@ struct FNonPlayerDiedEvent
 	/** 死亡的非玩家单位 */
 	TObjectPtr<AEnemyBase> Victim = nullptr;
 
+	/** 致死伤害信息 */
+	FTakeDamageInfo DamageInfo;
+
+	/** 造成伤害的攻击区域（可能为空，如非攻击区域导致的死亡） */
+	TObjectPtr<AAttackAreaBase> AttackArea = nullptr;
+
 	FNonPlayerDiedEvent() = default;
 
-	FNonPlayerDiedEvent(AEnemyBase* InVictim)
+	FNonPlayerDiedEvent(AEnemyBase* InVictim, const FTakeDamageInfo& InDamageInfo, AAttackAreaBase* InAttackArea)
 		: Victim(InVictim)
+		, DamageInfo(InDamageInfo)
+		, AttackArea(InAttackArea)
 	{
 	}
 };
