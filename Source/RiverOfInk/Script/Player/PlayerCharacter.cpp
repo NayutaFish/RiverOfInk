@@ -300,6 +300,9 @@ void APlayerCharacter::HandleHealthDirectDamage(const FTakeDamageInfo& InInfo)
 	LastAttacker = InInfo.Attacker;
 	OnTakeDirectDamage.Broadcast(InInfo);
 
+	// 通告玩家受到直接性攻击（供相机震动等订阅）
+	FEventBus::Publish<FPlayerTookDirectDamageEvent>(FPlayerTookDirectDamageEvent(InInfo));
+
 	// Direct damage grants the player a short invincibility window. This is
 	// player-specific state, so it remains outside the reusable health pool.
 	bIsInDirectDamageInvincible = true;

@@ -77,5 +77,8 @@ void ACameraManager::Tick(float DeltaTime)
 		NewLocation.Z = GetActorLocation().Z;
 	}
 
+	// 叠加相机震动偏移（非震动时为零向量，不影响正常跟随）
+	NewLocation += CurrentShakeOffset;
+
 	SetActorLocation(NewLocation);
 }

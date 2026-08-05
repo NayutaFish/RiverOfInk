@@ -46,6 +46,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera")
 	float StrengthBlendSpeed = 1.5f;
 
+	/** 相机震动偏移（由 CameraShakeManager 设置，Tick 应用，非震动时为零） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	FVector CurrentShakeOffset = FVector::ZeroVector;
+
 protected:
 	virtual void BeginPlay() override;
 
