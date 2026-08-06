@@ -81,6 +81,9 @@ public:
 	/** Called by a map GameMode after its world has begun play. */
 	bool NotifyRoomLoaded(UWorld* LoadedWorld);
 
+	/** Return whether a world matches the configured preparation-room map. */
+	bool IsPreparationRoomMap(const UWorld* World) const;
+
 	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow")
 	ERoguelikeRunState GetRunState() const { return CurrentRunState; }
 
@@ -160,7 +163,6 @@ private:
 	);
 	bool TransitionRunState(ERoguelikeRunState NextState, ERoguelikeRunTransitionReason Reason);
 	bool IsTransitionAllowed(ERoguelikeRunState NextState) const;
-	bool IsPreparationRoomMap(const UWorld* World) const;
 	bool ResetPlayerRuntimeData();
 	bool CaptureCurrentPlayerRuntimeData();
 
