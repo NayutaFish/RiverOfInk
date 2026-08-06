@@ -5,7 +5,7 @@
 #include "GameMode/RiverOfInkPlayerController.h"
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
-#include "RoguelikeSystem/RoguelikeLevelFlowSubsystem.h"
+#include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -33,9 +33,10 @@ void ARiverOfInkGameMode::BeginPlay()
 
 	if (UGameInstance* GameInstance = GetGameInstance())
 	{
-		if (URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>())
+		if (URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>())
 		{
-			LevelFlow->EnsurePreparationExit();
+			RunFlow->NotifyRoomLoaded(GetWorld());
+			RunFlow->EnsurePreparationStartExit();
 		}
 	}
 

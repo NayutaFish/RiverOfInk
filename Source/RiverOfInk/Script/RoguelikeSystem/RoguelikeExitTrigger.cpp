@@ -6,7 +6,7 @@
 #include "Engine/GameInstance.h"
 #include "Player/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
-#include "RoguelikeSystem/RoguelikeLevelFlowSubsystem.h"
+#include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 
 ARoguelikeExitTrigger::ARoguelikeExitTrigger()
@@ -41,17 +41,16 @@ void ARoguelikeExitTrigger::BeginPlay()
 	}
 
 	UGameInstance* GameInstance = GetGameInstance();
-	URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance
-		? GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>()
+	URoguelikeRunFlowSubsystem* RunFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>()
 		: nullptr;
-	const bool bIsPreparationLevel = LevelFlow
-		&& LevelFlow->GetCurrentMajorLevelId() == URoguelikeLevelFlowSubsystem::PreparationLevelId;
+	const bool bIsPreparationRoom = RunFlow
+		&& RunFlow->GetRunState() == ERoguelikeRunState::Preparation;
 
-	if (bIsPreparationLevel)
+	if (bIsPreparationRoom)
 	{
 		UE_LOG(LogRoguelike, Log,
-			TEXT("Preparation exit does not require a reward manager; Major=%d."),
-			LevelFlow->GetCurrentMajorLevelId());
+			TEXT("Preparation start exit does not require a reward manager."));
 	}
 	else if (ResolveRewardManager())
 	{
@@ -168,19 +167,21 @@ void ARoguelikeExitTrigger::HandlePlayerEntered(APlayerCharacter* Player)
 	UE_LOG(LogRoguelike, Log, TEXT("Player entered roguelike exit: %s."), *Player->GetName());
 
 	UGameInstance* GameInstance = GetGameInstance();
-	URoguelikeLevelFlowSubsystem* LevelFlow = GameInstance
-		? GameInstance->GetSubsystem<URoguelikeLevelFlowSubsystem>()
+	URoguelikeRunFlowSubsystem* RunFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>()
 		: nullptr;
-	if (!LevelFlow)
+	if (!RunFlow)
 	{
-		UE_LOG(LogRoguelike, Error, TEXT("Exit cannot request level travel: level-flow subsystem is unavailable."));
+		UE_LOG(LogRoguelike, Error, TEXT("Exit cannot request room travel: run-flow subsystem is unavailable."));
 		return;
 	}
 
-	if (!LevelFlow->AdvanceToNextLevel())
+	if (!RunFlow->RequestAdvanceFromExit())
 	{
 		UE_LOG(LogRoguelike, Log,
-			TEXT("Exit did not transition. Major=%d MinorIndex=%d; outcome/restart remains external."),
-			LevelFlow->GetCurrentMajorLevelId(), LevelFlow->GetCurrentMinorLevelIndex());
+			TEXT("Exit did not transition. RunState=%d MajorStage=%d RoomIndex=%d."),
+			static_cast<int32>(RunFlow->GetRunState()),
+			RunFlow->GetCurrentMajorStageIndex(),
+			RunFlow->GetCurrentRoomIndex());
 	}
 }

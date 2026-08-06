@@ -20,7 +20,7 @@
 | `USkillComponent` | 持有技能槽和升级等级；实现技能数据的 Capture/Apply | 不持有跨场景 Pawn 引用 |
 | `APlayerCharacter` | 协调自身组件，将组件数据汇总为一个快照或应用一个快照 | 不直接持有跨场景快照 |
 | `URoguelikeRuntimeDataSubsystem` | 持有当前局的 `FPlayerRuntimeData` 副本 | 不负责关卡切换、奖励 UI 或重新开始游戏 |
-| `URoguelikeLevelFlowSubsystem` | 持有大关/小关序列，并在 Level Travel 前请求 Capture | 不负责玩家数据结构或游戏失败/重启决定 |
+| `URoguelikeRunFlowSubsystem` | 持有 MajorStage/Room 序列、Run 状态与切图；在跨 Room 时请求 Capture | 不负责玩家数据结构、奖励 UI 或房间内刷怪 |
 | `ARoguelikeRewardManager` | 修改当前关卡中玩家的实时技能并广播奖励事件 | 不直接拥有跨场景快照 |
 
 ## 核心数据结构
@@ -66,14 +66,14 @@ CapturePlayerRuntimeData(Player)
 ### 2. 从旧关卡进入新关卡
 
 所有由肉鸽流程发起的切图都应经过
-`URoguelikeLevelFlowSubsystem::RequestLevelTravel()`：
+`URoguelikeRunFlowSubsystem`：
 
 ```text
 玩家进入已激活出口
     ↓
-LevelFlowSubsystem::AdvanceToNextLevel()
+RunFlowSubsystem::RequestAdvanceFromExit()
     ↓
-RequestLevelTravel()
+RequestMapTravel()
     ↓
 找到当前 Player 0
     ↓
@@ -128,7 +128,7 @@ OnRewardApplied.Broadcast()
     ↓
 出口激活
     ↓
-玩家进入出口后，下一次 RequestLevelTravel() Capture
+玩家进入出口后，下一次 RequestMapTravel() Capture
 ```
 
 当前设计下，奖励会在玩家进入出口并切图时写入 RuntimeData 快照。若未来需要支持“选择奖励后、进入出口前死亡/重启仍保留奖励”，应在奖励成功应用后增加一次显式 Capture 或统一的 RuntimeData 提交接口。
@@ -159,7 +159,7 @@ if (GameInstance)
 
 ### 推荐调用规则
 
-1. 正常切图：调用 `URoguelikeLevelFlowSubsystem` 的推进接口，不要在业务 Actor 中直接 `OpenLevel`。
+1. 正常切图：调用 `URoguelikeRunFlowSubsystem` 的推进接口，不要在业务 Actor 中直接 `OpenLevel`。
 2. 切图前：必须 Capture 当前有效玩家。
 3. 新 Pawn：让 `APlayerCharacter::BeginPlay()` 负责判断 Capture 或 Apply，不要在每个关卡蓝图中重复 Apply。
 4. 新增可持久化组件：为组件增加 `CaptureRuntimeData()` / `ApplyRuntimeData()`，再由 `APlayerCharacter` 汇总，不要让组件直接互相访问。
@@ -176,9 +176,9 @@ if (GameInstance)
     ↓
 RuntimeDataSubsystem::ResetPlayerRuntimeData()
     ↓
-LevelFlowSubsystem 重置大关、小关索引和已生成序列
+RunFlowSubsystem 重置 MajorStage、Room 索引和已生成序列
     ↓
-LoadPreparationLevel()
+LoadPreparationRoom()
 ```
 
 不要让 `RoguelikeRuntimeDataSubsystem` 自己发出重启事件，也不要把失败/结算逻辑塞进 `LevelFlowSubsystem`。
@@ -217,4 +217,4 @@ TestMap_0 启动
     ↓ 对比 HP、抗性、速度、技能槽和升级数量
 ```
 
-如果只看到默认初始化日志而看不到 Apply 日志，先确认新 Pawn 是否是 `APlayerCharacter`，以及切图是否绕过了 `RoguelikeLevelFlowSubsystem`。
+如果只看到默认初始化日志而看不到 Apply 日志，先确认新 Pawn 是否是 `APlayerCharacter`，以及切图是否绕过了 `RoguelikeRunFlowSubsystem`。
