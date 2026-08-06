@@ -12,6 +12,9 @@ class AActor;
 class USceneComponent;
 class ARoguelikeRewardManager;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDemoRoomStarted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDemoRoomCleared);
+
 /**
  * Demo room manager.
  *
@@ -72,6 +75,12 @@ public:
 	/** Optional reward manager notified when this room is cleared. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Room|Reward")
 	TObjectPtr<ARoguelikeRewardManager> RewardManager;
+
+	UPROPERTY(BlueprintAssignable, Category = "Room|Events")
+	FOnDemoRoomStarted OnRoomStarted;
+
+	UPROPERTY(BlueprintAssignable, Category = "Room|Events")
+	FOnDemoRoomCleared OnRoomCleared;
 
 private:
 	/** 敌人刷新余量 */

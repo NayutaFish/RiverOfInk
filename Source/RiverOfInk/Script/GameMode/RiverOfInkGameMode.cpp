@@ -3,8 +3,11 @@
 #include "GameMode/RiverOfInkGameMode.h"
 #include "Engine/GameInstance.h"
 #include "GameMode/RiverOfInkPlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "LevelRoomManager/DemoRoomManager.h"
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
+#include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
@@ -35,11 +38,179 @@ void ARiverOfInkGameMode::BeginPlay()
 	{
 		if (URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>())
 		{
+			RunFlow->OnRunStateChanged.AddDynamic(this, &ARiverOfInkGameMode::HandleRunStateChanged);
 			RunFlow->NotifyRoomLoaded(GetWorld());
 			RunFlow->EnsurePreparationStartExit();
 		}
 	}
 
+	BindRoomActors();
+
 	// 生成纯 C++ 相机管理器（玩家生成后由它自动接管并跟随）
 	GetWorld()->SpawnActor<ACameraManager>(ACameraManager::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+}
+
+void ARiverOfInkGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>())
+		{
+			RunFlow->OnRunStateChanged.RemoveDynamic(this, &ARiverOfInkGameMode::HandleRunStateChanged);
+		}
+	}
+
+	if (IsValid(BoundRoomManager))
+	{
+		BoundRoomManager->OnRoomStarted.RemoveDynamic(this, &ARiverOfInkGameMode::HandleRoomStarted);
+		BoundRoomManager->OnRoomCleared.RemoveDynamic(this, &ARiverOfInkGameMode::HandleRoomCleared);
+	}
+
+	if (IsValid(BoundRewardManager))
+	{
+		BoundRewardManager->OnRewardApplied.RemoveDynamic(this, &ARiverOfInkGameMode::HandleRewardApplied);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ARiverOfInkGameMode::BindRoomActors()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	TArray<AActor*> RoomManagers;
+	UGameplayStatics::GetAllActorsOfClass(World, ADemoRoomManager::StaticClass(), RoomManagers);
+	if (RoomManagers.Num() > 0)
+	{
+		BoundRoomManager = Cast<ADemoRoomManager>(RoomManagers[0]);
+		if (IsValid(BoundRoomManager))
+		{
+			BoundRoomManager->OnRoomStarted.AddDynamic(this, &ARiverOfInkGameMode::HandleRoomStarted);
+			BoundRoomManager->OnRoomCleared.AddDynamic(this, &ARiverOfInkGameMode::HandleRoomCleared);
+		}
+	}
+
+	TArray<AActor*> RewardManagers;
+	UGameplayStatics::GetAllActorsOfClass(World, ARoguelikeRewardManager::StaticClass(), RewardManagers);
+	if (RewardManagers.Num() > 0)
+	{
+		BoundRewardManager = Cast<ARoguelikeRewardManager>(RewardManagers[0]);
+		if (IsValid(BoundRewardManager))
+		{
+			BoundRewardManager->OnRewardApplied.AddDynamic(this, &ARiverOfInkGameMode::HandleRewardApplied);
+		}
+	}
+
+	UE_LOG(LogRoguelikeRunFlow, Verbose,
+		TEXT("Room flow actor binding complete. RoomManager=%s RewardManager=%s."),
+		*GetNameSafe(BoundRoomManager), *GetNameSafe(BoundRewardManager));
+}
+
+void ARiverOfInkGameMode::HandleRunStateChanged(
+	ERoguelikeRunState PreviousState,
+	ERoguelikeRunState NewState,
+	ERoguelikeRunTransitionReason Reason
+)
+{
+	(void)PreviousState;
+	(void)Reason;
+
+	if (NewState == ERoguelikeRunState::InRoom)
+	{
+		TransitionRoomState(ERoguelikeRoomState::Entering);
+	}
+	else if (NewState == ERoguelikeRunState::LoadingRoom
+		&& CurrentRoomState == ERoguelikeRoomState::Completed)
+	{
+		TransitionRoomState(ERoguelikeRoomState::Exiting);
+	}
+}
+
+void ARiverOfInkGameMode::HandleRoomStarted()
+{
+	if (CurrentRoomState != ERoguelikeRoomState::Entering)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Verbose,
+			TEXT("Room start event ignored in room state %d."),
+			static_cast<int32>(CurrentRoomState));
+		return;
+	}
+
+	TransitionRoomState(ERoguelikeRoomState::Ready);
+	TransitionRoomState(ERoguelikeRoomState::Combat);
+}
+
+void ARiverOfInkGameMode::HandleRoomCleared()
+{
+	if (CurrentRoomState != ERoguelikeRoomState::Combat)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Room clear event rejected in room state %d."),
+			static_cast<int32>(CurrentRoomState));
+		return;
+	}
+
+	TransitionRoomState(ERoguelikeRoomState::Reward);
+}
+
+void ARiverOfInkGameMode::HandleRewardApplied(const FRoguelikeRewardOption& Reward)
+{
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Room reward applied: %s."), *Reward.Title.ToString());
+
+	if (CurrentRoomState == ERoguelikeRoomState::Reward)
+	{
+		TransitionRoomState(ERoguelikeRoomState::Completed);
+	}
+}
+
+bool ARiverOfInkGameMode::TransitionRoomState(ERoguelikeRoomState NextState)
+{
+	if (CurrentRoomState == NextState)
+	{
+		return true;
+	}
+
+	if (!IsRoomTransitionAllowed(NextState))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Rejected room-state transition: %d -> %d."),
+			static_cast<int32>(CurrentRoomState), static_cast<int32>(NextState));
+		return false;
+	}
+
+	const ERoguelikeRoomState PreviousState = CurrentRoomState;
+	CurrentRoomState = NextState;
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Room state changed: %d -> %d."),
+		static_cast<int32>(PreviousState), static_cast<int32>(CurrentRoomState));
+	OnRoomStateChanged.Broadcast(PreviousState, CurrentRoomState);
+	return true;
+}
+
+bool ARiverOfInkGameMode::IsRoomTransitionAllowed(ERoguelikeRoomState NextState) const
+{
+	switch (CurrentRoomState)
+	{
+	case ERoguelikeRoomState::Initializing:
+		return NextState == ERoguelikeRoomState::Entering;
+	case ERoguelikeRoomState::Entering:
+		return NextState == ERoguelikeRoomState::Ready;
+	case ERoguelikeRoomState::Ready:
+		return NextState == ERoguelikeRoomState::Combat;
+	case ERoguelikeRoomState::Combat:
+		return NextState == ERoguelikeRoomState::Reward;
+	case ERoguelikeRoomState::Reward:
+		return NextState == ERoguelikeRoomState::Completed;
+	case ERoguelikeRoomState::Completed:
+		return NextState == ERoguelikeRoomState::Exiting;
+	case ERoguelikeRoomState::Exiting:
+		return false;
+	default:
+		return false;
+	}
 }

@@ -4,9 +4,11 @@
 
 #include "Components/SceneComponent.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "LevelRoomManager/EnemySpawnPoint.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RiverOfInk.h"
 #include "TimerManager.h"
 
@@ -26,6 +28,19 @@ void ADemoRoomManager::BeginPlay()
 	if (!World)
 	{
 		return;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>())
+		{
+			if (RunFlow->IsPreparationRoomMap(World))
+			{
+				UE_LOG(LogRoguelike, Log,
+					TEXT("Preparation room detected; skipping enemy spawn setup."));
+				return;
+			}
+		}
 	}
 
 	CollectSpawnPoints();
@@ -114,6 +129,7 @@ void ADemoRoomManager::StartRoom()
 	bRoomCleared = false;
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("Room started."));
+	OnRoomStarted.Broadcast();
 
 	// 初始化
 	AliveEnemyCount = 0;
@@ -216,6 +232,7 @@ void ADemoRoomManager::CheckRoomClear()
 
 	// 停止刷新计时器
 	GetWorldTimerManager().ClearTimer(SpawnCheckTimerHandle);
+	OnRoomCleared.Broadcast();
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("Room Clear!"));
 	if (RewardManager)
