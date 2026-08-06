@@ -8,6 +8,7 @@
 #include "RoguelikeExitTrigger.generated.h"
 
 class UBoxComponent;
+class UStaticMeshComponent;
 class APlayerCharacter;
 class ARoguelikeRewardManager;
 
@@ -28,6 +29,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Exit")
 	TObjectPtr<UBoxComponent> TriggerBox;
+
+	/** Whitebox marker shown only after this exit becomes usable. It has no collision. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Exit|Visual")
+	TObjectPtr<UStaticMeshComponent> ExitMarkerMesh;
 
 	/** Optional explicit reference; BeginPlay falls back to the first manager in the level. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Exit|Reward")

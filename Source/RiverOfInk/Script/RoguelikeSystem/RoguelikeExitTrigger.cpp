@@ -3,11 +3,16 @@
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/GameInstance.h"
-#include "Player/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "Player/PlayerCharacter.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 {
@@ -23,6 +28,28 @@ ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 	TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
 	TriggerBox->SetGenerateOverlapEvents(true);
 	TriggerBox->ShapeColor = FColor(40, 220, 90, 180);
+
+	ExitMarkerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExitMarkerMesh"));
+	ExitMarkerMesh->SetupAttachment(TriggerBox);
+	ExitMarkerMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ExitMarkerMesh->SetGenerateOverlapEvents(false);
+	ExitMarkerMesh->SetRelativeScale3D(FVector(3.0f, 3.0f, 2.0f));
+	ExitMarkerMesh->SetCastShadow(false);
+	ExitMarkerMesh->SetHiddenInGame(true);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> MarkerMeshAsset(
+		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (MarkerMeshAsset.Succeeded())
+	{
+		ExitMarkerMesh->SetStaticMesh(MarkerMeshAsset.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> MarkerMaterialAsset(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (MarkerMaterialAsset.Succeeded())
+	{
+		ExitMarkerMesh->SetMaterial(0, MarkerMaterialAsset.Object);
+	}
 }
 
 void ARoguelikeExitTrigger::BeginPlay()
@@ -38,6 +65,17 @@ void ARoguelikeExitTrigger::BeginPlay()
 		TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
 		TriggerBox->SetGenerateOverlapEvents(true);
 		TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
+	}
+
+	if (ExitMarkerMesh)
+	{
+		ExitMarkerMesh->SetHiddenInGame(!bIsActivated);
+		if (UMaterialInterface* BaseMaterial = ExitMarkerMesh->GetMaterial(0))
+		{
+			UMaterialInstanceDynamic* MarkerMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			MarkerMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.05f, 1.0f, 0.25f));
+			ExitMarkerMesh->SetMaterial(0, MarkerMaterial);
+		}
 	}
 
 	UGameInstance* GameInstance = GetGameInstance();
@@ -114,6 +152,10 @@ void ARoguelikeExitTrigger::ActivateExit()
 	}
 
 	bIsActivated = true;
+	if (ExitMarkerMesh)
+	{
+		ExitMarkerMesh->SetHiddenInGame(false);
+	}
 	UE_LOG(LogRoguelike, Log, TEXT("Roguelike exit activated; waiting for player overlap."));
 
 	// If the player was already standing inside the whitebox volume when the
