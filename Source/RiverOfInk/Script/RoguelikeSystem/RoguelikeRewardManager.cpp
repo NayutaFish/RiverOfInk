@@ -130,6 +130,10 @@ void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 
 	ActiveRewardWidget->SetupRewardOptions(this, CurrentRewardOptions);
 	ActiveRewardWidget->AddToViewport();
+	// The base UUserWidget is non-focusable by default. Enable focus before
+	// passing its Slate wrapper to UIOnly so keyboard navigation has a valid
+	// focus target and the PlayerController does not log a focus error.
+	ActiveRewardWidget->SetIsFocusable(true);
 	bRewardShownForRoom = true;
 	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(ActiveRewardWidget->TakeWidget());
@@ -269,6 +273,10 @@ void ARoguelikeRewardManager::CloseRewardUI()
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		FInputModeGameOnly InputMode;
+		// UIOnly releases the viewport capture. Preserve the first left-click
+		// after switching back so it reaches Enhanced Input instead of being
+		// consumed solely to recapture the viewport.
+		InputMode.SetConsumeCaptureMouseDown(false);
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->SetShowMouseCursor(false);
 		PlayerController->SetIgnoreMoveInput(false);
