@@ -82,6 +82,9 @@ void UPlayerHealthWidget::BuildDefaultWidgetTree()
 
 	RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("HealthCanvas"));
 	WidgetTree->RootWidget = RootCanvas;
+	// Health is display-only. Keep the full-screen HUD from becoming a mouse
+	// hit-test blocker for modal widgets such as the reward cards.
+	RootCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	HealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HealthBar"));
 	HealthBar->SetPercent(1.0f);

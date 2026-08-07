@@ -128,16 +128,24 @@ void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 		return;
 	}
 
-	ActiveRewardWidget->SetupRewardOptions(this, CurrentRewardOptions);
-	ActiveRewardWidget->AddToViewport();
 	// The base UUserWidget is non-focusable by default. Enable focus before
 	// passing its Slate wrapper to UIOnly so keyboard navigation has a valid
 	// focus target and the PlayerController does not log a focus error.
 	ActiveRewardWidget->SetIsFocusable(true);
+	ActiveRewardWidget->SetVisibility(ESlateVisibility::Visible);
+	ActiveRewardWidget->SetRenderOpacity(1.0f);
+	// Construct the Slate widget before populating its bindings. This makes the
+	// subsequent layout prepass include the icon brushes and text blocks.
+	// Reward selection is a modal screen. Put it above the display-only health
+	// and skill HUD layers so mouse hit testing reaches the two buttons first.
+	ActiveRewardWidget->AddToViewport(100);
+	ActiveRewardWidget->SetupRewardOptions(this, CurrentRewardOptions);
+	ActiveRewardWidget->ForceLayoutPrepass();
 	bRewardShownForRoom = true;
 	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(ActiveRewardWidget->TakeWidget());
 	PlayerController->SetInputMode(InputMode);
+	ActiveRewardWidget->FocusFirstOption();
 	PlayerController->SetShowMouseCursor(true);
 	PlayerController->SetIgnoreMoveInput(true);
 	PlayerController->SetIgnoreLookInput(true);
@@ -152,11 +160,9 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		return Candidates;
 	}
 
-	if (!CachedSkillComponent->HasSkill(EPlayerSkillID::CircularSlash) && CachedSkillComponent->HasEmptySkillSlot())
-	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::GainSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::None,
-			FText::FromString(TEXT("Gain Circular Slash")), FText::FromString(TEXT("Release a damaging circle around the player."))));
-	}
+	// Both active skills are part of the fixed starting loadout. Roguelike
+	// rewards only grow those skills; they do not add a third slot or unlock
+	// CircularSlash during the run.
 	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic))
 	{
 		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic,

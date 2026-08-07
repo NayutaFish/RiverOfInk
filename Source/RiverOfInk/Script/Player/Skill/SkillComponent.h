@@ -13,6 +13,7 @@ class APlayerCharacter;
 class APlayerSkill_CircleDamageArea;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
+DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
 
 /**
  * Owns the first-pass active skill cooldowns and spawning logic.
@@ -73,6 +74,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashCooldown() const;
+
+	/** Effective cooldown after current roguelike upgrades. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
+	float GetSkillCooldown(EPlayerSkillID SkillID) const;
+
+	/** Remaining cooldown in seconds; zero means the skill is ready. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
+	float GetRemainingSkillCooldown(EPlayerSkillID SkillID) const;
+
+	/** Native notification for HUDs and other runtime observers. */
+	FOnSkillStateChanged OnSkillStateChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Slots")
 	TArray<FPlayerSkillSlot> SkillSlots;

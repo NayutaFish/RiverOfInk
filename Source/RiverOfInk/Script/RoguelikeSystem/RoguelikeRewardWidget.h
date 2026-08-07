@@ -25,6 +25,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	void SelectOption(int32 OptionIndex);
 
+	/** Give keyboard/gamepad navigation a deterministic initial target. */
+	UFUNCTION(BlueprintCallable, Category = "Reward|Focus")
+	void FocusFirstOption();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Reward")
 	void OnRewardOptionsSet(const TArray<FRoguelikeRewardOption>& InOptions);
 

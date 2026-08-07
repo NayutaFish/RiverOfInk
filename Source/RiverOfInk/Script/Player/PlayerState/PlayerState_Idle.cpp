@@ -7,6 +7,7 @@
 #include "Player/PlayerState/PlayerState_Attack2.h"
 #include "Player/PlayerState/PlayerState_HitBack.h"
 #include "Player/PlayerState/PlayerState_Skill1.h"
+#include "Player/PlayerState/PlayerState_Skill2.h"
 #include "Input/PlayerInputComponent.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/SkillComponent.h"
@@ -30,6 +31,7 @@ void UPlayerState_Idle::OnEnter_Implementation()
 	Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Idle::OnLmb);
 	Input->OnRmbDelegate.AddUObject(this, &UPlayerState_Idle::OnRmb);
 	Input->OnQDelegate.AddUObject(this, &UPlayerState_Idle::OnQ);
+	Input->OnEDelegate.AddUObject(this, &UPlayerState_Idle::OnE);
 }
 
 void UPlayerState_Idle::OnExit_Implementation()
@@ -50,6 +52,7 @@ void UPlayerState_Idle::OnExit_Implementation()
 	Input->OnLmbDelegate.RemoveAll(this);
 	Input->OnRmbDelegate.RemoveAll(this);
 	Input->OnQDelegate.RemoveAll(this);
+	Input->OnEDelegate.RemoveAll(this);
 }
 
 void UPlayerState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -94,8 +97,19 @@ void UPlayerState_Idle::OnQ()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player || !Player->SkillComponent) return;
 
-	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::TripleProjectile, Player->SkillComponent->TripleProjectileCooldown))
+	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::TripleProjectile, Player->SkillComponent->GetTripleProjectileCooldown()))
 	{
 		Player->SwitchState(UPlayerState_Skill1::StaticClass());
+	}
+}
+
+void UPlayerState_Idle::OnE()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || !Player->SkillComponent) return;
+
+	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::CircularSlash, Player->SkillComponent->GetCircularSlashCooldown()))
+	{
+		Player->SwitchState(UPlayerState_Skill2::StaticClass());
 	}
 }

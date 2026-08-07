@@ -8,6 +8,7 @@
 #include "PlayerSkill_CircleDamageArea.generated.h"
 
 class USphereComponent;
+class UStaticMeshComponent;
 
 /** Short-lived, player-owned radial damage area for Circular Slash. */
 UCLASS(Blueprintable)
@@ -23,6 +24,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea")
 	TObjectPtr<USphereComponent> CollisionSphere;
+
+	/** Blue whitebox plane used as the first-pass CircularSlash visual. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Visual")
+	TObjectPtr<UStaticMeshComponent> VisualPlane;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea", meta = (ClampMin = "0.0"))
 	float Damage = 120.0f;
@@ -66,6 +71,7 @@ protected:
 		const FHitResult& SweepResult);
 
 private:
+	void UpdateVisualPlaneScale();
 	void TryDamageActor(AActor* OtherActor);
 
 	UPROPERTY(Transient)

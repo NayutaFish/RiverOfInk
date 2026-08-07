@@ -8,6 +8,7 @@
 #include "Player/PlayerState/PlayerState_Dash.h"
 #include "Player/PlayerState/PlayerState_HitBack.h"
 #include "Player/PlayerState/PlayerState_Skill1.h"
+#include "Player/PlayerState/PlayerState_Skill2.h"
 #include "Input/PlayerInputComponent.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/SkillComponent.h"
@@ -38,10 +39,11 @@ void UPlayerState_Move::OnEnter_Implementation()
 	Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Move::OnMoveX);
 	Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Move::OnMoveY);
 	Input->OnShiftDelegate.AddUObject(this, &UPlayerState_Move::OnShift);
-		Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Move::OnLmb);
-		Input->OnRmbDelegate.AddUObject(this, &UPlayerState_Move::OnRmb);
-		Input->OnSpaceDelegate.AddUObject(this, &UPlayerState_Move::OnSpace);
-		Input->OnQDelegate.AddUObject(this, &UPlayerState_Move::OnQ);
+	Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Move::OnLmb);
+	Input->OnRmbDelegate.AddUObject(this, &UPlayerState_Move::OnRmb);
+	Input->OnSpaceDelegate.AddUObject(this, &UPlayerState_Move::OnSpace);
+	Input->OnQDelegate.AddUObject(this, &UPlayerState_Move::OnQ);
+	Input->OnEDelegate.AddUObject(this, &UPlayerState_Move::OnE);
 }
 
 void UPlayerState_Move::OnExit_Implementation()
@@ -64,6 +66,7 @@ void UPlayerState_Move::OnExit_Implementation()
 		Input->OnRmbDelegate.RemoveAll(this);
 		Input->OnSpaceDelegate.RemoveAll(this);
 		Input->OnQDelegate.RemoveAll(this);
+		Input->OnEDelegate.RemoveAll(this);
 	}
 
 	Player->GetCharacterMovement()->MaxWalkSpeed = Player->WalkSpeed;
@@ -131,9 +134,20 @@ void UPlayerState_Move::OnQ()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player || !Player->SkillComponent) return;
 
-	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::TripleProjectile, Player->SkillComponent->TripleProjectileCooldown))
+	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::TripleProjectile, Player->SkillComponent->GetTripleProjectileCooldown()))
 	{
 		Player->SwitchState(UPlayerState_Skill1::StaticClass());
+	}
+}
+
+void UPlayerState_Move::OnE()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || !Player->SkillComponent) return;
+
+	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::CircularSlash, Player->SkillComponent->GetCircularSlashCooldown()))
+	{
+		Player->SwitchState(UPlayerState_Skill2::StaticClass());
 	}
 }
 

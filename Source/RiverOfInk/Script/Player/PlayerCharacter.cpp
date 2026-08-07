@@ -26,6 +26,7 @@
 #include "Player/PlayerState/PlayerState_Skill1.h"
 #include "Player/PlayerState/PlayerState_Skill2.h"
 #include "UI/PlayerHealthWidget.h"
+#include "UI/PlayerSkillWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -51,6 +52,7 @@ APlayerCharacter::APlayerCharacter()
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
+	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
 
 	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
 	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
@@ -205,6 +207,7 @@ void APlayerCharacter::BeginPlay()
 	}
 
 	CreateHealthWidget();
+	CreateSkillWidget();
 
 	// ── 玩家生成完毕 ──
 	FEventBus::Publish<FPlayerSpawnedEvent>(FPlayerSpawnedEvent(this));
@@ -224,6 +227,7 @@ void APlayerCharacter::PossessedBy(AController* NewController)
 	if (HasActorBegunPlay())
 	{
 		CreateHealthWidget();
+		CreateSkillWidget();
 	}
 }
 
@@ -267,6 +271,56 @@ void APlayerCharacter::CreateHealthWidget()
 	HealthWidget->AddToViewport(10);
 	HealthWidget->InitializeForPlayer(this);
 	UE_LOG(LogRiverOfInk, Log, TEXT("Health HUD created for %s."), *GetName());
+}
+
+void APlayerCharacter::CreateSkillWidget()
+{
+	if (SkillWidget)
+	{
+		return;
+	}
+
+	if (!IsLocallyControlled())
+	{
+		UE_LOG(LogSkill, Verbose, TEXT("Skill HUD skipped: %s is not locally controlled yet."), *GetName());
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+
+	if (!PlayerController)
+	{
+		UE_LOG(LogSkill, Warning, TEXT("Skill HUD skipped: no local PlayerController for %s."), *GetName());
+		return;
+	}
+
+	TSubclassOf<UPlayerSkillWidget> WidgetClass = SkillWidgetClass;
+	if (!WidgetClass)
+	{
+		WidgetClass = UPlayerSkillWidget::StaticClass();
+	}
+
+	SkillWidget = CreateWidget<UPlayerSkillWidget>(PlayerController, WidgetClass);
+	if (!SkillWidget)
+	{
+		UE_LOG(LogSkill, Error, TEXT("Skill HUD creation failed for %s."), *GetName());
+		return;
+	}
+
+	// The native widget owns its presentation, but the character explicitly
+	// resets visibility in case a Blueprint subclass kept a designer preview state.
+	SkillWidget->SetVisibility(ESlateVisibility::Visible);
+	SkillWidget->SetRenderOpacity(1.0f);
+	SkillWidget->AddToViewport(20);
+	SkillWidget->InitializeForPlayer(this);
+	UE_LOG(LogSkill, Log, TEXT("Skill HUD created for %s. InViewport=%s Visibility=%d."),
+		*GetName(),
+		SkillWidget->IsInViewport() ? TEXT("true") : TEXT("false"),
+		static_cast<int32>(SkillWidget->GetVisibility()));
 }
 
 void APlayerCharacter::Tick(float DeltaTime)
@@ -318,6 +372,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	CreateHealthWidget();
+	CreateSkillWidget();
 
 	// 通知 PlayerInputComponent 注册子系统和绑定回调（此时 Controller 和 InputComponent 均已就绪）
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent))

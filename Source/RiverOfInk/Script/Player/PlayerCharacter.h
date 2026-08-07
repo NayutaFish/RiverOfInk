@@ -17,6 +17,7 @@ class USkillComponent;
 class UHealthComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
+class UPlayerSkillWidget;
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDeathSignature, AActor*, DeadPlayer);
@@ -121,12 +122,22 @@ protected:
 	/** Create the first-pass health HUD for the locally controlled player. */
 	void CreateHealthWidget();
 
+	/** Create the fixed Q/E skill HUD for the locally controlled player. */
+	void CreateSkillWidget();
+
 	/** Optional Blueprint subclass for the health HUD. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<UPlayerHealthWidget> HealthWidgetClass;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPlayerHealthWidget> HealthWidget;
+
+	/** Optional Blueprint subclass for the skill HUD. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UPlayerSkillWidget> SkillWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPlayerSkillWidget> SkillWidget;
 
 	void Die();
 	void OnAttack();
