@@ -2,6 +2,8 @@
 
 #include "Player/PlayerState/PlayerState_Dash.h"
 #include "RiverOfInk.h"
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "Player/PlayerState/PlayerState_Idle.h"
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Input/PlayerInputComponent.h"
@@ -15,6 +17,9 @@ void UPlayerState_Dash::OnEnter_Implementation()
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
+
+	// 通报进入冲刺事件（供音效/特效等订阅）
+	FEventBus::Publish<FPlayerEnterDashEvent>(FPlayerEnterDashEvent());
 
 	// 标记闪避状态
 	Player->bIsDashing = true;
@@ -55,6 +60,9 @@ void UPlayerState_Dash::OnExit_Implementation()
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
+
+	// 通报退出冲刺事件（供音效/特效等订阅）
+	FEventBus::Publish<FPlayerExitDashEvent>(FPlayerExitDashEvent());
 
 	// 取消闪避标记
 	Player->bIsDashing = false;

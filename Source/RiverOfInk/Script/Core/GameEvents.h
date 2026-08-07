@@ -131,3 +131,125 @@ struct FPlayerDiedEvent
 	{
 	}
 };
+
+// ====================
+// 玩家普攻（CommonAttack）命中事件
+// ====================
+
+struct FPlayerCommonAttackHitEvent
+{
+	/** 命中的敌人 */
+	TObjectPtr<AEnemyBase> Enemy = nullptr;
+
+	FPlayerCommonAttackHitEvent() = default;
+
+	FPlayerCommonAttackHitEvent(AEnemyBase* InEnemy)
+		: Enemy(InEnemy)
+	{
+	}
+};
+
+// ====================
+// 玩家特攻（SpecialAttack）命中事件
+// ====================
+
+struct FPlayerSpecialAttackHitEvent
+{
+	/** 命中的敌人 */
+	TObjectPtr<AEnemyBase> Enemy = nullptr;
+
+	FPlayerSpecialAttackHitEvent() = default;
+
+	FPlayerSpecialAttackHitEvent(AEnemyBase* InEnemy)
+		: Enemy(InEnemy)
+	{
+	}
+};
+
+// ====================
+// 玩家 Q 技能命中事件
+// ====================
+
+struct FPlayerSkillQHitEvent
+{
+	/** 命中的敌人 */
+	TObjectPtr<AEnemyBase> Enemy = nullptr;
+
+	FPlayerSkillQHitEvent() = default;
+
+	FPlayerSkillQHitEvent(AEnemyBase* InEnemy)
+		: Enemy(InEnemy)
+	{
+	}
+};
+
+// ====================
+// 玩家 E 技能命中事件
+// ====================
+
+struct FPlayerSkillEHitEvent
+{
+	/** 命中的敌人 */
+	TObjectPtr<AEnemyBase> Enemy = nullptr;
+
+	FPlayerSkillEHitEvent() = default;
+
+	FPlayerSkillEHitEvent(AEnemyBase* InEnemy)
+		: Enemy(InEnemy)
+	{
+	}
+};
+
+// ====================
+// 玩家 Q 技能施放事件
+// ====================
+
+struct FPlayerSkillQCastEvent
+{
+	FPlayerSkillQCastEvent() = default;
+};
+
+// ====================
+// 玩家 E 技能施放事件
+// ====================
+
+struct FPlayerSkillECastEvent
+{
+	FPlayerSkillECastEvent() = default;
+};
+
+// ====================
+// 玩家 Q 技能冷却完毕事件
+// ====================
+
+struct FPlayerSkillQCooldownReadyEvent
+{
+	FPlayerSkillQCooldownReadyEvent() = default;
+};
+
+// ====================
+// 玩家 E 技能冷却完毕事件
+// ====================
+
+struct FPlayerSkillECooldownReadyEvent
+{
+	FPlayerSkillECooldownReadyEvent() = default;
+};
+
+// ====================
+// 玩家进入冲刺事件
+// ====================
+
+struct FPlayerEnterDashEvent
+{
+	FPlayerEnterDashEvent() = default;
+};
+
+// ====================
+// 玩家退出冲刺事件
+// ====================
+
+struct FPlayerExitDashEvent
+{
+	FPlayerExitDashEvent() = default;
+};
