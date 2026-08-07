@@ -8,6 +8,7 @@
 #include "Player/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Common/AttackAreaBase.h"
+#include "Player/Attack/AttackArea_PlayerAttack2.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 
@@ -45,7 +46,7 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 		}
 	}
 
-	// 在面前生成攻击区域
+	// 在面前生成攻击区域（射弹：非近战，带飞行速度，命中即销毁）
 	if (Player->Attack2AreaClass)
 	{
 		FActorSpawnParameters SpawnParams;
@@ -53,13 +54,16 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 		SpawnParams.Instigator = Player;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		if (AAttackAreaBase* AttackArea = GetWorld()->SpawnActor<AAttackAreaBase>(
+		if (AAttackArea_PlayerAttack2* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack2>(
 				Player->Attack2AreaClass,
 				Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f,
 				Player->GetActorRotation(),
 				SpawnParams))
 		{
-			AttackArea->Initialize(0.3f, 0.0f, true, Player);
+		// 射弹：生命周期 0.5s，飞行速度 900，非近战（命中即销毁）。
+		// 注意：不传 FollowTarget——射弹有独立飞行，跟随玩家会导致每帧被拉回原位
+		AttackArea->Initialize(0.5f, 900.0f, false);
+			AttackArea->bDetectObstacle = true;
 		}
 	}
 

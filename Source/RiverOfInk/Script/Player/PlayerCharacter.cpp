@@ -7,6 +7,7 @@
 #include "Common/AttackAreaBase.h"
 #include "Common/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Player/Attack/AttackArea_PlayerAttack1.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -472,7 +473,7 @@ void APlayerCharacter::OnAttack()
 	Params.Instigator = this;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	if (AAttackAreaBase* AttackArea = GetWorld()->SpawnActor<AAttackAreaBase>(
+	if (AAttackArea_PlayerAttack1* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
 			AttackAreaClass,
 			GetActorLocation() + GetActorForwardVector() * 100.0f,
 			GetActorRotation(),

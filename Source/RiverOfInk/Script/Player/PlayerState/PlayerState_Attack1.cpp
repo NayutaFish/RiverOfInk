@@ -8,6 +8,7 @@
 #include "Player/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Common/AttackAreaBase.h"
+#include "Player/Attack/AttackArea_PlayerAttack1.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 
@@ -45,7 +46,7 @@ void UPlayerState_Attack1::OnEnter_Implementation()
 		}
 	}
 
-	// 在面前生成攻击区域
+	// 在面前生成攻击区域（近战：无速度，持续存在至生命周期结束）
 	if (Player->AttackAreaClass)
 	{
 		FActorSpawnParameters SpawnParams;
@@ -53,7 +54,7 @@ void UPlayerState_Attack1::OnEnter_Implementation()
 		SpawnParams.Instigator = Player;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		if (AAttackAreaBase* AttackArea = GetWorld()->SpawnActor<AAttackAreaBase>(
+		if (AAttackArea_PlayerAttack1* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
 				Player->AttackAreaClass,
 				Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f,
 				Player->GetActorRotation(),

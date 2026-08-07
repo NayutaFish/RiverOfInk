@@ -10,6 +10,8 @@
 
 class UAnimMontage;
 class AAttackAreaBase;
+class AAttackArea_PlayerAttack1;
+class AAttackArea_PlayerAttack2;
 class UStateBase;
 class USkillComponent;
 class UHealthComponent;
@@ -175,13 +177,13 @@ private:
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void TestDie();
 
-	/** 攻击范围蓝图类（在蓝图中赋值） */
+	/** 攻击范围类（近战，普攻；在蓝图中赋值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
-	TSubclassOf<AAttackAreaBase> AttackAreaClass;
+	TSubclassOf<AAttackArea_PlayerAttack1> AttackAreaClass;
 
-	/** Attack2 攻击范围蓝图类（在蓝图中赋值） */
+	/** Attack2 攻击范围类（射弹，特攻；在蓝图中赋值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
-	TSubclassOf<AAttackAreaBase> Attack2AreaClass;
+	TSubclassOf<AAttackArea_PlayerAttack2> Attack2AreaClass;
 
 public:
 	/** 是否正在闪避中 */
