@@ -30,11 +30,17 @@ void USkillComponent::BeginPlay()
 
 void USkillComponent::InitializeSkillSlots()
 {
-	SkillSlots.SetNum(3);
+	// The current run has exactly two active skills. Slot order is the input
+	// contract: slot 0 is Q and slot 1 is E.
+	SkillSlots.SetNum(2);
 	SkillSlots[0].SkillID = EPlayerSkillID::TripleProjectile;
 	SkillSlots[0].SkillLevel = 1;
+	SkillSlots[1].SkillID = EPlayerSkillID::CircularSlash;
+	SkillSlots[1].SkillLevel = 1;
 	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::TripleProjectile);
-	UE_LOG(LogSkill, Log, TEXT("Skill slots initialized: Slot 1 = TripleProjectile."));
+	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::CircularSlash);
+	UE_LOG(LogSkill, Log,
+		TEXT("Skill slots initialized: Slot 0 (Q) = TripleProjectile, Slot 1 (E) = CircularSlash."));
 }
 
 void USkillComponent::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const
@@ -53,6 +59,17 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 {
 	SkillSlots = InRuntimeData.SkillSlots;
 	SkillUpgradeStates = InRuntimeData.SkillUpgradeStates;
+
+	// Older snapshots may contain an empty third slot or no CircularSlash slot.
+	// Normalize them to the current fixed two-skill contract before gameplay uses
+	// the data. Upgrade levels remain owned by the runtime snapshot.
+	SkillSlots.SetNum(2);
+	SkillSlots[0].SkillID = EPlayerSkillID::TripleProjectile;
+	SkillSlots[0].SkillLevel = FMath::Max(1, SkillSlots[0].SkillLevel);
+	SkillSlots[1].SkillID = EPlayerSkillID::CircularSlash;
+	SkillSlots[1].SkillLevel = FMath::Max(1, SkillSlots[1].SkillLevel);
+	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::TripleProjectile);
+	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::CircularSlash);
 	LastCastTimes.Reset();
 
 	UE_LOG(LogSkill, Log,
@@ -60,6 +77,7 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 		*GetNameSafe(GetOwner()),
 		SkillSlots.Num(),
 		SkillUpgradeStates.Num());
+	OnSkillStateChanged.Broadcast();
 }
 
 void USkillComponent::TryCastSkill1()
@@ -100,6 +118,7 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 	if (bCastSucceeded)
 	{
 		LastCastTimes.Add(SkillID, GetWorld()->GetTimeSeconds());
+		OnSkillStateChanged.Broadcast();
 	}
 }
 
@@ -130,6 +149,7 @@ bool USkillComponent::AddSkillToFirstEmptySlot(EPlayerSkillID SkillID)
 	SkillSlots[EmptySlotIndex].SkillLevel = 1;
 	SkillUpgradeStates.FindOrAdd(SkillID);
 	UE_LOG(LogSkill, Log, TEXT("Added %s to skill slot %d."), *UEnum::GetValueAsString(SkillID), EmptySlotIndex + 1);
+	OnSkillStateChanged.Broadcast();
 	return true;
 }
 
@@ -176,6 +196,7 @@ void USkillComponent::ApplySkillUpgrade(EPlayerSkillID SkillID, ESkillUpgradeTyp
 		++SkillSlots[SlotIndex].SkillLevel;
 	}
 	UE_LOG(LogSkill, Log, TEXT("Upgraded %s: Mechanic=%d Cooldown=%d."), *UEnum::GetValueAsString(SkillID), State.MechanicLevel, State.CooldownLevel);
+	OnSkillStateChanged.Broadcast();
 }
 
 FSkillUpgradeState USkillComponent::GetSkillUpgradeState(EPlayerSkillID SkillID) const
@@ -205,6 +226,33 @@ float USkillComponent::GetCircularSlashRadius() const
 float USkillComponent::GetCircularSlashCooldown() const
 {
 	return FMath::Max(1.6f, CircularSlashCooldown - GetSkillUpgradeState(EPlayerSkillID::CircularSlash).CooldownLevel * 0.4f);
+}
+
+float USkillComponent::GetSkillCooldown(EPlayerSkillID SkillID) const
+{
+	switch (SkillID)
+	{
+	case EPlayerSkillID::TripleProjectile:
+		return GetTripleProjectileCooldown();
+	case EPlayerSkillID::CircularSlash:
+		return GetCircularSlashCooldown();
+	default:
+		return 0.0f;
+	}
+}
+
+float USkillComponent::GetRemainingSkillCooldown(EPlayerSkillID SkillID) const
+{
+	const UWorld* World = GetWorld();
+	const double* LastCastTime = LastCastTimes.Find(SkillID);
+	if (!World || !LastCastTime)
+	{
+		return 0.0f;
+	}
+
+	const float Remaining = GetSkillCooldown(SkillID)
+		- static_cast<float>(World->GetTimeSeconds() - *LastCastTime);
+	return FMath::Max(0.0f, Remaining);
 }
 
 bool USkillComponent::CanCastSkill() const

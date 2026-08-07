@@ -29,4 +29,5 @@ private:
 	void OnLmb();
 	void OnRmb();
 	void OnQ();
+	void OnE();
 };

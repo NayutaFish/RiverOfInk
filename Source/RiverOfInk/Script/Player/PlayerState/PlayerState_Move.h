@@ -36,6 +36,7 @@ private:
 	void OnRmb();
 	void OnSpace();
 	void OnQ();
+	void OnE();
 
 	float LastInputTime = 0.0f;
 	float LastShiftTime = 0.0f;
