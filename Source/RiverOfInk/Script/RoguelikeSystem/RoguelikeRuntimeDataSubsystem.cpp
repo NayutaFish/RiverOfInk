@@ -3,6 +3,7 @@
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 
 #include "Common/HealthComponent.h"
+#include "Core/CombatDamageCalculator.h"
 #include "Player/PlayerCharacter.h"
 
 DEFINE_LOG_CATEGORY(LogRoguelikeRuntimeData);
@@ -50,14 +51,20 @@ bool URoguelikeRuntimeDataSubsystem::RegisterPlayerRuntimeData(const FPlayerRunt
 		PlayerRuntimeData.Stats.CurrentHealth,
 		0.0f,
 		PlayerRuntimeData.Stats.MaxHealth);
+	PlayerRuntimeData.Stats.Defense = RiverOfInkDamage::ResolveLegacyDefense(
+		PlayerRuntimeData.Stats.Defense,
+		PlayerRuntimeData.Stats.PhysicalResistance,
+		PlayerRuntimeData.Stats.MagicResistance);
+	// Keep old readers and Blueprint snapshots compatible during migration.
+	PlayerRuntimeData.Stats.PhysicalResistance = PlayerRuntimeData.Stats.Defense;
+	PlayerRuntimeData.Stats.MagicResistance = PlayerRuntimeData.Stats.Defense;
 	bHasPlayerRuntimeData = true;
 
 	UE_LOG(LogRoguelikeRuntimeData, Log,
-		TEXT("Player runtime data registered: HP=%.0f/%.0f PhysicalResistance=%d MagicResistance=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
+		TEXT("Player runtime data registered: HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
 		PlayerRuntimeData.Stats.CurrentHealth,
 		PlayerRuntimeData.Stats.MaxHealth,
-		PlayerRuntimeData.Stats.PhysicalResistance,
-		PlayerRuntimeData.Stats.MagicResistance,
+		PlayerRuntimeData.Stats.Defense,
 		PlayerRuntimeData.Stats.WalkSpeed,
 		PlayerRuntimeData.Stats.SprintSpeed,
 		PlayerRuntimeData.SkillSlots.Num(),
@@ -92,12 +99,11 @@ bool URoguelikeRuntimeDataSubsystem::ApplyRegisteredPlayerRuntimeData(APlayerCha
 	}
 
 	UE_LOG(LogRoguelikeRuntimeData, Log,
-		TEXT("Player runtime data applied: Player=%s HP=%.0f/%.0f PhysicalResistance=%d MagicResistance=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
+		TEXT("Player runtime data applied: Player=%s HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
 		*Player->GetName(),
 		Player->GetHealthComponent()->GetCurrentHealth(),
 		Player->GetHealthComponent()->GetMaxHealth(),
-		Player->GetHealthComponent()->GetPhysicalResistance(),
-		Player->GetHealthComponent()->GetMagicResistance(),
+		Player->GetHealthComponent()->GetDefense(),
 		Player->WalkSpeed,
 		Player->SprintSpeed,
 		PlayerRuntimeData.SkillSlots.Num(),

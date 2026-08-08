@@ -35,7 +35,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill")
 	void InitializeForPlayer(APlayerCharacter* InPlayer);
 
-	/** Refresh slot labels, icons, levels, and cooldown state. */
+	/** Refresh parsed build summaries, icons, levels, and cooldown state. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill")
 	void RefreshSkills();
 
@@ -53,9 +53,11 @@ private:
 	void RefreshSlot(
 		const FPlayerSkillSlot& Slot,
 		EPlayerSkillID FallbackSkillID,
+		EPlayerSkillForm FallbackSkillForm,
 		UImage* Icon,
 		UTextBlock* Title,
 		UTextBlock* Level,
+		UTextBlock* BuildSummary,
 		UProgressBar* CooldownBar,
 		UTextBlock* CooldownText,
 		const TCHAR* KeyLabel);
@@ -89,6 +91,9 @@ private:
 	TObjectPtr<UTextBlock> QLevel;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> QBuildSummary;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> QCooldownBar;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -102,6 +107,9 @@ private:
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ELevel;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EBuildSummary;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> ECooldownBar;

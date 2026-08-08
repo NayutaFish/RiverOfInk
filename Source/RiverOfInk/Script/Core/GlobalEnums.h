@@ -20,5 +20,6 @@ enum class EDamageType : uint8
 	Physical UMETA(DisplayName = "Physical"),
 	Magic UMETA(DisplayName = "Magic"),
 	TrueDamage UMETA(DisplayName = "True Damage"),
-	Must UMETA(DisplayName = "Must")
+	Must UMETA(DisplayName = "Must"),
+	Unified UMETA(DisplayName = "Unified Damage")
 };

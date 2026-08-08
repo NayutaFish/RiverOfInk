@@ -6,11 +6,13 @@
 #include "Components/ActorComponent.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeSystem/PlayerRuntimeData.h"
+#include "TimerManager.h"
 #include "SkillComponent.generated.h"
 
 class AAttackAreaBase;
 class APlayerCharacter;
 class APlayerSkill_CircleDamageArea;
+class APlayerSkill_ThrownGrenade;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
 DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
@@ -54,10 +56,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill|Upgrade")
 	void ApplySkillUpgrade(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType);
 
-	/** Copy skill slots and upgrade levels into the aggregate run snapshot. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Build")
+	int32 GetModifierStack(EPlayerSkillID SkillID, ESkillModifierID ModifierID) const;
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Build")
+	bool CanApplyModifier(EPlayerSkillID SkillID, ESkillModifierID ModifierID, int32 StackDelta = 1) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Skill|Build")
+	bool ApplyModifier(EPlayerSkillID SkillID, ESkillModifierID ModifierID, int32 StackDelta = 1);
+
+	/** Copy skill slots, modifiers, and upgrade levels into the aggregate run snapshot. */
 	void CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
 
-	/** Apply skill slots and upgrade levels from the aggregate run snapshot. */
+	/** Apply skill slots, modifiers, and upgrade levels from the aggregate run snapshot. */
 	void ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Upgrade")
@@ -75,6 +86,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashCooldown() const;
 
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
+
+	/** True when a target form belongs to this skill and differs from its current form. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm) const;
+
+	/** Set a persistent skill form. Reward systems call this instead of editing slots directly. */
+	UFUNCTION(BlueprintCallable, Category = "Skill|Form")
+	bool ApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm);
+
 	/** Effective cooldown after current roguelike upgrades. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
 	float GetSkillCooldown(EPlayerSkillID SkillID) const;
@@ -82,6 +104,17 @@ public:
 	/** Remaining cooldown in seconds; zero means the skill is ready. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
 	float GetRemainingSkillCooldown(EPlayerSkillID SkillID) const;
+
+	/** Resolve the current build into deterministic, one-cast parameters. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FResolvedSkillSpec ResolveSkillSpec(EPlayerSkillID SkillID) const;
+
+	/** Presentation-safe summaries derived from the same build state used by casts. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FText GetSkillBuildSummary(EPlayerSkillID SkillID) const;
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FText GetResolvedSkillSummary(EPlayerSkillID SkillID) const;
 
 	/** Native notification for HUDs and other runtime observers. */
 	FOnSkillStateChanged OnSkillStateChanged;
@@ -107,8 +140,49 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.01"))
 	float CircularSlashLifeTime = 0.25f;
 
+	/** Twin Slash repeats the E hit after this short delay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "s"))
+	float TwinSlashDelay = 0.18f;
+
+	/** Damage multiplier used by Twin Slash's delayed second hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0"))
+	float TwinSlashSecondDamageMultiplier = 0.8f;
+
+	/** The delayed hit is placed in this yaw direction relative to the first cast. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
+	float TwinSlashSecondYawOffset = 35.0f;
+
+	/** Offset the delayed circular hit so the yaw angle has gameplay impact. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "cm"))
+	float TwinSlashSecondForwardOffset = 110.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
+
+	/** Legacy Q form actor. New builds select it through the InkGrenade modifier. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
+	TSubclassOf<APlayerSkill_ThrownGrenade> ThrownGrenadeClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeSpeed = 850.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
+	float ThrownGrenadeGravityZ = -980.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.05"))
+	float ThrownGrenadeFuseTime = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
+	float ThrownGrenadeExplosionRadius = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeDamage = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0", Units = "s"))
+	float ThrownGrenadeExplosionDelay = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
+	float ThrownGrenadeCollisionRadius = 32.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile", meta = (ClampMin = "0.0"))
 	float TripleProjectileCooldown = 4.0f;
@@ -130,6 +204,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:
 	bool IsOnCooldown(EPlayerSkillID SkillID, float Cooldown) const;
@@ -137,13 +212,36 @@ public:
 private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
+	bool SpawnCircularSlash(
+		const FTransform& SpawnTransform,
+		float Radius,
+		float Damage,
+		bool bNullifyEnemyProjectiles);
+	void CastTwinSlashSecondHit();
 	bool CastTripleProjectile();
-	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& Direction, const TCHAR* ProjectileLabel);
+	bool CastThrownGrenade(const FResolvedSkillSpec& Spec);
+	bool SpawnProjectile(
+		const FVector& SpawnLocation,
+		const FVector& Direction,
+		float ProjectileLifeTime,
+		float ProjectileSpeed,
+		const TCHAR* ProjectileLabel);
 	void InitializeSkillSlots();
 	int32 GetMaxUpgradeLevel(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType) const;
+	int32 GetModifierStackForSlot(const FPlayerSkillSlot& Slot, ESkillModifierID ModifierID) const;
+	int32 GetMaxModifierStack(EPlayerSkillID SkillID, ESkillModifierID ModifierID) const;
+	void NormalizeSkillModifiers();
+	void MigrateLegacySkillForms();
+	void AddModifierIfMissing(FPlayerSkillSlot& Slot, ESkillModifierID ModifierID, int32 StackCount);
+	FString BuildModifierSummary(EPlayerSkillID SkillID) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerCharacter> OwnerCharacter;
 
 	TMap<EPlayerSkillID, double> LastCastTimes;
+
+	FTimerHandle TwinSlashTimerHandle;
+	FVector PendingTwinSlashOrigin = FVector::ZeroVector;
+	FRotator PendingTwinSlashRotation = FRotator::ZeroRotator;
+	FResolvedSkillSpec PendingTwinSlashSpec;
 };

@@ -2,6 +2,7 @@
 
 #include "Common/HealthComponent.h"
 
+#include "Core/CombatDamageCalculator.h"
 #include "RiverOfInk.h"
 
 UHealthComponent::UHealthComponent()
@@ -12,6 +13,7 @@ UHealthComponent::UHealthComponent()
 void UHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	NormalizeDefenseFromLegacy();
 	InitializeHealth();
 }
 
@@ -41,26 +43,14 @@ void UHealthComponent::TakeDamage(const FTakeDamageInfo& InInfo)
 		OnTakeDirectDamage.Broadcast(InInfo);
 	}
 
-	float FinalDamage = InInfo.DamageValue;
-	switch (InInfo.DamageType)
-	{
-	case EDamageType::Physical:
-		FinalDamage = FMath::Max(InInfo.DamageValue * 0.05f, InInfo.DamageValue - PhysicalResistance);
-		break;
-	case EDamageType::Magic:
-		FinalDamage = FMath::Max(
-			InInfo.DamageValue * 0.05f,
-			static_cast<float>(FMath::FloorToInt(InInfo.DamageValue * (1.0f - MagicResistance / 100.0f))));
-		break;
-	default:
-		break;
-	}
+	const int32 FinalDamage = RiverOfInkDamage::CalculateFinalDamage(InInfo.DamageValue, Defense);
 
-	CurrentHealth = FMath::Max(0.0f, CurrentHealth - FinalDamage);
+	CurrentHealth = FMath::Max(0.0f, CurrentHealth - static_cast<float>(FinalDamage));
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Health component damage: Owner=%s Damage=%.1f CurrentHealth=%.1f."),
+		TEXT("Health component damage: Owner=%s Damage=%d Defense=%d CurrentHealth=%.1f."),
 		*GetNameSafe(GetOwner()),
 		FinalDamage,
+		Defense,
 		CurrentHealth);
 
 	if (CurrentHealth <= 0.0f)
@@ -103,10 +93,22 @@ void UHealthComponent::SetRuntimeHealthData(
 	int32 InPhysicalResistance,
 	int32 InMagicResistance)
 {
+	SetRuntimeDefenseData(
+		InMaxHealth,
+		InCurrentHealth,
+		RiverOfInkDamage::ResolveLegacyDefense(0, InPhysicalResistance, InMagicResistance));
+}
+
+void UHealthComponent::SetRuntimeDefenseData(
+	float InMaxHealth,
+	float InCurrentHealth,
+	int32 InDefense)
+{
 	MaxHealth = FMath::Max(1.0f, InMaxHealth);
 	CurrentHealth = FMath::Clamp(InCurrentHealth, 0.0f, MaxHealth);
-	PhysicalResistance = FMath::Max(0, InPhysicalResistance);
-	MagicResistance = FMath::Clamp(InMagicResistance, 0, 100);
+	Defense = FMath::Max(0, InDefense);
+	PhysicalResistance = Defense;
+	MagicResistance = Defense;
 	BroadcastHealthChanged();
 }
 
@@ -114,39 +116,49 @@ void UHealthComponent::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) co
 {
 	OutRuntimeData.Stats.MaxHealth = FMath::Max(1.0f, MaxHealth);
 	OutRuntimeData.Stats.CurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, OutRuntimeData.Stats.MaxHealth);
-	OutRuntimeData.Stats.PhysicalResistance = FMath::Max(0, PhysicalResistance);
-	OutRuntimeData.Stats.MagicResistance = FMath::Clamp(MagicResistance, 0, 100);
+	OutRuntimeData.Stats.Defense = FMath::Max(0, Defense);
+	// Keep legacy snapshot fields synchronized for older readers.
+	OutRuntimeData.Stats.PhysicalResistance = OutRuntimeData.Stats.Defense;
+	OutRuntimeData.Stats.MagicResistance = OutRuntimeData.Stats.Defense;
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Health runtime data captured: Owner=%s HP=%.0f/%.0f PhysicalResistance=%d MagicResistance=%d."),
+		TEXT("Health runtime data captured: Owner=%s HP=%.0f/%.0f Defense=%d."),
 		*GetNameSafe(GetOwner()),
 		OutRuntimeData.Stats.CurrentHealth,
 		OutRuntimeData.Stats.MaxHealth,
-		OutRuntimeData.Stats.PhysicalResistance,
-		OutRuntimeData.Stats.MagicResistance);
+		OutRuntimeData.Stats.Defense);
 }
 
 void UHealthComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 {
-	SetRuntimeHealthData(
-		InRuntimeData.Stats.MaxHealth,
-		InRuntimeData.Stats.CurrentHealth,
+	const int32 RuntimeDefense = RiverOfInkDamage::ResolveLegacyDefense(
+		InRuntimeData.Stats.Defense,
 		InRuntimeData.Stats.PhysicalResistance,
 		InRuntimeData.Stats.MagicResistance);
+	SetRuntimeDefenseData(
+		InRuntimeData.Stats.MaxHealth,
+		InRuntimeData.Stats.CurrentHealth,
+		RuntimeDefense);
 
 	UE_LOG(LogRiverOfInk, Verbose,
-		TEXT("Health runtime data applied: Owner=%s HP=%.0f/%.0f PhysicalResistance=%d MagicResistance=%d."),
+		TEXT("Health runtime data applied: Owner=%s HP=%.0f/%.0f Defense=%d."),
 		*GetNameSafe(GetOwner()),
 		CurrentHealth,
 		MaxHealth,
-		PhysicalResistance,
-		MagicResistance);
+		Defense);
 }
 
 void UHealthComponent::SetCurrentHealth(float InCurrentHealth)
 {
 	CurrentHealth = FMath::Clamp(InCurrentHealth, 0.0f, MaxHealth);
 	BroadcastHealthChanged();
+}
+
+void UHealthComponent::NormalizeDefenseFromLegacy()
+{
+	Defense = RiverOfInkDamage::ResolveLegacyDefense(Defense, PhysicalResistance, MagicResistance);
+	PhysicalResistance = Defense;
+	MagicResistance = Defense;
 }
 
 void UHealthComponent::BroadcastHealthChanged()

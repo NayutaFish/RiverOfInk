@@ -20,7 +20,12 @@ public:
 	APlayerSkill_CircleDamageArea();
 
 	UFUNCTION(BlueprintCallable, Category = "SkillArea")
-	void Initialize(float InRadius, float InDamage, float InLifeTime, AActor* InInstigator);
+	void Initialize(
+		float InRadius,
+		float InDamage,
+		float InLifeTime,
+		AActor* InInstigator,
+		bool bInNullifyEnemyProjectiles = false);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea")
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -32,9 +37,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea", meta = (ClampMin = "0.0"))
 	float Damage = 120.0f;
 
-	/** 伤害类型（物理/魔法/真实/必中） */
+	/** Legacy metadata only; all skills use the unified damage calculation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea")
-	EDamageType DamageType = EDamageType::Physical;
+	EDamageType DamageType = EDamageType::Unified;
 
 	/** 是否为直接性伤害（非持续/非技能间接伤害） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea")
@@ -58,6 +63,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea|Debug")
 	bool bDrawDebugArea = true;
 
+	/** True only for the E Null Ring form. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|NullRing")
+	bool bNullifyEnemyProjectiles = false;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -73,6 +82,7 @@ protected:
 private:
 	void UpdateVisualPlaneScale();
 	void TryDamageActor(AActor* OtherActor);
+	void NullifyEnemyProjectilesInRange();
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DamageInstigator;

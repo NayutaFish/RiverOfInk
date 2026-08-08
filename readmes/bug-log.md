@@ -1,5 +1,21 @@
 # Bug Log
 
+## 2026-08-08：Slice 6–7 PIE 基础启动验证
+
+- **验证结果**：`RiverOfInkEditor` 冷编译成功；PIE 成功创建 `/Game/Level/UEDPIE_0_TestMap_0`，并在验证后正常停止。
+- **已确认**：`Health HUD`、`Skill HUD`、Q/E 图标、Q/E 构筑摘要和准备房间跳过敌人生成均在 `LogRiverOfInk` / `LogSkill` / `LogRoguelike` 中完成初始化。
+- **尚未覆盖**：本次从准备房间启动，未进入 Combat Room，因此奖励卡选择、Modifier 组合、跨房间 Capture/Apply 和技能实际行为矩阵仍需下一轮 PIE。
+- **环境提示**：UE 5.8 默认 Installed DDC/Zen/Shader 工作目录不可写；本次通过 `-DDC-ForceMemoryCache -SkipZenStore -NoZenAutoLaunch` 并指定项目 `Saved` 工作目录完成启动。Turnkey 权限和 EOS SSL 警告属于本机环境噪声。
+- **遗留资产警告**：旧 `WBP_RoguelikeReward.uasset` 仍引用 `/Script/Test_GamePlay`，加载时会出现 `Unknown structure`；未阻塞本次基础启动，但应在奖励 UI 专项 PIE 前迁移或重保存该 WBP。
+
+## 2026-08-08：旧版技能 WBP 不显示构筑摘要
+
+- **现象**：奖励已经写入 `USkillComponent`，实际施放参数发生变化，但旧版技能 HUD 仍只显示技能名、等级和冷却，玩家无法确认当前 Modifier 层数。
+- **根本原因**：旧 WBP 没有 Slice 6 新增的 `BuildSummary` 绑定；同时 HUD 不应复制 Resolver 的计算逻辑，否则容易出现“显示值”和“实际施放值”分叉。
+- **最终修复**：新增 `GetSkillBuildSummary()` 与 `GetResolvedSkillSummary()`，统一读取 `FResolvedSkillSpec`；`UPlayerSkillWidget` 订阅 `OnSkillStateChanged`，有新控件时写入摘要，没有新控件时把相同内容追加到等级文本；原生白盒树增加独立摘要区域。
+- **如何验证**：代码静态检查和 `git diff --check` 已通过；PIE 需在 UnrealBuildTool 日志备份权限恢复后，按构筑矩阵确认奖励选择后 Q/E 卡片立即更新。
+- **涉及的 C++/UE 知识点**：组件作为运行时数据唯一来源、Delegate 驱动 HUD、可选 `BindWidget` 兼容旧控件树、Resolver 作为不可变展示模型、Timer 只承担冷却倒计时。
+
 ## 2026-08-07：技能 HUD 已创建但游戏画面不可见
 
 - **现象**：PIE 日志出现 `Skill HUD tree`、`Skill HUD bound` 和 `Skill HUD created`，但画面只有左上角血条，底部没有 Q/E 技能栏。

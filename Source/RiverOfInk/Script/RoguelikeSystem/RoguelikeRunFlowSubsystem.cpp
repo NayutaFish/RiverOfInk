@@ -7,6 +7,7 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
+#include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "UObject/SoftObjectPath.h"
@@ -16,6 +17,7 @@ DEFINE_LOG_CATEGORY(LogRoguelikeRunFlow);
 void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	Collection.InitializeDependency<URoguelikeEconomySubsystem>();
 
 	ResetRunProgress();
 	CurrentRunState = ERoguelikeRunState::MainMenu;
@@ -88,6 +90,11 @@ bool URoguelikeRunFlowSubsystem::LoadPreparationRoom()
 	}
 
 	if (!ResetPlayerRuntimeData())
+	{
+		return false;
+	}
+
+	if (!ResetEconomyData())
 	{
 		return false;
 	}
@@ -417,6 +424,11 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 		return false;
 	}
 
+	if (!ResetEconomyData())
+	{
+		return false;
+	}
+
 	ResetRunProgress();
 
 	TArray<FRoguelikeRoomDefinition> FirstMajorStageSequence;
@@ -669,6 +681,24 @@ bool URoguelikeRunFlowSubsystem::ResetPlayerRuntimeData()
 
 	RuntimeData->ResetPlayerRuntimeData();
 	UE_LOG(LogRoguelikeRunFlow, Log, TEXT("Player runtime data reset for a new run boundary."));
+	return true;
+}
+
+bool URoguelikeRunFlowSubsystem::ResetEconomyData()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeEconomySubsystem* Economy = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeEconomySubsystem>()
+		: nullptr;
+	if (!Economy)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Error,
+			TEXT("Cannot reset Pure Ink economy: economy subsystem is unavailable."));
+		return false;
+	}
+
+	Economy->ResetForNewRun();
+	UE_LOG(LogRoguelikeRunFlow, Log, TEXT("Pure Ink economy reset for a new run boundary."));
 	return true;
 }
 

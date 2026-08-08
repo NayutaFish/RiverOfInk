@@ -54,13 +54,21 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Stats")
 	float CurrentHealth = 100.0f;
 
-	/** 物理抗性（物理伤害减免值，最终伤害不低于原伤害的5%） */
+	/** Single defense value used by the project-wide damage formula. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "0"))
+	int32 Defense = 0;
+
+	/** Legacy physical resistance retained for old Blueprint assets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 PhysicalResistance = 0;
 
-	/** 魔法抗性（百分比减免，最终伤害不低于原伤害的5%） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "0", ClampMax = "100"))
+	/** Legacy magic resistance retained for old Blueprint assets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 MagicResistance = 0;
+
+	/** Pure Ink awarded when this enemy dies during an active Combat Room. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Economy|Pure Ink", meta = (ClampMin = "0"))
+	int32 PureInkDropAmount = 1;
 
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Enemy|State")
@@ -171,6 +179,9 @@ public:
 	TObjectPtr<APlayerCharacter> CachedPlayer;
 
 public:
+	UFUNCTION(BlueprintPure, Category = "Enemy|Economy|Pure Ink")
+	int32 GetPureInkDropAmount() const { return PureInkDropAmount; }
+
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
 
@@ -179,4 +190,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void Die();
+
+private:
+	void NormalizeDefenseFromLegacy();
 };

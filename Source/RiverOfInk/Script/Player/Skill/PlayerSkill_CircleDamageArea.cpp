@@ -2,11 +2,14 @@
 
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
 
+#include "Common/AttackAreaBase.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/GlobalStructs.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -89,6 +92,11 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 
 	UE_LOG(LogSkill, Log, TEXT("CircularSlash blue plane visual ready: Radius=%.0f LifeTime=%.2f."), Radius, LifeTime);
 
+	if (bNullifyEnemyProjectiles)
+	{
+		NullifyEnemyProjectilesInRange();
+	}
+
 	// Include enemies that were already inside the final radius when the deferred spawn finished.
 	TArray<AActor*> OverlappingActors;
 	CollisionSphere->GetOverlappingActors(OverlappingActors, AEnemyBase::StaticClass());
@@ -98,12 +106,18 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	}
 }
 
-void APlayerSkill_CircleDamageArea::Initialize(float InRadius, float InDamage, float InLifeTime, AActor* InInstigator)
+void APlayerSkill_CircleDamageArea::Initialize(
+	float InRadius,
+	float InDamage,
+	float InLifeTime,
+	AActor* InInstigator,
+	bool bInNullifyEnemyProjectiles)
 {
 	Radius = FMath::Max(1.0f, InRadius);
 	Damage = FMath::Max(0.0f, InDamage);
 	LifeTime = FMath::Max(0.01f, InLifeTime);
 	DamageInstigator = InInstigator;
+	bNullifyEnemyProjectiles = bInNullifyEnemyProjectiles;
 	CollisionSphere->SetSphereRadius(Radius, HasActorBegunPlay());
 	UpdateVisualPlaneScale();
 
@@ -111,6 +125,56 @@ void APlayerSkill_CircleDamageArea::Initialize(float InRadius, float InDamage, f
 	{
 		SetLifeSpan(LifeTime);
 	}
+}
+
+void APlayerSkill_CircleDamageArea::NullifyEnemyProjectilesInRange()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectQuery;
+	ObjectQuery.AddObjectTypesToQuery(ECC_GameTraceChannel1); // DamageArea
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(NullRing), false);
+	QueryParams.AddIgnoredActor(this);
+	QueryParams.AddIgnoredActor(DamageInstigator);
+
+	TArray<FOverlapResult> Overlaps;
+	const bool bHasOverlaps = World->OverlapMultiByObjectType(
+		Overlaps,
+		GetActorLocation(),
+		FQuat::Identity,
+		ObjectQuery,
+		FCollisionShape::MakeSphere(Radius),
+		QueryParams);
+
+	int32 ProjectileCount = 0;
+	int32 NullifiedCount = 0;
+	if (bHasOverlaps)
+	{
+		for (const FOverlapResult& Overlap : Overlaps)
+		{
+			AAttackAreaBase* AttackArea = Cast<AAttackAreaBase>(Overlap.GetActor());
+			if (!IsValid(AttackArea) || !AttackArea->bIsEnemyProjectile)
+			{
+				continue;
+			}
+
+			++ProjectileCount;
+			if (AttackArea->NullifyEnemyProjectile())
+			{
+				++NullifiedCount;
+			}
+		}
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Null Ring query resolved: Radius=%.0f EnemyProjectiles=%d Nullified=%d."),
+		Radius,
+		ProjectileCount,
+		NullifiedCount);
 }
 
 void APlayerSkill_CircleDamageArea::UpdateVisualPlaneScale()

@@ -26,9 +26,12 @@ struct FTakeDamageInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	TObjectPtr<AActor> Attacker;
 
-	/** 伤害类型 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
-	EDamageType DamageType = EDamageType::Physical;
+	/**
+	 * Legacy metadata retained so old Blueprint assets and callers still load.
+	 * Health owners now use one damage calculation regardless of this value.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage", meta = (DeprecatedProperty, DeprecationMessage = "DamageType is metadata only; use the unified damage model."))
+	EDamageType DamageType = EDamageType::Unified;
 
 	/** 伤害值 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")

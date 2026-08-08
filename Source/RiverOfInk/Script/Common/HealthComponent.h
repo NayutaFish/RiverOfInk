@@ -14,7 +14,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthDeathSignature, AActor*, De
 /**
  * Reusable health and damage component.
  *
- * The component owns effective health values and resistance-based damage
+ * The component owns effective health values and the single-defense damage
  * calculation. The owning actor remains responsible for actor-specific death
  * presentation, destruction, and gameplay events.
  */
@@ -32,7 +32,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void InitializeHealth();
 
-	/** Apply one damage request after resistance calculation. */
+	/** Apply one damage request through the project-wide single damage model. */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void TakeDamage(const FTakeDamageInfo& InInfo);
 
@@ -40,8 +40,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Die();
 
-	/** Apply a cross-level runtime snapshot after the owner has initialized. */
+	/** Apply a cross-level runtime snapshot using the unified defense value. */
 	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SetRuntimeDefenseData(
+		float InMaxHealth,
+		float InCurrentHealth,
+		int32 InDefense);
+
+	/**
+	 * Legacy four-argument adapter. Existing Blueprint callers can continue to
+	 * pass the old resistance pair while the runtime stores one Defense value.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	UE_DEPRECATED(5.8, "Use SetRuntimeDefenseData; the damage model has one Defense value.")
 	void SetRuntimeHealthData(
 		float InMaxHealth,
 		float InCurrentHealth,
@@ -64,10 +75,15 @@ public:
 	float GetCurrentHealth() const { return CurrentHealth; }
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	int32 GetPhysicalResistance() const { return PhysicalResistance; }
+	int32 GetDefense() const { return Defense; }
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	int32 GetMagicResistance() const { return MagicResistance; }
+	UE_DEPRECATED(5.8, "Use GetDefense; the damage model has one Defense value.")
+	int32 GetPhysicalResistance() const { return Defense; }
+
+	UFUNCTION(BlueprintPure, Category = "Health")
+	UE_DEPRECATED(5.8, "Use GetDefense; the damage model has one Defense value.")
+	int32 GetMagicResistance() const { return Defense; }
 
 	UFUNCTION(BlueprintPure, Category = "Health")
 	bool IsDead() const { return bIsDead; }
@@ -78,12 +94,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health|Stats")
 	float CurrentHealth = 100.0f;
 
-	/** Physical damage reduction. Final damage is never lower than 5%. */
+	/** Single defense value used by the current damage formula. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Stats", meta = (ClampMin = "0"))
+	int32 Defense = 0;
+
+	/** Legacy physical resistance retained for old Blueprint assets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 PhysicalResistance = 0;
 
-	/** Magic damage reduction percentage. Final damage is never lower than 5%. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Stats", meta = (ClampMin = "0", ClampMax = "100"))
+	/** Legacy magic resistance retained for old Blueprint assets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 MagicResistance = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health|State")
@@ -99,5 +119,6 @@ public:
 	FOnTakeDirectDamageSignature OnTakeDirectDamage;
 
 private:
+	void NormalizeDefenseFromLegacy();
 	void BroadcastHealthChanged();
 };

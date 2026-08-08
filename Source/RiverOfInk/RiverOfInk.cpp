@@ -21,3 +21,4 @@ class FRiverOfInkModule : public FDefaultGameModuleImpl
 IMPLEMENT_PRIMARY_GAME_MODULE(FRiverOfInkModule, RiverOfInk, "RiverOfInk");
 
 DEFINE_LOG_CATEGORY(LogRiverOfInk);
+DEFINE_LOG_CATEGORY(LogRoguelike);

@@ -8,3 +8,6 @@
  * 用法：UE_LOG(LogRiverOfInk, Warning, TEXT("Message")); */
 DECLARE_LOG_CATEGORY_EXTERN(LogRiverOfInk, Log, All);
 
+/** Shared roguelike gameplay log category. */
+DECLARE_LOG_CATEGORY_EXTERN(LogRoguelike, Log, All);
+

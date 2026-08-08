@@ -8,6 +8,7 @@
 #include "RoguelikeRunFlowSubsystem.generated.h"
 
 class ARoguelikeExitTrigger;
+class URoguelikeEconomySubsystem;
 class UWorld;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogRoguelikeRunFlow, Log, All);
@@ -164,6 +165,7 @@ private:
 	bool TransitionRunState(ERoguelikeRunState NextState, ERoguelikeRunTransitionReason Reason);
 	bool IsTransitionAllowed(ERoguelikeRunState NextState) const;
 	bool ResetPlayerRuntimeData();
+	bool ResetEconomyData();
 	bool CaptureCurrentPlayerRuntimeData();
 
 	FRandomStream RoomRandomStream;
