@@ -59,6 +59,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	bool bIsMeleeAttack = false;
 
+	/**
+	 * Explicit gameplay tag for moving enemy attacks that E's Null Ring is
+	 * allowed to erase. Player projectiles and enemy melee areas stay false.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Projectile")
+	bool bIsEnemyProjectile = false;
+
 	/** 命中特效（在敌人位置生成，朝向=攻击者→受击者方向） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
 	TObjectPtr<UNiagaraSystem> HitSpark;
@@ -72,6 +79,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void Initialize(float InLifeTime, float InSpeed, bool InIsMeleeAttack = false, AActor* InFollowTarget = nullptr);
+
+	/** Disable collision and destroy this attack area if it is an enemy projectile. */
+	UFUNCTION(BlueprintCallable, Category = "Attack|Projectile")
+	bool NullifyEnemyProjectile();
 
 protected:
 	/** 统一销毁入口，带原因屏幕输出 */

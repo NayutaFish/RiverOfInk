@@ -152,6 +152,24 @@ void AAttackAreaBase::Initialize(float InLifeTime, float InSpeed, bool InIsMelee
 	}
 }
 
+bool AAttackAreaBase::NullifyEnemyProjectile()
+{
+	if (!bIsEnemyProjectile || IsActorBeingDestroyed())
+	{
+		return false;
+	}
+
+	// Disable the harmful overlap before Destroy() is processed at the end of
+	// the frame. This keeps a projectile from dealing damage in the same frame
+	// in which a Null Ring erases it.
+	CollisionSphere->SetGenerateOverlapEvents(false);
+	CollisionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetActorEnableCollision(false);
+	UE_LOG(LogRiverOfInk, Log, TEXT("Enemy projectile nullified: %s."), *GetName());
+	Destroy();
+	return true;
+}
+
 void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 {
 	// 攻击者由代码填充（施放者），不依赖编辑器配置

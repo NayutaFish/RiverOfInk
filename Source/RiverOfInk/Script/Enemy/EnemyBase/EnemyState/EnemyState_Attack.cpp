@@ -4,6 +4,7 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "RiverOfInk.h"
 #include "Common/AttackAreaBase.h"
 #include "Engine/World.h"
 
@@ -77,6 +78,12 @@ void UEnemyState_Attack::ExecuteAttack()
 			Enemy->bAttackAreaIsMelee, FollowTarget);
 		AttackArea->bDamageOpponentOnly = true;
 		AttackArea->bDetectObstacle = Enemy->bAttackAreaDetectObstacle;
+		AttackArea->bIsEnemyProjectile = !Enemy->bAttackAreaIsMelee
+			&& Enemy->AttackAreaSpeed > KINDA_SMALL_NUMBER;
+		if (AttackArea->bIsEnemyProjectile)
+		{
+			UE_LOG(LogRiverOfInk, Log, TEXT("Enemy projectile tagged for Null Ring: %s."), *AttackArea->GetName());
+		}
 	}
 
 	GetWorld()->GetTimerManager().SetTimer(ReturnHandle, this,

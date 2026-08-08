@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeSystem/PlayerRuntimeData.h"
+#include "TimerManager.h"
 #include "SkillComponent.generated.h"
 
 class AAttackAreaBase;
@@ -79,6 +80,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
 
+	/** True when a target form belongs to this skill and differs from its current form. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm) const;
+
+	/** Set a persistent skill form. Reward systems call this instead of editing slots directly. */
+	UFUNCTION(BlueprintCallable, Category = "Skill|Form")
+	bool ApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm);
+
 	/** Effective cooldown after current roguelike upgrades. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
 	float GetSkillCooldown(EPlayerSkillID SkillID) const;
@@ -110,6 +119,22 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.01"))
 	float CircularSlashLifeTime = 0.25f;
+
+	/** Twin Slash repeats the E hit after this short delay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "s"))
+	float TwinSlashDelay = 0.18f;
+
+	/** Damage multiplier used by Twin Slash's delayed second hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0"))
+	float TwinSlashSecondDamageMultiplier = 0.8f;
+
+	/** The delayed hit is placed in this yaw direction relative to the first cast. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
+	float TwinSlashSecondYawOffset = 35.0f;
+
+	/** Offset the delayed circular hit so the yaw angle has gameplay impact. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "cm"))
+	float TwinSlashSecondForwardOffset = 110.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
@@ -156,6 +181,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:
 	bool IsOnCooldown(EPlayerSkillID SkillID, float Cooldown) const;
@@ -163,6 +189,8 @@ public:
 private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
+	bool SpawnCircularSlash(const FTransform& SpawnTransform, float Damage, bool bNullifyEnemyProjectiles);
+	void CastTwinSlashSecondHit();
 	bool CastTripleProjectile();
 	bool CastThrownGrenade();
 	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& Direction, const TCHAR* ProjectileLabel);
@@ -173,4 +201,8 @@ private:
 	TObjectPtr<APlayerCharacter> OwnerCharacter;
 
 	TMap<EPlayerSkillID, double> LastCastTimes;
+
+	FTimerHandle TwinSlashTimerHandle;
+	FVector PendingTwinSlashOrigin = FVector::ZeroVector;
+	FRotator PendingTwinSlashRotation = FRotator::ZeroRotator;
 };

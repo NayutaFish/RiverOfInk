@@ -21,7 +21,9 @@ UENUM(BlueprintType)
 enum class EPlayerSkillForm : uint8
 {
 	Default UMETA(DisplayName = "Default"),
-	ThrownGrenade UMETA(DisplayName = "Thrown Grenade")
+	ThrownGrenade UMETA(DisplayName = "Thrown Grenade"),
+	NullRing UMETA(DisplayName = "Null Ring"),
+	TwinSlash UMETA(DisplayName = "Twin Slash")
 };
 
 UENUM(BlueprintType)
@@ -37,7 +39,8 @@ UENUM(BlueprintType)
 enum class ERoguelikeRewardType : uint8
 {
 	GainSkill UMETA(DisplayName = "Gain Skill"),
-	UpgradeSkill UMETA(DisplayName = "Upgrade Skill")
+	UpgradeSkill UMETA(DisplayName = "Upgrade Skill"),
+	ChangeSkillForm UMETA(DisplayName = "Change Skill Form")
 };
 
 USTRUCT(BlueprintType)
@@ -87,6 +90,14 @@ struct FRoguelikeRewardOption
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward")
 	ESkillUpgradeType UpgradeType = ESkillUpgradeType::None;
+
+	/** Snapshot taken when this card is generated; used for accurate UI copy. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Form")
+	EPlayerSkillForm CurrentSkillForm = EPlayerSkillForm::Default;
+
+	/** Destination form for a form-change reward; normal upgrades keep CurrentSkillForm. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Form")
+	EPlayerSkillForm TargetSkillForm = EPlayerSkillForm::Default;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward")
 	FText Title;

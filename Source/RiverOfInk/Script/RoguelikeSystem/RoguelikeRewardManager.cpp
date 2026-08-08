@@ -165,23 +165,44 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 	// CircularSlash during the run.
 	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic))
 	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic,
+		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic, EPlayerSkillForm::Default,
 			FText::FromString(TEXT("Projectile Barrage")), FText::FromString(TEXT("Triple Projectile fires 2 additional projectiles."))));
 	}
 	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Cooldown))
 	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Cooldown,
+		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Cooldown, EPlayerSkillForm::Default,
 			FText::FromString(TEXT("Quick Reload")), FText::FromString(TEXT("Triple Projectile cooldown is reduced by 0.5 seconds."))));
 	}
 	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::CircularSlash, ESkillUpgradeType::Mechanic))
 	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Mechanic,
+		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Mechanic, EPlayerSkillForm::Default,
 			FText::FromString(TEXT("Expanded Slash")), FText::FromString(TEXT("Circular Slash radius is increased by 60."))));
 	}
 	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::CircularSlash, ESkillUpgradeType::Cooldown))
 	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Cooldown,
+		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Cooldown, EPlayerSkillForm::Default,
 			FText::FromString(TEXT("Swift Recovery")), FText::FromString(TEXT("Circular Slash cooldown is reduced by 0.4 seconds."))));
+	}
+
+	// E form rewards are mutually exclusive for this first pass. Once the
+	// player chooses a form, later rooms continue offering numeric upgrades for
+	// that form instead of replacing it again.
+	if (CachedSkillComponent->GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::Default)
+	{
+		Candidates.Add(MakeOption(
+			ERoguelikeRewardType::ChangeSkillForm,
+			EPlayerSkillID::CircularSlash,
+			ESkillUpgradeType::None,
+			EPlayerSkillForm::NullRing,
+			FText::FromString(TEXT("Null Ring")),
+			FText::FromString(TEXT("Circular Slash erases enemy projectiles already inside its radius."))));
+		Candidates.Add(MakeOption(
+			ERoguelikeRewardType::ChangeSkillForm,
+			EPlayerSkillID::CircularSlash,
+			ESkillUpgradeType::None,
+			EPlayerSkillForm::TwinSlash,
+			FText::FromString(TEXT("Twin Slash")),
+			FText::FromString(TEXT("Circular Slash repeats after 0.18 seconds at +35 degrees for 80% damage."))));
 	}
 
 	TArray<FRoguelikeRewardOption> Options;
@@ -190,6 +211,17 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		const int32 CandidateIndex = FMath::RandRange(0, Candidates.Num() - 1);
 		Options.Add(Candidates[CandidateIndex]);
 		Candidates.RemoveAtSwap(CandidateIndex);
+	}
+	for (const FRoguelikeRewardOption& Option : Options)
+	{
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Reward generated: Title=%s Skill=%d Type=%d Upgrade=%d CurrentForm=%d TargetForm=%d."),
+			*Option.Title.ToString(),
+			static_cast<int32>(Option.SkillID),
+			static_cast<int32>(Option.RewardType),
+			static_cast<int32>(Option.UpgradeType),
+			static_cast<int32>(Option.CurrentSkillForm),
+			static_cast<int32>(Option.TargetSkillForm));
 	}
 	return Options;
 }
@@ -242,7 +274,9 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 		return false;
 	}
 
-	if (Reward.RewardType == ERoguelikeRewardType::GainSkill)
+	switch (Reward.RewardType)
+	{
+	case ERoguelikeRewardType::GainSkill:
 	{
 		const bool bAdded = CachedSkillComponent->AddSkillToFirstEmptySlot(Reward.SkillID);
 		if (!bAdded)
@@ -251,8 +285,9 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 		}
 
 		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: GainSkill Skill=%d."), static_cast<int32>(Reward.SkillID));
+		return true;
 	}
-	else
+	case ERoguelikeRewardType::UpgradeSkill:
 	{
 		if (!CachedSkillComponent->CanApplyUpgrade(Reward.SkillID, Reward.UpgradeType))
 		{
@@ -262,9 +297,24 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 		CachedSkillComponent->ApplySkillUpgrade(Reward.SkillID, Reward.UpgradeType);
 		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: Upgrade Skill=%d Type=%d."),
 			static_cast<int32>(Reward.SkillID), static_cast<int32>(Reward.UpgradeType));
+		return true;
 	}
+	case ERoguelikeRewardType::ChangeSkillForm:
+	{
+		if (!CachedSkillComponent->ApplySkillForm(Reward.SkillID, Reward.TargetSkillForm))
+		{
+			return false;
+		}
 
-	return true;
+		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: ChangeSkillForm Skill=%d From=%d To=%d."),
+			static_cast<int32>(Reward.SkillID),
+			static_cast<int32>(Reward.CurrentSkillForm),
+			static_cast<int32>(Reward.TargetSkillForm));
+		return true;
+	}
+	default:
+		return false;
+	}
 }
 
 void ARoguelikeRewardManager::CloseRewardUI()
@@ -290,12 +340,24 @@ void ARoguelikeRewardManager::CloseRewardUI()
 	}
 }
 
-FRoguelikeRewardOption ARoguelikeRewardManager::MakeOption(ERoguelikeRewardType RewardType, EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType, const FText& Title, const FText& Description) const
+FRoguelikeRewardOption ARoguelikeRewardManager::MakeOption(
+	ERoguelikeRewardType RewardType,
+	EPlayerSkillID SkillID,
+	ESkillUpgradeType UpgradeType,
+	EPlayerSkillForm TargetSkillForm,
+	const FText& Title,
+	const FText& Description) const
 {
 	FRoguelikeRewardOption Option;
 	Option.RewardType = RewardType;
 	Option.SkillID = SkillID;
 	Option.UpgradeType = UpgradeType;
+	Option.CurrentSkillForm = CachedSkillComponent
+		? CachedSkillComponent->GetSkillForm(SkillID)
+		: EPlayerSkillForm::Default;
+	Option.TargetSkillForm = RewardType == ERoguelikeRewardType::ChangeSkillForm
+		? TargetSkillForm
+		: Option.CurrentSkillForm;
 	Option.Title = Title;
 	Option.Description = Description;
 	return Option;

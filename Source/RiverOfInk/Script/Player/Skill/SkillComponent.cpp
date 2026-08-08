@@ -243,6 +243,53 @@ EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
 		: EPlayerSkillForm::Default;
 }
 
+bool USkillComponent::CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm) const
+{
+	const int32 SlotIndex = FindSkillSlot(SkillID);
+	if (!SkillSlots.IsValidIndex(SlotIndex) || SkillSlots[SlotIndex].SkillForm == NewForm)
+	{
+		return false;
+	}
+
+	switch (SkillID)
+	{
+	case EPlayerSkillID::TripleProjectile:
+		return NewForm == EPlayerSkillForm::Default || NewForm == EPlayerSkillForm::ThrownGrenade;
+	case EPlayerSkillID::CircularSlash:
+		return NewForm == EPlayerSkillForm::Default
+			|| NewForm == EPlayerSkillForm::NullRing
+			|| NewForm == EPlayerSkillForm::TwinSlash;
+	default:
+		return false;
+	}
+}
+
+void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(TwinSlashTimerHandle);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+bool USkillComponent::ApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm)
+{
+	if (!CanApplySkillForm(SkillID, NewForm))
+	{
+		return false;
+	}
+
+	const int32 SlotIndex = FindSkillSlot(SkillID);
+	SkillSlots[SlotIndex].SkillForm = NewForm;
+	UE_LOG(LogSkill, Log, TEXT("Skill form applied: Skill=%s Form=%s."),
+		*UEnum::GetValueAsString(SkillID),
+		*UEnum::GetValueAsString(NewForm));
+	OnSkillStateChanged.Broadcast();
+	return true;
+}
+
 float USkillComponent::GetSkillCooldown(EPlayerSkillID SkillID) const
 {
 	switch (SkillID)
@@ -294,18 +341,98 @@ bool USkillComponent::CastCircularSlash()
 		return false;
 	}
 
-	const float Radius = GetCircularSlashRadius();
+	const EPlayerSkillForm SkillForm = GetSkillForm(EPlayerSkillID::CircularSlash);
 	const FTransform SpawnTransform(OwnerCharacter->GetActorRotation(), OwnerCharacter->GetActorLocation());
-	APlayerSkill_CircleDamageArea* DamageArea = World->SpawnActorDeferred<APlayerSkill_CircleDamageArea>(CircularSlashAreaClass, SpawnTransform, OwnerCharacter, OwnerCharacter, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	const bool bNullifyEnemyProjectiles = SkillForm == EPlayerSkillForm::NullRing;
+	if (!SpawnCircularSlash(SpawnTransform, CircularSlashDamage, bNullifyEnemyProjectiles))
+	{
+		return false;
+	}
+
+	if (SkillForm == EPlayerSkillForm::TwinSlash)
+	{
+		PendingTwinSlashOrigin = SpawnTransform.GetLocation();
+		PendingTwinSlashRotation = SpawnTransform.Rotator();
+		World->GetTimerManager().ClearTimer(TwinSlashTimerHandle);
+		World->GetTimerManager().SetTimer(
+			TwinSlashTimerHandle,
+			this,
+			&USkillComponent::CastTwinSlashSecondHit,
+			TwinSlashDelay,
+			false);
+		UE_LOG(LogSkill, Log,
+			TEXT("Twin Slash queued: Delay=%.2f Damage=%.1f Angle=%.1f Offset=%.0f."),
+			TwinSlashDelay,
+			CircularSlashDamage * TwinSlashSecondDamageMultiplier,
+			TwinSlashSecondYawOffset,
+			TwinSlashSecondForwardOffset);
+	}
+
+	UE_LOG(LogSkill, Display, TEXT("CircularSlash cast: Radius=%.0f NullRing=%s TwinSlash=%s."),
+		GetCircularSlashRadius(),
+		bNullifyEnemyProjectiles ? TEXT("true") : TEXT("false"),
+		SkillForm == EPlayerSkillForm::TwinSlash ? TEXT("true") : TEXT("false"));
+	return true;
+}
+
+bool USkillComponent::SpawnCircularSlash(const FTransform& SpawnTransform, float Damage, bool bNullifyEnemyProjectiles)
+{
+	UWorld* World = GetWorld();
+	if (!World || !CircularSlashAreaClass || !OwnerCharacter)
+	{
+		return false;
+	}
+
+	APlayerSkill_CircleDamageArea* DamageArea = World->SpawnActorDeferred<APlayerSkill_CircleDamageArea>(
+		CircularSlashAreaClass,
+		SpawnTransform,
+		OwnerCharacter,
+		OwnerCharacter,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!DamageArea)
 	{
 		return false;
 	}
 
-	DamageArea->Initialize(Radius, CircularSlashDamage, CircularSlashLifeTime, OwnerCharacter);
+	DamageArea->Initialize(
+		GetCircularSlashRadius(),
+		Damage,
+		CircularSlashLifeTime,
+		OwnerCharacter,
+		bNullifyEnemyProjectiles);
 	UGameplayStatics::FinishSpawningActor(DamageArea, SpawnTransform);
-	UE_LOG(LogSkill, Display, TEXT("CircularSlash cast: Radius=%.0f."), Radius);
 	return true;
+}
+
+void USkillComponent::CastTwinSlashSecondHit()
+{
+	UWorld* World = GetWorld();
+	if (!World || !IsValid(OwnerCharacter) || OwnerCharacter->IsDead())
+	{
+		return;
+	}
+
+	const FRotator SecondRotation = PendingTwinSlashRotation + FRotator(0.0f, TwinSlashSecondYawOffset, 0.0f);
+	FVector SecondDirection = SecondRotation.Vector();
+	SecondDirection.Z = 0.0f;
+	if (!SecondDirection.Normalize())
+	{
+		return;
+	}
+
+	const FVector SecondLocation = PendingTwinSlashOrigin + SecondDirection * TwinSlashSecondForwardOffset;
+	const FTransform SecondTransform(SecondRotation, SecondLocation);
+	const float SecondDamage = CircularSlashDamage * TwinSlashSecondDamageMultiplier;
+	if (SpawnCircularSlash(SecondTransform, SecondDamage, false))
+	{
+		UE_LOG(LogSkill, Log,
+			TEXT("Twin Slash second cast: Damage=%.1f Angle=%.1f Location=(%.0f, %.0f, %.0f)."),
+			SecondDamage,
+			TwinSlashSecondYawOffset,
+			SecondLocation.X,
+			SecondLocation.Y,
+			SecondLocation.Z);
+	}
 }
 
 bool USkillComponent::CastTripleProjectile()

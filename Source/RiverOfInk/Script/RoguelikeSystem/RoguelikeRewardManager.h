@@ -70,7 +70,13 @@ private:
 	void EnsureExitTrigger();
 	bool ApplyReward(const FRoguelikeRewardOption& Reward);
 	void CloseRewardUI();
-	FRoguelikeRewardOption MakeOption(ERoguelikeRewardType RewardType, EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType, const FText& Title, const FText& Description) const;
+	FRoguelikeRewardOption MakeOption(
+		ERoguelikeRewardType RewardType,
+		EPlayerSkillID SkillID,
+		ESkillUpgradeType UpgradeType,
+		EPlayerSkillForm TargetSkillForm,
+		const FText& Title,
+		const FText& Description) const;
 	bool bRewardSelectionInProgress = false;
 
 	UPROPERTY(Transient)

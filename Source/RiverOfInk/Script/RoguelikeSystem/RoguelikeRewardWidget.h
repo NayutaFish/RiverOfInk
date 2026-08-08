@@ -51,6 +51,32 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Description_1;
 
+	/** Optional detailed fields. The existing Title/Description layout receives
+	 * a multiline fallback until these are added to WBP_RoguelikeReward. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SkillName_0;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CurrentForm_0;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RewardCategory_0;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Effect_0;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SkillName_1;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CurrentForm_1;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RewardCategory_1;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Effect_1;
+
 	/** Optional icon bindings used by the whitebox reward cards. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> Icon_0;

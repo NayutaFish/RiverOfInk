@@ -20,7 +20,12 @@ public:
 	APlayerSkill_CircleDamageArea();
 
 	UFUNCTION(BlueprintCallable, Category = "SkillArea")
-	void Initialize(float InRadius, float InDamage, float InLifeTime, AActor* InInstigator);
+	void Initialize(
+		float InRadius,
+		float InDamage,
+		float InLifeTime,
+		AActor* InInstigator,
+		bool bInNullifyEnemyProjectiles = false);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea")
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -58,6 +63,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea|Debug")
 	bool bDrawDebugArea = true;
 
+	/** True only for the E Null Ring form. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|NullRing")
+	bool bNullifyEnemyProjectiles = false;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -73,6 +82,7 @@ protected:
 private:
 	void UpdateVisualPlaneScale();
 	void TryDamageActor(AActor* OtherActor);
+	void NullifyEnemyProjectilesInRange();
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DamageInstigator;
