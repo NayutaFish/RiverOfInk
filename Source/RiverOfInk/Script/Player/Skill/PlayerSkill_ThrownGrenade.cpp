@@ -57,6 +57,7 @@ APlayerSkill_ThrownGrenade::APlayerSkill_ThrownGrenade()
 	DamageInfo.DamageType = EDamageType::Unified;
 	DamageInfo.bCanCauseDeath = true;
 	DamageInfo.bIsDirectDamage = true;
+	ExplosionsRemaining = 1;
 }
 
 void APlayerSkill_ThrownGrenade::BeginPlay()
@@ -67,6 +68,9 @@ void APlayerSkill_ThrownGrenade::BeginPlay()
 	CollisionRadius = FMath::Max(1.0f, CollisionRadius);
 	ExplosionRadius = FMath::Max(1.0f, ExplosionRadius);
 	FuseTime = FMath::Max(0.05f, FuseTime);
+	ExplosionCount = FMath::Max(1, ExplosionCount);
+	ExplosionDelay = FMath::Max(0.0f, ExplosionDelay);
+	ExplosionsRemaining = ExplosionCount;
 	CollisionSphere->SetSphereRadius(CollisionRadius, true);
 
 	if (VisualMesh)
@@ -86,6 +90,16 @@ void APlayerSkill_ThrownGrenade::BeginPlay()
 		ExplosionRadius,
 		Damage,
 		*Velocity.ToString());
+}
+
+void APlayerSkill_ThrownGrenade::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ExplosionTimerHandle);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void APlayerSkill_ThrownGrenade::Tick(float DeltaTime)
@@ -124,7 +138,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	float InGravityZ,
 	float InCollisionRadius,
 	const FVector& InInitialVelocity,
-	AActor* InInstigator
+	AActor* InInstigator,
+	int32 InExplosionCount,
+	float InExplosionDelay
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -132,6 +148,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	Damage = FMath::Max(0.0f, InDamage);
 	GravityZ = InGravityZ;
 	CollisionRadius = FMath::Max(1.0f, InCollisionRadius);
+	ExplosionCount = FMath::Max(1, InExplosionCount);
+	ExplosionDelay = FMath::Max(0.0f, InExplosionDelay);
+	ExplosionsRemaining = ExplosionCount;
 	Velocity = InInitialVelocity;
 	DamageInstigator = InInstigator;
 	DamageInfo.Attacker = InInstigator;
@@ -184,6 +203,42 @@ void APlayerSkill_ThrownGrenade::Detonate()
 	}
 
 	bDetonated = true;
+	ExplosionsRemaining = FMath::Max(1, ExplosionCount);
+	PerformExplosion();
+
+	if (ExplosionsRemaining > 0 && GetWorld())
+	{
+		if (ExplosionDelay <= KINDA_SMALL_NUMBER)
+		{
+			PerformExplosion();
+		}
+		else
+		{
+			GetWorld()->GetTimerManager().SetTimer(
+				ExplosionTimerHandle,
+				this,
+				&APlayerSkill_ThrownGrenade::PerformExplosion,
+				ExplosionDelay,
+				false);
+			return;
+		}
+	}
+
+	if (ExplosionsRemaining <= 0)
+	{
+		Destroy();
+	}
+}
+
+void APlayerSkill_ThrownGrenade::PerformExplosion()
+{
+	if (!GetWorld() || ExplosionsRemaining <= 0)
+	{
+		return;
+	}
+
+	const int32 ExplosionIndex = ExplosionCount - ExplosionsRemaining + 1;
+	--ExplosionsRemaining;
 	TArray<FOverlapResult> Overlaps;
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(EnemyHitboxChannel);
@@ -226,9 +281,15 @@ void APlayerSkill_ThrownGrenade::Detonate()
 #endif
 
 	UE_LOG(LogSkill, Log,
-		TEXT("ThrownGrenade detonated: Radius=%.0f Damage=%.1f Hits=%d."),
+		TEXT("ThrownGrenade explosion %d/%d: Radius=%.0f Damage=%.1f Hits=%d."),
+		ExplosionIndex,
+		ExplosionCount,
 		ExplosionRadius,
 		Damage,
 		HitCount);
-	Destroy();
+
+	if (ExplosionsRemaining <= 0)
+	{
+		Destroy();
+	}
 }

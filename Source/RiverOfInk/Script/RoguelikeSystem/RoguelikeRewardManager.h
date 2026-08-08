@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "RiverOfInk.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeRewardManager.generated.h"
 
@@ -11,8 +12,6 @@ class APlayerCharacter;
 class USkillComponent;
 class URoguelikeRewardWidget;
 class ARoguelikeExitTrigger;
-
-DECLARE_LOG_CATEGORY_EXTERN(LogRoguelike, Log, All);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnRoguelikeRewardApplied,
@@ -77,6 +76,13 @@ private:
 		EPlayerSkillForm TargetSkillForm,
 		const FText& Title,
 		const FText& Description) const;
+	FRoguelikeRewardOption MakeModifierOption(
+		EPlayerSkillID SkillID,
+		ESkillModifierID ModifierID,
+		int32 StackDelta,
+		const FText& Title,
+		const FText& Description) const;
+	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;
 
 	UPROPERTY(Transient)

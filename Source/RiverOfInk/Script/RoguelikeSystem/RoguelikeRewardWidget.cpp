@@ -45,6 +45,22 @@ namespace
 		const TCHAR* InputSlot = Option.SkillID == EPlayerSkillID::CircularSlash ? TEXT("E") : TEXT("Q");
 		switch (Option.RewardType)
 		{
+		case ERoguelikeRewardType::Modifier:
+		{
+			const TCHAR* ModifierName = TEXT("Build");
+			switch (Option.ModifierID)
+			{
+			case ESkillModifierID::AddProjectile: ModifierName = TEXT("Projectile Count"); break;
+			case ESkillModifierID::InkGrenade: ModifierName = TEXT("Payload"); break;
+			case ESkillModifierID::ExtraExplosion: ModifierName = TEXT("Explosion"); break;
+			case ESkillModifierID::TwinSlash: ModifierName = TEXT("Second Hit"); break;
+			case ESkillModifierID::NullRing: ModifierName = TEXT("Projectile Erase"); break;
+			case ESkillModifierID::RadiusUp: ModifierName = TEXT("Radius"); break;
+			case ESkillModifierID::CooldownDown: ModifierName = TEXT("Cooldown"); break;
+			default: break;
+			}
+			return FText::FromString(FString::Printf(TEXT("%s Build · %s"), InputSlot, ModifierName));
+		}
 		case ERoguelikeRewardType::ChangeSkillForm:
 			return FText::FromString(FString::Printf(TEXT("%s Form Change"), InputSlot));
 		case ERoguelikeRewardType::UpgradeSkill:
@@ -60,6 +76,38 @@ namespace
 
 	FText GetRewardEffectText(const FRoguelikeRewardOption& Option)
 	{
+		if (Option.RewardType == ERoguelikeRewardType::Modifier)
+		{
+			FString Preview;
+			switch (Option.ModifierID)
+			{
+			case ESkillModifierID::AddProjectile:
+				Preview = FString::Printf(TEXT("Projectiles %.0f → %.0f"), Option.BeforeValue, Option.AfterValue);
+				break;
+			case ESkillModifierID::InkGrenade:
+				Preview = TEXT("Triple Projectile → Ink Grenade");
+				break;
+			case ESkillModifierID::ExtraExplosion:
+				Preview = FString::Printf(TEXT("Explosions %.0f → %.0f"), Option.BeforeValue, Option.AfterValue);
+				break;
+			case ESkillModifierID::TwinSlash:
+				Preview = FString::Printf(TEXT("Hits %.0f → %.0f"), Option.BeforeValue, Option.AfterValue);
+				break;
+			case ESkillModifierID::NullRing:
+				Preview = TEXT("Projectile erase: Off → On");
+				break;
+			case ESkillModifierID::RadiusUp:
+				Preview = FString::Printf(TEXT("Radius %.0f → %.0f"), Option.BeforeValue, Option.AfterValue);
+				break;
+			case ESkillModifierID::CooldownDown:
+				Preview = FString::Printf(TEXT("Cooldown %.2f s → %.2f s"), Option.BeforeValue, Option.AfterValue);
+				break;
+			default:
+				break;
+			}
+			return FText::FromString(FString::Printf(TEXT("%s\n%s"), *Preview, *Option.Description.ToString()));
+		}
+
 		if (Option.RewardType != ERoguelikeRewardType::ChangeSkillForm)
 		{
 			return Option.Description;
@@ -178,7 +226,32 @@ namespace
 	UTexture2D* LoadRewardIcon(const FRoguelikeRewardOption& Option)
 	{
 		const TCHAR* IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_Cooldown.Icon_Cooldown");
-		if (Option.SkillID == EPlayerSkillID::CircularSlash)
+		if (Option.RewardType == ERoguelikeRewardType::Modifier)
+		{
+			switch (Option.ModifierID)
+			{
+			case ESkillModifierID::AddProjectile:
+			case ESkillModifierID::ExtraExplosion:
+				IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_ProjectileCount.Icon_ProjectileCount");
+				break;
+			case ESkillModifierID::InkGrenade:
+				IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_TripleProjectile.Icon_TripleProjectile");
+				break;
+			case ESkillModifierID::TwinSlash:
+			case ESkillModifierID::NullRing:
+				IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_CircularSlash.Icon_CircularSlash");
+				break;
+			case ESkillModifierID::RadiusUp:
+				IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_Range.Icon_Range");
+				break;
+			case ESkillModifierID::CooldownDown:
+				IconPath = TEXT("/Game/RawContent/UI/Texture/Icon_Cooldown.Icon_Cooldown");
+				break;
+			default:
+				break;
+			}
+		}
+		else if (Option.SkillID == EPlayerSkillID::CircularSlash)
 		{
 			IconPath = Option.UpgradeType == ESkillUpgradeType::Mechanic
 				? TEXT("/Game/RawContent/UI/Texture/Icon_Range.Icon_Range")
@@ -206,15 +279,17 @@ namespace
 				Image->SetBrushFromTexture(Icon, true);
 				Image->SetDesiredSizeOverride(FVector2D(112.0f, 112.0f));
 				Image->SetVisibility(ESlateVisibility::Visible);
-				UE_LOG(LogRoguelike, Log, TEXT("Reward icon applied: Skill=%d Upgrade=%d Asset=%s."),
+				UE_LOG(LogRoguelike, Log, TEXT("Reward icon applied: Skill=%d Modifier=%d Upgrade=%d Asset=%s."),
 					static_cast<int32>(Option->SkillID),
+					static_cast<int32>(Option->ModifierID),
 					static_cast<int32>(Option->UpgradeType),
 					*GetNameSafe(Icon));
 				return;
 			}
 
-			UE_LOG(LogRoguelike, Warning, TEXT("Reward icon load failed: Skill=%d Upgrade=%d."),
+			UE_LOG(LogRoguelike, Warning, TEXT("Reward icon load failed: Skill=%d Modifier=%d Upgrade=%d."),
 				static_cast<int32>(Option->SkillID),
+				static_cast<int32>(Option->ModifierID),
 				static_cast<int32>(Option->UpgradeType));
 		}
 

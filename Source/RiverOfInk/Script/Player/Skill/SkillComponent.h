@@ -56,10 +56,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill|Upgrade")
 	void ApplySkillUpgrade(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType);
 
-	/** Copy skill slots and upgrade levels into the aggregate run snapshot. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Build")
+	int32 GetModifierStack(EPlayerSkillID SkillID, ESkillModifierID ModifierID) const;
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Build")
+	bool CanApplyModifier(EPlayerSkillID SkillID, ESkillModifierID ModifierID, int32 StackDelta = 1) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Skill|Build")
+	bool ApplyModifier(EPlayerSkillID SkillID, ESkillModifierID ModifierID, int32 StackDelta = 1);
+
+	/** Copy skill slots, modifiers, and upgrade levels into the aggregate run snapshot. */
 	void CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
 
-	/** Apply skill slots and upgrade levels from the aggregate run snapshot. */
+	/** Apply skill slots, modifiers, and upgrade levels from the aggregate run snapshot. */
 	void ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Upgrade")
@@ -95,6 +104,17 @@ public:
 	/** Remaining cooldown in seconds; zero means the skill is ready. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
 	float GetRemainingSkillCooldown(EPlayerSkillID SkillID) const;
+
+	/** Resolve the current build into deterministic, one-cast parameters. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FResolvedSkillSpec ResolveSkillSpec(EPlayerSkillID SkillID) const;
+
+	/** Presentation-safe summaries derived from the same build state used by casts. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FText GetSkillBuildSummary(EPlayerSkillID SkillID) const;
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Resolved")
+	FText GetResolvedSkillSummary(EPlayerSkillID SkillID) const;
 
 	/** Native notification for HUDs and other runtime observers. */
 	FOnSkillStateChanged OnSkillStateChanged;
@@ -139,7 +159,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
 
-	/** First form slice for Q. Default Q uses a short-arc thrown grenade. */
+	/** Legacy Q form actor. New builds select it through the InkGrenade modifier. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
 	TSubclassOf<APlayerSkill_ThrownGrenade> ThrownGrenadeClass;
 
@@ -157,6 +177,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
 	float ThrownGrenadeDamage = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0", Units = "s"))
+	float ThrownGrenadeExplosionDelay = 0.12f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
 	float ThrownGrenadeCollisionRadius = 32.0f;
@@ -189,13 +212,28 @@ public:
 private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
-	bool SpawnCircularSlash(const FTransform& SpawnTransform, float Damage, bool bNullifyEnemyProjectiles);
+	bool SpawnCircularSlash(
+		const FTransform& SpawnTransform,
+		float Radius,
+		float Damage,
+		bool bNullifyEnemyProjectiles);
 	void CastTwinSlashSecondHit();
 	bool CastTripleProjectile();
-	bool CastThrownGrenade();
-	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& Direction, const TCHAR* ProjectileLabel);
+	bool CastThrownGrenade(const FResolvedSkillSpec& Spec);
+	bool SpawnProjectile(
+		const FVector& SpawnLocation,
+		const FVector& Direction,
+		float ProjectileLifeTime,
+		float ProjectileSpeed,
+		const TCHAR* ProjectileLabel);
 	void InitializeSkillSlots();
 	int32 GetMaxUpgradeLevel(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType) const;
+	int32 GetModifierStackForSlot(const FPlayerSkillSlot& Slot, ESkillModifierID ModifierID) const;
+	int32 GetMaxModifierStack(EPlayerSkillID SkillID, ESkillModifierID ModifierID) const;
+	void NormalizeSkillModifiers();
+	void MigrateLegacySkillForms();
+	void AddModifierIfMissing(FPlayerSkillSlot& Slot, ESkillModifierID ModifierID, int32 StackCount);
+	FString BuildModifierSummary(EPlayerSkillID SkillID) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerCharacter> OwnerCharacter;
@@ -205,4 +243,5 @@ private:
 	FTimerHandle TwinSlashTimerHandle;
 	FVector PendingTwinSlashOrigin = FVector::ZeroVector;
 	FRotator PendingTwinSlashRotation = FRotator::ZeroRotator;
+	FResolvedSkillSpec PendingTwinSlashSpec;
 };

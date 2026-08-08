@@ -7,6 +7,7 @@
 #include "LevelRoomManager/DemoRoomManager.h"
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
+#include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "Engine/World.h"
@@ -152,6 +153,27 @@ void ARiverOfInkGameMode::HandleRoomCleared()
 			TEXT("Room clear event rejected in room state %d."),
 			static_cast<int32>(CurrentRoomState));
 		return;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>();
+		URoguelikeEconomySubsystem* Economy = GameInstance->GetSubsystem<URoguelikeEconomySubsystem>();
+		if (RunFlow && Economy && IsValid(BoundRoomManager))
+		{
+			Economy->GrantRoomResult(
+				RunFlow->GetCurrentMajorStageIndex(),
+				RunFlow->GetCurrentRoomIndex(),
+				BoundRoomManager->PureInkRoomResultReward);
+		}
+		else
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("Room result Pure Ink could not be granted: RunFlow=%s Economy=%s RoomManager=%s."),
+				RunFlow ? TEXT("valid") : TEXT("null"),
+				Economy ? TEXT("valid") : TEXT("null"),
+				IsValid(BoundRoomManager) ? TEXT("valid") : TEXT("null"));
+		}
 	}
 
 	TransitionRoomState(ERoguelikeRoomState::Reward);

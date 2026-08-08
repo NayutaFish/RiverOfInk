@@ -35,7 +35,9 @@ public:
 		float InGravityZ,
 		float InCollisionRadius,
 		const FVector& InInitialVelocity,
-		AActor* InInstigator
+		AActor* InInstigator,
+		int32 InExplosionCount = 1,
+		float InExplosionDelay = 0.12f
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -60,6 +62,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade", meta = (ClampMin = "1.0"))
 	float CollisionRadius = 32.0f;
 
+	/** Number of explosions at the detonation location. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade", meta = (ClampMin = "1"))
+	int32 ExplosionCount = 1;
+
+	/** Delay between repeated explosions from ExtraExplosion. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade", meta = (ClampMin = "0.0", Units = "s"))
+	float ExplosionDelay = 0.12f;
+
 	/** Development-only debug sphere at the explosion location. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Debug")
 	bool bDrawDebugExplosion = true;
@@ -67,9 +77,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	void Detonate();
+	void PerformExplosion();
 	bool SweepForImpact(const FVector& Start, const FVector& End, FHitResult& OutHit) const;
 
 	UPROPERTY(Transient)
@@ -79,4 +91,6 @@ private:
 	FVector Velocity = FVector::ZeroVector;
 	float ElapsedTime = 0.0f;
 	bool bDetonated = false;
+	int32 ExplosionsRemaining = 1;
+	FTimerHandle ExplosionTimerHandle;
 };

@@ -57,6 +57,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room|Spawn", meta = (ClampMin = "1"))
 	int32 TargetEliminateCount = 5;
 
+	/** Fixed Pure Ink granted by this Combat Room's result settlement. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room|Economy|Pure Ink", meta = (ClampMin = "0"))
+	int32 PureInkRoomResultReward = 20;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Runtime")
 	int32 AliveEnemyCount = 0;
 

@@ -11,8 +11,6 @@
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
-DEFINE_LOG_CATEGORY(LogRoguelike);
-
 ARoguelikeRewardManager::ARoguelikeRewardManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -160,50 +158,72 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		return Candidates;
 	}
 
-	// Both active skills are part of the fixed starting loadout. Roguelike
-	// rewards only grow those skills; they do not add a third slot or unlock
-	// CircularSlash during the run.
-	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic))
+	// The player always owns Q/E. The reward pool now only emits legal
+	// modifiers; old UpgradeSkill/ChangeSkillForm values remain supported by
+	// ApplyReward for backwards-compatible Blueprint or snapshot data.
+	const auto AddModifierCandidate = [this, &Candidates](
+		EPlayerSkillID SkillID,
+		ESkillModifierID ModifierID,
+		const TCHAR* Title,
+		const TCHAR* Description)
 	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Mechanic, EPlayerSkillForm::Default,
-			FText::FromString(TEXT("Projectile Barrage")), FText::FromString(TEXT("Triple Projectile fires 2 additional projectiles."))));
-	}
-	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Cooldown))
-	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::TripleProjectile, ESkillUpgradeType::Cooldown, EPlayerSkillForm::Default,
-			FText::FromString(TEXT("Quick Reload")), FText::FromString(TEXT("Triple Projectile cooldown is reduced by 0.5 seconds."))));
-	}
-	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::CircularSlash, ESkillUpgradeType::Mechanic))
-	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Mechanic, EPlayerSkillForm::Default,
-			FText::FromString(TEXT("Expanded Slash")), FText::FromString(TEXT("Circular Slash radius is increased by 60."))));
-	}
-	if (CachedSkillComponent->CanApplyUpgrade(EPlayerSkillID::CircularSlash, ESkillUpgradeType::Cooldown))
-	{
-		Candidates.Add(MakeOption(ERoguelikeRewardType::UpgradeSkill, EPlayerSkillID::CircularSlash, ESkillUpgradeType::Cooldown, EPlayerSkillForm::Default,
-			FText::FromString(TEXT("Swift Recovery")), FText::FromString(TEXT("Circular Slash cooldown is reduced by 0.4 seconds."))));
-	}
+		if (CachedSkillComponent->CanApplyModifier(SkillID, ModifierID, 1))
+		{
+			Candidates.Add(MakeModifierOption(
+				SkillID,
+				ModifierID,
+				1,
+				FText::FromString(Title),
+				FText::FromString(Description)));
+		}
+	};
 
-	// E form rewards are mutually exclusive for this first pass. Once the
-	// player chooses a form, later rooms continue offering numeric upgrades for
-	// that form instead of replacing it again.
-	if (CachedSkillComponent->GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::Default)
-	{
-		Candidates.Add(MakeOption(
-			ERoguelikeRewardType::ChangeSkillForm,
-			EPlayerSkillID::CircularSlash,
-			ESkillUpgradeType::None,
-			EPlayerSkillForm::NullRing,
-			FText::FromString(TEXT("Null Ring")),
-			FText::FromString(TEXT("Circular Slash erases enemy projectiles already inside its radius."))));
-		Candidates.Add(MakeOption(
-			ERoguelikeRewardType::ChangeSkillForm,
-			EPlayerSkillID::CircularSlash,
-			ESkillUpgradeType::None,
-			EPlayerSkillForm::TwinSlash,
-			FText::FromString(TEXT("Twin Slash")),
-			FText::FromString(TEXT("Circular Slash repeats after 0.18 seconds at +35 degrees for 80% damage."))));
-	}
+	// Q build candidates. Extra Explosion is gated by Ink Grenade inside
+	// CanApplyModifier, so it cannot be offered as a dead-end card.
+	AddModifierCandidate(
+		EPlayerSkillID::TripleProjectile,
+		ESkillModifierID::AddProjectile,
+		TEXT("Add Projectile"),
+		TEXT("Q fires one additional projectile or Ink Grenade."));
+	AddModifierCandidate(
+		EPlayerSkillID::TripleProjectile,
+		ESkillModifierID::InkGrenade,
+		TEXT("Ink Grenade"),
+		TEXT("Q projectiles become thrown ink grenades that explode on fuse."));
+	AddModifierCandidate(
+		EPlayerSkillID::TripleProjectile,
+		ESkillModifierID::ExtraExplosion,
+		TEXT("Extra Explosion"),
+		TEXT("Each Q ink grenade explodes one additional time at the same location."));
+	AddModifierCandidate(
+		EPlayerSkillID::TripleProjectile,
+		ESkillModifierID::CooldownDown,
+		TEXT("Quick Reload"),
+		TEXT("Q cooldown is reduced by 0.5 seconds."));
+
+	// E build candidates intentionally do not form an exclusive group. Twin
+	// Slash and Null Ring can coexist, so the resolver can produce two hits
+	// where both attack areas also erase enemy projectiles.
+	AddModifierCandidate(
+		EPlayerSkillID::CircularSlash,
+		ESkillModifierID::TwinSlash,
+		TEXT("Twin Slash"),
+		TEXT("E repeats after a short delay with an angled second hit for 80% damage."));
+	AddModifierCandidate(
+		EPlayerSkillID::CircularSlash,
+		ESkillModifierID::NullRing,
+		TEXT("Null Ring"),
+		TEXT("E erases marked enemy projectiles inside each slash area."));
+	AddModifierCandidate(
+		EPlayerSkillID::CircularSlash,
+		ESkillModifierID::RadiusUp,
+		TEXT("Expanded Slash"),
+		TEXT("E radius is increased by 60."));
+	AddModifierCandidate(
+		EPlayerSkillID::CircularSlash,
+		ESkillModifierID::CooldownDown,
+		TEXT("Swift Recovery"),
+		TEXT("E cooldown is reduced by 0.4 seconds."));
 
 	TArray<FRoguelikeRewardOption> Options;
 	while (!Candidates.IsEmpty() && Options.Num() < 2)
@@ -215,13 +235,17 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 	for (const FRoguelikeRewardOption& Option : Options)
 	{
 		UE_LOG(LogRoguelike, Log,
-			TEXT("Reward generated: Title=%s Skill=%d Type=%d Upgrade=%d CurrentForm=%d TargetForm=%d."),
+			TEXT("Reward generated: Title=%s Skill=%d Type=%d Modifier=%d Stack=%d Upgrade=%d CurrentForm=%d TargetForm=%d Before=%.2f After=%.2f."),
 			*Option.Title.ToString(),
 			static_cast<int32>(Option.SkillID),
 			static_cast<int32>(Option.RewardType),
+			static_cast<int32>(Option.ModifierID),
+			Option.StackDelta,
 			static_cast<int32>(Option.UpgradeType),
 			static_cast<int32>(Option.CurrentSkillForm),
-			static_cast<int32>(Option.TargetSkillForm));
+			static_cast<int32>(Option.TargetSkillForm),
+			Option.BeforeValue,
+			Option.AfterValue);
 	}
 	return Options;
 }
@@ -299,6 +323,43 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 			static_cast<int32>(Reward.SkillID), static_cast<int32>(Reward.UpgradeType));
 		return true;
 	}
+	case ERoguelikeRewardType::Modifier:
+	{
+		if (!CachedSkillComponent->CanApplyModifier(Reward.SkillID, Reward.ModifierID, Reward.StackDelta))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("Modifier reward rejected: Skill=%d Modifier=%d StackDelta=%d."),
+				static_cast<int32>(Reward.SkillID),
+				static_cast<int32>(Reward.ModifierID),
+				Reward.StackDelta);
+			return false;
+		}
+
+		const int32 BeforeStack = CachedSkillComponent->GetModifierStack(Reward.SkillID, Reward.ModifierID);
+		const bool bApplied = CachedSkillComponent->ApplyModifier(
+			Reward.SkillID,
+			Reward.ModifierID,
+			Reward.StackDelta);
+		if (!bApplied)
+		{
+			return false;
+		}
+
+		const int32 AfterStack = CachedSkillComponent->GetModifierStack(Reward.SkillID, Reward.ModifierID);
+		const FResolvedSkillSpec ResolvedSpec = CachedSkillComponent->ResolveSkillSpec(Reward.SkillID);
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Reward applied: Modifier Skill=%d Modifier=%d Stack=%d->%d Resolved(Projectiles=%d Explosions=%d Hits=%d Radius=%.0f Cooldown=%.2f)."),
+			static_cast<int32>(Reward.SkillID),
+			static_cast<int32>(Reward.ModifierID),
+			BeforeStack,
+			AfterStack,
+			ResolvedSpec.ProjectileCount,
+			ResolvedSpec.ExplosionCount,
+			ResolvedSpec.HitCount,
+			ResolvedSpec.Radius,
+			ResolvedSpec.Cooldown);
+		return true;
+	}
 	case ERoguelikeRewardType::ChangeSkillForm:
 	{
 		if (!CachedSkillComponent->ApplySkillForm(Reward.SkillID, Reward.TargetSkillForm))
@@ -352,6 +413,8 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeOption(
 	Option.RewardType = RewardType;
 	Option.SkillID = SkillID;
 	Option.UpgradeType = UpgradeType;
+	Option.ModifierID = ESkillModifierID::None;
+	Option.StackDelta = 0;
 	Option.CurrentSkillForm = CachedSkillComponent
 		? CachedSkillComponent->GetSkillForm(SkillID)
 		: EPlayerSkillForm::Default;
@@ -361,4 +424,72 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeOption(
 	Option.Title = Title;
 	Option.Description = Description;
 	return Option;
+}
+
+FRoguelikeRewardOption ARoguelikeRewardManager::MakeModifierOption(
+	EPlayerSkillID SkillID,
+	ESkillModifierID ModifierID,
+	int32 StackDelta,
+	const FText& Title,
+	const FText& Description) const
+{
+	FRoguelikeRewardOption Option;
+	Option.RewardType = ERoguelikeRewardType::Modifier;
+	Option.SkillID = SkillID;
+	Option.UpgradeType = ESkillUpgradeType::None;
+	Option.ModifierID = ModifierID;
+	Option.StackDelta = StackDelta;
+	Option.CurrentSkillForm = CachedSkillComponent
+		? CachedSkillComponent->GetSkillForm(SkillID)
+		: EPlayerSkillForm::Default;
+	Option.TargetSkillForm = Option.CurrentSkillForm;
+	Option.Title = Title;
+	Option.Description = Description;
+	FillModifierPreview(Option);
+	return Option;
+}
+
+void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option) const
+{
+	if (!IsValid(CachedSkillComponent))
+	{
+		return;
+	}
+
+	const FResolvedSkillSpec BeforeSpec = CachedSkillComponent->ResolveSkillSpec(Option.SkillID);
+	switch (Option.ModifierID)
+	{
+	case ESkillModifierID::AddProjectile:
+		Option.BeforeValue = static_cast<float>(CachedSkillComponent->GetTripleProjectileCount());
+		Option.AfterValue = FMath::Min(7.0f, Option.BeforeValue + static_cast<float>(Option.StackDelta));
+		break;
+	case ESkillModifierID::InkGrenade:
+		Option.BeforeValue = BeforeSpec.PayloadType == ESkillPayloadType::InkGrenade ? 1.0f : 0.0f;
+		Option.AfterValue = 1.0f;
+		break;
+	case ESkillModifierID::ExtraExplosion:
+		Option.BeforeValue = static_cast<float>(BeforeSpec.ExplosionCount);
+		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
+		break;
+	case ESkillModifierID::TwinSlash:
+		Option.BeforeValue = static_cast<float>(BeforeSpec.HitCount);
+		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
+		break;
+	case ESkillModifierID::NullRing:
+		Option.BeforeValue = BeforeSpec.bNullifyEnemyProjectiles ? 1.0f : 0.0f;
+		Option.AfterValue = 1.0f;
+		break;
+	case ESkillModifierID::RadiusUp:
+		Option.BeforeValue = CachedSkillComponent->GetCircularSlashRadius();
+		Option.AfterValue = FMath::Min(440.0f, Option.BeforeValue + 60.0f * static_cast<float>(Option.StackDelta));
+		break;
+	case ESkillModifierID::CooldownDown:
+		Option.BeforeValue = CachedSkillComponent->GetSkillCooldown(Option.SkillID);
+		Option.AfterValue = Option.SkillID == EPlayerSkillID::TripleProjectile
+			? FMath::Max(2.0f, Option.BeforeValue - 0.5f * static_cast<float>(Option.StackDelta))
+			: FMath::Max(1.6f, Option.BeforeValue - 0.4f * static_cast<float>(Option.StackDelta));
+		break;
+	default:
+		break;
+	}
 }

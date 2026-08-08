@@ -4,19 +4,35 @@
 
 #include "CoreMinimal.h"
 #include "Player/Skill/PlayerSkillTypes.h"
+#include "RoguelikeSystem/RoguelikeEconomyTypes.h"
 #include "PlayerRuntimeData.generated.h"
 
 /**
- * Placeholder for a buff that belongs to the current run.
+ * Data-only state for a temporary buff that belongs to the current run.
  *
- * The first runtime-data slice only reserves the storage boundary. Buff
- * identity, stacks, duration, and application rules will be defined together
- * with the buff system instead of being guessed here.
+ * E0 defines the persistence contract only. Applying modifiers, decrementing
+ * CombatRoomDuration, and removing expired entries belong to the Shop/Buff
+ * slices that consume this data.
  */
 USTRUCT(BlueprintType)
 struct FRunBuffData
 {
 	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
+	FName BuffId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
+	EPlayerRuntimeStat StatType = EPlayerRuntimeStat::MaxHealth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
+	float AdditiveValue = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
+	float MultiplierValue = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs", meta = (ClampMin = "0"))
+	int32 RemainCombatCount = 0;
 };
 
 /** Effective player stats that must survive a level transition in one run. */

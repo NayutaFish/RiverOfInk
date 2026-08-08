@@ -85,6 +85,9 @@ void UPlayerSkillWidget::NativeConstruct()
 		QIcon ? TEXT("valid") : TEXT("null"),
 		EIcon ? TEXT("valid") : TEXT("null"),
 		SkillBar ? TEXT("valid") : TEXT("null"));
+	UE_LOG(LogSkill, Log, TEXT("Skill HUD summary bindings: Q=%s E=%s."),
+		QBuildSummary ? TEXT("valid") : TEXT("null"),
+		EBuildSummary ? TEXT("valid") : TEXT("null"));
 
 	UE_LOG(LogSkill, Log,
 		TEXT("Skill HUD layout: DockDesired=(%.0f,%.0f) QIconDesired=(%.0f,%.0f) EIconDesired=(%.0f,%.0f) DataBound=%s Visibility=%d."),
@@ -147,10 +150,11 @@ void UPlayerSkillWidget::RefreshSkills()
 	RefreshSlot(
 		QSlot,
 		EPlayerSkillID::TripleProjectile,
-		EPlayerSkillForm::ThrownGrenade,
+		EPlayerSkillForm::Default,
 		QIcon,
 		QTitle,
 		QLevel,
+		QBuildSummary,
 		QCooldownBar,
 		QCooldownText,
 		TEXT("Q"));
@@ -161,9 +165,15 @@ void UPlayerSkillWidget::RefreshSkills()
 		EIcon,
 		ETitle,
 		ELevel,
+		EBuildSummary,
 		ECooldownBar,
 		ECooldownText,
 		TEXT("E"));
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Skill HUD resolved build: Q=%s; E=%s."),
+		*ObservedSkillComponent->GetSkillBuildSummary(EPlayerSkillID::TripleProjectile).ToString(),
+		*ObservedSkillComponent->GetSkillBuildSummary(EPlayerSkillID::CircularSlash).ToString());
 	RefreshCooldowns();
 }
 
@@ -184,8 +194,8 @@ void UPlayerSkillWidget::BuildDefaultWidgetTree()
 	{
 		SkillBarSlot->SetAnchors(FAnchors(0.5f, 1.0f));
 		SkillBarSlot->SetAlignment(FVector2D(0.5f, 1.0f));
-		SkillBarSlot->SetPosition(FVector2D(0.0f, -28.0f));
-		SkillBarSlot->SetSize(FVector2D(560.0f, 186.0f));
+		SkillBarSlot->SetPosition(FVector2D(0.0f, -32.0f));
+		SkillBarSlot->SetSize(FVector2D(560.0f, 224.0f));
 	}
 
 	const auto AddText = [this](UVerticalBox* Card, const TCHAR* Name, const FText& Text, const FLinearColor& Color, int32 FontSize)
@@ -205,11 +215,11 @@ void UPlayerSkillWidget::BuildDefaultWidgetTree()
 		return TextBlock;
 	};
 
-	const auto AddCard = [this, &AddText](const TCHAR* Prefix, const TCHAR* KeyLabel, EPlayerSkillID SkillID, TObjectPtr<UBorder>& OutCardBorder, TObjectPtr<UImage>& OutIcon, TObjectPtr<UTextBlock>& OutTitle, TObjectPtr<UTextBlock>& OutLevel, TObjectPtr<UProgressBar>& OutCooldownBar, TObjectPtr<UTextBlock>& OutCooldownText)
+	const auto AddCard = [this, &AddText](const TCHAR* Prefix, const TCHAR* KeyLabel, EPlayerSkillID SkillID, TObjectPtr<UBorder>& OutCardBorder, TObjectPtr<UImage>& OutIcon, TObjectPtr<UTextBlock>& OutTitle, TObjectPtr<UTextBlock>& OutLevel, TObjectPtr<UTextBlock>& OutBuildSummary, TObjectPtr<UProgressBar>& OutCooldownBar, TObjectPtr<UTextBlock>& OutCooldownText)
 	{
 		USizeBox* CardSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *FString::Printf(TEXT("%sSize"), Prefix));
 		CardSize->SetWidthOverride(256.0f);
-		CardSize->SetHeightOverride(178.0f);
+		CardSize->SetHeightOverride(214.0f);
 		if (UHorizontalBoxSlot* CardSlot = SkillBar->AddChildToHorizontalBox(CardSize))
 		{
 			CardSlot->SetPadding(FMargin(8.0f, 0.0f));
@@ -242,6 +252,9 @@ void UPlayerSkillWidget::BuildDefaultWidgetTree()
 
 		OutTitle = AddText(Card, *FString::Printf(TEXT("%sTitle"), Prefix), GetSkillTitle(SkillID), GetSkillColor(SkillID), 18);
 		OutLevel = AddText(Card, *FString::Printf(TEXT("%sLevel"), Prefix), FText::FromString(TEXT("Lv.1")), FLinearColor(0.86f, 0.9f, 0.96f, 1.0f), 14);
+		OutBuildSummary = AddText(Card, *FString::Printf(TEXT("%sBuildSummary"), Prefix), FText::FromString(TEXT("Build: Base\nEffect: Ready")), FLinearColor(0.72f, 0.8f, 0.9f, 1.0f), 12);
+		OutBuildSummary->SetAutoWrapText(true);
+		OutBuildSummary->SetWrapTextAt(224.0f);
 
 		OutCooldownBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), *FString::Printf(TEXT("%sCooldownBar"), Prefix));
 		OutCooldownBar->SetPercent(0.0f);
@@ -259,8 +272,8 @@ void UPlayerSkillWidget::BuildDefaultWidgetTree()
 		OutCooldownText = AddText(Card, *FString::Printf(TEXT("%sCooldownText"), Prefix), FText::FromString(TEXT("Ready")), FLinearColor(0.8f, 0.86f, 0.94f, 1.0f), 13);
 	};
 
-	AddCard(TEXT("QSkill"), TEXT("Q"), EPlayerSkillID::TripleProjectile, QCardBorder, QIcon, QTitle, QLevel, QCooldownBar, QCooldownText);
-	AddCard(TEXT("ESkill"), TEXT("E"), EPlayerSkillID::CircularSlash, ECardBorder, EIcon, ETitle, ELevel, ECooldownBar, ECooldownText);
+	AddCard(TEXT("QSkill"), TEXT("Q"), EPlayerSkillID::TripleProjectile, QCardBorder, QIcon, QTitle, QLevel, QBuildSummary, QCooldownBar, QCooldownText);
+	AddCard(TEXT("ESkill"), TEXT("E"), EPlayerSkillID::CircularSlash, ECardBorder, EIcon, ETitle, ELevel, EBuildSummary, ECooldownBar, ECooldownText);
 }
 
 void UPlayerSkillWidget::BindSkillEvents()
@@ -322,6 +335,7 @@ void UPlayerSkillWidget::RefreshSlot(
 	UImage* Icon,
 	UTextBlock* Title,
 	UTextBlock* Level,
+	UTextBlock* BuildSummary,
 	UProgressBar* CooldownBar,
 	UTextBlock* CooldownText,
 	const TCHAR* KeyLabel)
@@ -368,6 +382,29 @@ void UPlayerSkillWidget::RefreshSlot(
 	if (Level)
 	{
 		Level->SetText(FText::Format(FText::FromString(TEXT("{0}  Lv.{1}")), FText::FromString(KeyLabel), FMath::Max(1, SkillSlot.SkillLevel)));
+	}
+	if (IsValid(ObservedSkillComponent))
+	{
+		const FText BuildText = ObservedSkillComponent->GetSkillBuildSummary(SkillID);
+		const FText EffectText = ObservedSkillComponent->GetResolvedSkillSummary(SkillID);
+		const FText CombinedSummary = FText::FromString(FString::Printf(
+			TEXT("%s\n%s"),
+			*BuildText.ToString(),
+			*EffectText.ToString()));
+		if (BuildSummary)
+		{
+			BuildSummary->SetText(CombinedSummary);
+		}
+		else if (Level)
+		{
+			// Existing Blueprint HUDs may not yet contain the optional summary
+			// binding. Keep the parsed build visible instead of silently dropping it.
+			Level->SetText(FText::FromString(FString::Printf(
+				TEXT("%s  Lv.%d\n%s"),
+				KeyLabel,
+				FMath::Max(1, SkillSlot.SkillLevel),
+				*CombinedSummary.ToString())));
+		}
 	}
 
 }

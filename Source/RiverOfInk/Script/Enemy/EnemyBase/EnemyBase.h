@@ -66,6 +66,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 MagicResistance = 0;
 
+	/** Pure Ink awarded when this enemy dies during an active Combat Room. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Economy|Pure Ink", meta = (ClampMin = "0"))
+	int32 PureInkDropAmount = 1;
+
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Enemy|State")
 	bool bIsDead = false;
@@ -175,6 +179,9 @@ public:
 	TObjectPtr<APlayerCharacter> CachedPlayer;
 
 public:
+	UFUNCTION(BlueprintPure, Category = "Enemy|Economy|Pure Ink")
+	int32 GetPureInkDropAmount() const { return PureInkDropAmount; }
+
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
 
