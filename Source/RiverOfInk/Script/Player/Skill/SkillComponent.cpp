@@ -7,6 +7,7 @@
 #include "Player/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
+#include "Player/Skill/PlayerSkill_ThrownGrenade.h"
 
 DEFINE_LOG_CATEGORY(LogSkill);
 
@@ -15,6 +16,7 @@ USkillComponent::USkillComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	CircularSlashAreaClass = APlayerSkill_CircleDamageArea::StaticClass();
 	ProjectileAttackAreaClass = AAttackAreaBase::StaticClass();
+	ThrownGrenadeClass = APlayerSkill_ThrownGrenade::StaticClass();
 	InitializeSkillSlots();
 }
 
@@ -35,12 +37,14 @@ void USkillComponent::InitializeSkillSlots()
 	SkillSlots.SetNum(2);
 	SkillSlots[0].SkillID = EPlayerSkillID::TripleProjectile;
 	SkillSlots[0].SkillLevel = 1;
+	SkillSlots[0].SkillForm = EPlayerSkillForm::ThrownGrenade;
 	SkillSlots[1].SkillID = EPlayerSkillID::CircularSlash;
 	SkillSlots[1].SkillLevel = 1;
+	SkillSlots[1].SkillForm = EPlayerSkillForm::Default;
 	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::TripleProjectile);
 	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::CircularSlash);
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill slots initialized: Slot 0 (Q) = TripleProjectile, Slot 1 (E) = CircularSlash."));
+		TEXT("Skill slots initialized: Slot 0 (Q) = TripleProjectile [ThrownGrenade], Slot 1 (E) = CircularSlash."));
 }
 
 void USkillComponent::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const
@@ -68,6 +72,9 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 	SkillSlots[0].SkillLevel = FMath::Max(1, SkillSlots[0].SkillLevel);
 	SkillSlots[1].SkillID = EPlayerSkillID::CircularSlash;
 	SkillSlots[1].SkillLevel = FMath::Max(1, SkillSlots[1].SkillLevel);
+	// SkillForm is intentionally preserved from the snapshot. A missing field
+	// in an older snapshot deserializes as Default and keeps the old spread
+	// projectile behavior as a backwards-compatible fallback.
 	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::TripleProjectile);
 	SkillUpgradeStates.FindOrAdd(EPlayerSkillID::CircularSlash);
 	LastCastTimes.Reset();
@@ -228,6 +235,14 @@ float USkillComponent::GetCircularSlashCooldown() const
 	return FMath::Max(1.6f, CircularSlashCooldown - GetSkillUpgradeState(EPlayerSkillID::CircularSlash).CooldownLevel * 0.4f);
 }
 
+EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
+{
+	const int32 SlotIndex = FindSkillSlot(SkillID);
+	return SkillSlots.IsValidIndex(SlotIndex)
+		? SkillSlots[SlotIndex].SkillForm
+		: EPlayerSkillForm::Default;
+}
+
 float USkillComponent::GetSkillCooldown(EPlayerSkillID SkillID) const
 {
 	switch (SkillID)
@@ -295,6 +310,11 @@ bool USkillComponent::CastCircularSlash()
 
 bool USkillComponent::CastTripleProjectile()
 {
+	if (GetSkillForm(EPlayerSkillID::TripleProjectile) == EPlayerSkillForm::ThrownGrenade)
+	{
+		return CastThrownGrenade();
+	}
+
 	if (!ProjectileAttackAreaClass)
 	{
 		UE_LOG(LogSkill, Error, TEXT("ProjectileAttackAreaClass is not configured."));
@@ -329,6 +349,57 @@ bool USkillComponent::CastTripleProjectile()
 		UE_LOG(LogSkill, Display, TEXT("TripleProjectile cast: ProjectileCount=%d."), ProjectileCount);
 	}
 	return bSpawnedAny;
+}
+
+bool USkillComponent::CastThrownGrenade()
+{
+	UWorld* World = GetWorld();
+	if (!World || !OwnerCharacter || !ThrownGrenadeClass)
+	{
+		UE_LOG(LogSkill, Error, TEXT("ThrownGrenade cast failed: missing World, OwnerCharacter, or ThrownGrenadeClass."));
+		return false;
+	}
+
+	FVector Direction = OwnerCharacter->GetActorForwardVector();
+	Direction.Z = 0.0f;
+	if (!Direction.Normalize())
+	{
+		return false;
+	}
+
+	const FVector SpawnLocation = OwnerCharacter->GetActorLocation()
+		+ Direction * ProjectileSpawnForwardOffset
+		+ FVector(0.0f, 0.0f, 60.0f);
+	const FTransform SpawnTransform(Direction.Rotation(), SpawnLocation);
+
+	APlayerSkill_ThrownGrenade* Grenade = World->SpawnActorDeferred<APlayerSkill_ThrownGrenade>(
+		ThrownGrenadeClass,
+		SpawnTransform,
+		OwnerCharacter,
+		OwnerCharacter,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Grenade)
+	{
+		UE_LOG(LogSkill, Error, TEXT("ThrownGrenade cast failed: actor spawn returned null."));
+		return false;
+	}
+
+	Grenade->Initialize(
+		ThrownGrenadeFuseTime,
+		ThrownGrenadeExplosionRadius,
+		ThrownGrenadeDamage,
+		ThrownGrenadeGravityZ,
+		ThrownGrenadeCollisionRadius,
+		Direction * ThrownGrenadeSpeed,
+		OwnerCharacter);
+	UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
+
+	UE_LOG(LogSkill, Display,
+		TEXT("TripleProjectile thrown grenade cast: Fuse=%.2f Radius=%.0f Damage=%.1f."),
+		ThrownGrenadeFuseTime,
+		ThrownGrenadeExplosionRadius,
+		ThrownGrenadeDamage);
+	return true;
 }
 
 bool USkillComponent::SpawnProjectile(const FVector& SpawnLocation, const FVector& Direction, const TCHAR* ProjectileLabel)

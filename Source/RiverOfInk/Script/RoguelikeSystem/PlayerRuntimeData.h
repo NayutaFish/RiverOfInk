@@ -31,10 +31,14 @@ struct FPlayerRuntimeStats
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")
 	float CurrentHealth = 100.0f;
 
+	/** Single defense value used by the current damage model. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")
+	int32 Defense = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats", meta = (DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 PhysicalResistance = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats", meta = (DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 MagicResistance = 0;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")

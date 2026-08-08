@@ -35,6 +35,15 @@ namespace
 		}
 	}
 
+	FText GetSkillTitle(EPlayerSkillID SkillID, EPlayerSkillForm SkillForm)
+	{
+		if (SkillID == EPlayerSkillID::TripleProjectile && SkillForm == EPlayerSkillForm::ThrownGrenade)
+		{
+			return FText::FromString(TEXT("Ink Grenade"));
+		}
+		return GetSkillTitle(SkillID);
+	}
+
 	FLinearColor GetSkillColor(EPlayerSkillID SkillID)
 	{
 		return SkillID == EPlayerSkillID::CircularSlash
@@ -138,6 +147,7 @@ void UPlayerSkillWidget::RefreshSkills()
 	RefreshSlot(
 		QSlot,
 		EPlayerSkillID::TripleProjectile,
+		EPlayerSkillForm::ThrownGrenade,
 		QIcon,
 		QTitle,
 		QLevel,
@@ -147,6 +157,7 @@ void UPlayerSkillWidget::RefreshSkills()
 	RefreshSlot(
 		ESlot,
 		EPlayerSkillID::CircularSlash,
+		EPlayerSkillForm::Default,
 		EIcon,
 		ETitle,
 		ELevel,
@@ -307,6 +318,7 @@ void UPlayerSkillWidget::RefreshCooldowns()
 void UPlayerSkillWidget::RefreshSlot(
 	const FPlayerSkillSlot& SkillSlot,
 	EPlayerSkillID FallbackSkillID,
+	EPlayerSkillForm FallbackSkillForm,
 	UImage* Icon,
 	UTextBlock* Title,
 	UTextBlock* Level,
@@ -315,6 +327,7 @@ void UPlayerSkillWidget::RefreshSlot(
 	const TCHAR* KeyLabel)
 {
 	const EPlayerSkillID SkillID = SkillSlot.SkillID == EPlayerSkillID::None ? FallbackSkillID : SkillSlot.SkillID;
+	const EPlayerSkillForm SkillForm = SkillSlot.SkillID == EPlayerSkillID::None ? FallbackSkillForm : SkillSlot.SkillForm;
 	if (Icon)
 	{
 		if (SkillID == EPlayerSkillID::TripleProjectile)
@@ -338,7 +351,7 @@ void UPlayerSkillWidget::RefreshSlot(
 
 		if (Icon->GetBrush().GetResourceObject() == nullptr)
 		{
-			UE_LOG(LogSkill, Warning, TEXT("Skill HUD icon missing for %s; showing color placeholder."), *GetSkillTitle(SkillID).ToString());
+			UE_LOG(LogSkill, Warning, TEXT("Skill HUD icon missing for %s; showing color placeholder."), *GetSkillTitle(SkillID, SkillForm).ToString());
 			Icon->SetColorAndOpacity(GetSkillColor(SkillID));
 		}
 		else
@@ -349,7 +362,7 @@ void UPlayerSkillWidget::RefreshSlot(
 
 	if (Title)
 	{
-		Title->SetText(GetSkillTitle(SkillID));
+		Title->SetText(GetSkillTitle(SkillID, SkillForm));
 		Title->SetColorAndOpacity(FSlateColor(GetSkillColor(SkillID)));
 	}
 	if (Level)

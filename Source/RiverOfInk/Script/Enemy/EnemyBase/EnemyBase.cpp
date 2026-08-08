@@ -6,6 +6,7 @@
 #include "Common/StateBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Core/CombatDamageCalculator.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Engine/World.h"
@@ -37,6 +38,7 @@ void AEnemyBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	NormalizeDefenseFromLegacy();
 	CurrentHealth = MaxHealth;
 	bIsDead = false;
 
@@ -92,28 +94,18 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 		OnTakeDirectDamage.Broadcast(InInfo);
 	}
 
-	// 按伤害类型计算最终伤害（真实/必中伤害不减免）
-	float FinalDamage = InInfo.DamageValue;
-	switch (InInfo.DamageType)
-	{
-	case EDamageType::Physical:
-		FinalDamage = FMath::Max(InInfo.DamageValue * 0.05f, InInfo.DamageValue - PhysicalResistance);
-		break;
-	case EDamageType::Magic:
-		FinalDamage = FMath::Max(InInfo.DamageValue * 0.05f, (float)FMath::FloorToInt(InInfo.DamageValue * (1.0f - MagicResistance / 100.0f)));
-		break;
-	default:
-		break;
-	}
+	// DamageType remains legacy metadata; all damage uses one defense formula.
+	const int32 FinalDamage = RiverOfInkDamage::CalculateFinalDamage(InInfo.DamageValue, Defense);
 
-	CurrentHealth = FMath::Max(0.0f, CurrentHealth - FinalDamage);
+	CurrentHealth = FMath::Max(0.0f, CurrentHealth - static_cast<float>(FinalDamage));
 
 	UE_LOG(
 		LogRiverOfInk,
 		Log,
-		TEXT("Enemy %s took %.1f damage. CurrentHealth = %.1f"),
+		TEXT("Enemy %s took %d damage with Defense=%d. CurrentHealth = %.1f"),
 		*GetName(),
 		FinalDamage,
+		Defense,
 		CurrentHealth
 	);
 
@@ -153,4 +145,11 @@ void AEnemyBase::Die()
 	FEventBus::Publish<FNonPlayerDiedEvent>(FNonPlayerDiedEvent(this, LastDamageInfo, LastAttackArea));
 
 	Destroy();
+}
+
+void AEnemyBase::NormalizeDefenseFromLegacy()
+{
+	Defense = RiverOfInkDamage::ResolveLegacyDefense(Defense, PhysicalResistance, MagicResistance);
+	PhysicalResistance = Defense;
+	MagicResistance = Defense;
 }

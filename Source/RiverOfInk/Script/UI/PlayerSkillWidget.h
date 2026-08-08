@@ -53,6 +53,7 @@ private:
 	void RefreshSlot(
 		const FPlayerSkillSlot& Slot,
 		EPlayerSkillID FallbackSkillID,
+		EPlayerSkillForm FallbackSkillForm,
 		UImage* Icon,
 		UTextBlock* Title,
 		UTextBlock* Level,

@@ -32,9 +32,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea", meta = (ClampMin = "0.0"))
 	float Damage = 120.0f;
 
-	/** 伤害类型（物理/魔法/真实/必中） */
+	/** Legacy metadata only; all skills use the unified damage calculation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea")
-	EDamageType DamageType = EDamageType::Physical;
+	EDamageType DamageType = EDamageType::Unified;
 
 	/** 是否为直接性伤害（非持续/非技能间接伤害） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea")

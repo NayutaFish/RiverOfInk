@@ -11,6 +11,7 @@
 class AAttackAreaBase;
 class APlayerCharacter;
 class APlayerSkill_CircleDamageArea;
+class APlayerSkill_ThrownGrenade;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
 DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
@@ -75,6 +76,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashCooldown() const;
 
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
+
 	/** Effective cooldown after current roguelike upgrades. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Cooldown")
 	float GetSkillCooldown(EPlayerSkillID SkillID) const;
@@ -110,6 +114,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
 
+	/** First form slice for Q. Default Q uses a short-arc thrown grenade. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
+	TSubclassOf<APlayerSkill_ThrownGrenade> ThrownGrenadeClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeSpeed = 850.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
+	float ThrownGrenadeGravityZ = -980.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.05"))
+	float ThrownGrenadeFuseTime = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
+	float ThrownGrenadeExplosionRadius = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeDamage = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
+	float ThrownGrenadeCollisionRadius = 32.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile", meta = (ClampMin = "0.0"))
 	float TripleProjectileCooldown = 4.0f;
 
@@ -138,6 +164,7 @@ private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
 	bool CastTripleProjectile();
+	bool CastThrownGrenade();
 	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& Direction, const TCHAR* ProjectileLabel);
 	void InitializeSkillSlots();
 	int32 GetMaxUpgradeLevel(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType) const;

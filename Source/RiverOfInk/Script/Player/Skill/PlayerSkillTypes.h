@@ -13,6 +13,17 @@ enum class EPlayerSkillID : uint8
 	CircularSlash UMETA(DisplayName = "Circular Slash")
 };
 
+/**
+ * Runtime form of a skill. Forms change attack geometry/tempo while the
+ * owning skill slot and its upgrade levels remain unchanged.
+ */
+UENUM(BlueprintType)
+enum class EPlayerSkillForm : uint8
+{
+	Default UMETA(DisplayName = "Default"),
+	ThrownGrenade UMETA(DisplayName = "Thrown Grenade")
+};
+
 UENUM(BlueprintType)
 enum class ESkillUpgradeType : uint8
 {
@@ -39,6 +50,13 @@ struct FPlayerSkillSlot
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill")
 	int32 SkillLevel = 0;
+
+	/**
+	 * Form is part of the slot so a skill-form reward survives level travel in
+	 * FPlayerRuntimeData. Older snapshots deserialize as Default.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill")
+	EPlayerSkillForm SkillForm = EPlayerSkillForm::Default;
 };
 
 USTRUCT(BlueprintType)
