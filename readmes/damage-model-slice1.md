@@ -3,6 +3,8 @@
 日期：2026-08-08
 工作区：`E:\project\UE\demo0803`
 
+> **文档状态：历史方案（Legacy）。** 本文记录的是旧版 `SkillForm = ThrownGrenade` 的 Q 形态分支，不能作为当前新版 Modifier 构筑的接入说明。当前默认 Q 是普通 `TripleProjectile`，投掷手雷由 `InkGrenade` Modifier 通过 `ResolveSkillSpec()` 解析；请改读 [新版技能系统 C++ 代码清单](skill-system-code-checklist-2026-08-09.md)。本文仅保留作迁移背景和旧 PIE 证据。
+
 ## 1. 本切片范围
 
 切片 0 的统一 `Damage / Defense` 公式已通过 PIE 后，本切片实现 Q 的第一种技能形态：短弧投掷型技能（`Q_ThrownGrenade`）。

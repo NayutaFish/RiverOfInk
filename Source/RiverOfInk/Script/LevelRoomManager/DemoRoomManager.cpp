@@ -40,6 +40,15 @@ void ADemoRoomManager::BeginPlay()
 					TEXT("Preparation room detected; skipping enemy spawn setup."));
 				return;
 			}
+
+			if (RunFlow->GetRunState() == ERoguelikeRunState::InRoom
+				&& RunFlow->GetCurrentRoomDefinition().RoomType != ERoguelikeRoomType::Combat)
+			{
+				UE_LOG(LogRoguelike, Log,
+					TEXT("Non-combat room detected; skipping DemoRoomManager enemy spawn setup. RoomType=%d."),
+					static_cast<int32>(RunFlow->GetCurrentRoomDefinition().RoomType));
+				return;
+			}
 		}
 	}
 

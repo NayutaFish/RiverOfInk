@@ -1,6 +1,6 @@
 # Pure Ink 经济系统状态记录
 
-> 状态：暂停继续实施，保留 E0–E2 代码作为基础设施。
+> 状态：E0–E2 已恢复实施；P1.5 最小 Shop Manager 已落地，Shop Room 接入和 UI 仍待后续切片。
 >
 > 工程：`E:\project\UE\demo0803` / `RiverOfInk`
 
@@ -39,20 +39,31 @@
 - 敌人掉落：`1 Pure Ink`；
 - Combat Room Result：`20 Pure Ink`。
 
+## P1.5 最小 Shop Manager（2026-08-09）
+
+已新增 `ARoguelikeShopManager`：
+
+- `ERoguelikeRoomType::Shop` 作为房间类型；
+- 默认固定报价：恢复 500 HP（10 Pure Ink）、额外一次二选一奖励入口（25 Pure Ink）；
+- 购买前检查房间类型、余额、未知物品和 SoldOut；
+- 通过 `URoguelikeEconomySubsystem::TrySpendPureInk` 原子扣款；
+- 同一 Shop Manager 内每个物品只允许购买一次；
+- `DemoRoomManager` 对非 Combat 房间跳过敌人刷怪。
+
+本轮完整构建通过；默认地图序列目前仍为 Combat，因此 Shop 购买事务需要等 Shop Room 配置到房间池后再做 PIE 点击验证。
+
 ## 当前暂停范围
 
-以下内容暂不实施：
+以下内容仍暂不实施：
 
 - Shop Room 固定末位生成；
-- Shop Item 购买与 SoldOut；
-- 固定数值恢复；
 - 跨 Combat Room 的临时属性 Buff 应用与计数；
 - 购买后立即触发 Reward；
 - Pure Ink HUD 和 Shop UI。
 
-后续继续开发时，从资源系统策划案的 E3（Shop Room）开始，使用现有
+后续继续开发时，从资源系统策划案的 E3（Shop Room 配置与 UI）开始，使用现有
 `URoguelikeEconomySubsystem`，不要重新在 Pawn 或 Widget 中创建余额副本。
 
 ## 验证状态
 
-E0–E2 已通过 UnrealHeaderTool、C++ 编译和链接验证；PIE 收入矩阵暂留到经济系统恢复实施时执行。
+E0–E2、P1.5 Shop Manager 已通过 UnrealHeaderTool、C++ 编译和链接验证；PIE 已验证敌人掉落、Room Result（20）与余额累加（21）。Shop 购买 PIE 暂留到 Shop Room 接入后执行。

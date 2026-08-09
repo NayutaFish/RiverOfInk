@@ -5,7 +5,6 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
-#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
 UEnemyState_Idle::UEnemyState_Idle()
@@ -16,18 +15,6 @@ UEnemyState_Idle::UEnemyState_Idle()
 void UEnemyState_Idle::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// 尝试获取玩家引用
-	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
-	if (Enemy)
-	{
-		Enemy->CachedPlayer = Cast<APlayerCharacter>(
-			UGameplayStatics::GetPlayerCharacter(this, 0));
-	}
-
-	// 兜底：即使状态机未进入 OnEnter，也保证初始 AI 检测启动
-	GetWorld()->GetTimerManager().SetTimer(DetectTimerHandle, this,
-		&UEnemyState_Idle::CheckPlayerDistance, 0.5f, true, 0.0f);
 }
 
 void UEnemyState_Idle::OnEnter_Implementation()
@@ -37,12 +24,17 @@ void UEnemyState_Idle::OnEnter_Implementation()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy) return;
 
+	Enemy->RefreshCombatTarget();
+
 	// 订阅直接性受击事件，受击时切 HitBack
 	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Idle::OnTakeDirectDamage);
 
 	// 每 0.5s 检测一次玩家距离
-	GetWorld()->GetTimerManager().SetTimer(DetectTimerHandle, this,
-		&UEnemyState_Idle::CheckPlayerDistance, 0.5f, true, 0.0f);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(DetectTimerHandle, this,
+			&UEnemyState_Idle::CheckPlayerDistance, 0.5f, true, 0.0f);
+	}
 }
 
 void UEnemyState_Idle::OnExit_Implementation()
@@ -56,7 +48,10 @@ void UEnemyState_Idle::OnExit_Implementation()
 	Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Idle::OnTakeDirectDamage);
 
 	// 停止距离检测
-	GetWorld()->GetTimerManager().ClearTimer(DetectTimerHandle);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DetectTimerHandle);
+	}
 }
 
 void UEnemyState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -70,11 +65,16 @@ void UEnemyState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
 void UEnemyState_Idle::CheckPlayerDistance()
 {
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
-	if (!Enemy || !Enemy->CachedPlayer) return;
+	if (!Enemy) return;
+
+	Enemy->RefreshCombatTarget();
+	if (!Enemy->HasValidCombatTarget()) return;
+
+	APlayerCharacter* Player = Enemy->GetCombatTarget();
 
 	// 计算 XY 平面距离
 	FVector EnemyLoc = Enemy->GetActorLocation();
-	FVector PlayerLoc = Enemy->CachedPlayer->GetActorLocation();
+	FVector PlayerLoc = Player->GetActorLocation();
 	FVector Delta = PlayerLoc - EnemyLoc;
 	Delta.Z = 0.0f;
 

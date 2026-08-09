@@ -254,6 +254,10 @@ int32 USkillComponent::GetMaxModifierStack(
 		case ESkillModifierID::InkGrenade:
 		case ESkillModifierID::ExtraExplosion:
 			return 1;
+		case ESkillModifierID::CooldownDown:
+			// Q starts at 4.0s and bottoms out at 2.0s in
+			// GetTripleProjectileCooldown(), so four 0.5s steps are legal.
+			return 4;
 		default:
 			return 0;
 		}
