@@ -19,7 +19,7 @@ ACameraManager::ACameraManager()
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->SetUsingAbsoluteRotation(true);   // 弹簧臂自身保持固定旋转（俯视角）
-	CameraBoom->TargetArmLength = 800.f;          // 相机距离目标 800 单位
+	CameraBoom->TargetArmLength = 1600.f;         // 相机距离目标 1600 单位（高度差约 800，原为 400）
 	CameraBoom->SetRelativeRotation(FRotator(-60.f, 45.f, 0.f)); // 俯视 60 度 + Yaw 45 度对齐 WASD 移动方向
 	CameraBoom->bDoCollisionTest = false;
 
