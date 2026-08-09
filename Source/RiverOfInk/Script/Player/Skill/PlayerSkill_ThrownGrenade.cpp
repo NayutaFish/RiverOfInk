@@ -175,7 +175,6 @@ bool APlayerSkill_ThrownGrenade::SweepForImpact(
 	}
 
 	FCollisionObjectQueryParams ObjectQuery;
-	ObjectQuery.AddObjectTypesToQuery(ECC_WorldStatic);
 	ObjectQuery.AddObjectTypesToQuery(EnemyHitboxChannel);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ThrownGrenadeImpact), false);
@@ -185,14 +184,55 @@ bool APlayerSkill_ThrownGrenade::SweepForImpact(
 		QueryParams.AddIgnoredActor(DamageInstigator);
 	}
 
-	return GetWorld()->SweepSingleByObjectType(
-		OutHit,
+	// Object-type sweeps use the engine's default WorldStatic query channel.
+	// The white-box floor uses BlockAllDynamic (WorldDynamic), so it is not
+	// returned by that overload even when WorldDynamic is in ObjectQuery.
+	// Visibility is the project's geometry trace channel and is blocked by the
+	// floor, therefore use it for the world-impact leg of the sweep.
+	FHitResult WorldHit;
+	const bool bWorldHit = GetWorld()->SweepSingleByChannel(
+		WorldHit,
+		Start,
+		End,
+		FQuat::Identity,
+		ECC_Visibility,
+		FCollisionShape::MakeSphere(CollisionRadius),
+		QueryParams);
+
+	// Keep enemy detection on the explicit EnemyHitbox object type. This is an
+	// overlap response by design, so it remains independent of the floor trace
+	// channel and preserves direct enemy contact as a valid detonation trigger.
+	FHitResult EnemyHit;
+	const bool bEnemyHit = GetWorld()->SweepSingleByObjectType(
+		EnemyHit,
 		Start,
 		End,
 		FQuat::Identity,
 		ObjectQuery,
 		FCollisionShape::MakeSphere(CollisionRadius),
 		QueryParams);
+
+	if (bWorldHit && (!bEnemyHit || WorldHit.Time <= EnemyHit.Time))
+	{
+		OutHit = WorldHit;
+	}
+	else if (bEnemyHit)
+	{
+		OutHit = EnemyHit;
+	}
+	else
+	{
+		return false;
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("ThrownGrenade impact: Actor=%s Component=%s Location=%s ImpactPoint=%s."),
+		*GetNameSafe(OutHit.GetActor()),
+		*GetNameSafe(OutHit.GetComponent()),
+		*OutHit.Location.ToString(),
+		*OutHit.ImpactPoint.ToString());
+
+	return true;
 }
 
 void APlayerSkill_ThrownGrenade::Detonate()

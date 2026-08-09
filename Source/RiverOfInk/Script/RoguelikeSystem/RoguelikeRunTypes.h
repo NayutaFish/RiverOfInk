@@ -60,7 +60,8 @@ enum class ERoguelikeRoomState : uint8
 UENUM(BlueprintType)
 enum class ERoguelikeRoomType : uint8
 {
-	Combat
+	Combat,
+	Shop
 };
 
 /** One concrete room candidate in a major-stage pool. RoomId is an identifier, not a string to parse. */

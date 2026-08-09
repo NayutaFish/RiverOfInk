@@ -1,5 +1,30 @@
 # Bug Log
 
+## 2026-08-09：投掷技能穿过白盒地面
+
+- **现象**：`Ink Grenade` 的球体下沉穿过 `TestMap_1/Floor_0`；未直接撞到敌人时，随后在地面下引信爆炸，表现为“只有直接触碰敌人才生效”。
+- **根因**：`APlayerSkill_ThrownGrenade::SweepForImpact` 原先使用 `SweepSingleByObjectType`。该 UE API 使用默认 `WorldStatic` 查询通道，而白盒 `Floor_0` 的 `BodyInstance` 是 `WorldDynamic + BlockAllDynamic`，因此对象类型列表即使加入 `WorldDynamic` 也不会得到地面命中。
+- **修复**：地面碰撞改用 `ECC_Visibility` 球体扫掠；敌人仍用 `EnemyHitbox (GameTraceChannel2)` 对象查询，两个结果按 `FHitResult::Time` 取最近命中。新增 `LogSkill: ThrownGrenade impact` 记录 Actor、Component、球心和接触点。
+- **PIE 验证**：`TestMap_1` 中连续投掷三枚手雷，日志确认 `Actor=Floor_0`、`Location.Z=31.500`、`ImpactPoint.Z=-0.500`，随后立即输出 `ThrownGrenade explosion`；球心保持在地面上方约一个碰撞半径，不再下沉。历史同一构筑日志已确认爆炸范围可命中 `Hits=1/2`，本修复未改变范围查询。
+- **构建**：以正常权限运行 bundled .NET 10 的完整 UBT，`DOTNET_EXIT=0`、`Result: Succeeded`、5/5 actions；仅保留既有 `TakeDamage` C4263/C4264 警告及缺失 NETFXSDK 目录警告。沙箱内曾因 UBT 日志轮转目录不可写触发 `UnauthorizedAccessException`，旧日志已备份并改用正常权限验证，未修改系统 ACL、EventLog 或 UE bundled .NET。
+
+## 2026-08-09：P1 运行数据与 Pure Ink PIE 验证
+
+- **P1.4 跨场景数据流**：奖励选择后，`SkillComponent` 先记录 `TwinSlash` 的 Modifier（`Stack=0->1`、解析后 `HitCount=2`），RunFlow 随后进入 `RewardApplied → Exiting`。玩家进入出口后推进到 `TestMap_2`，日志确认 `Player runtime data captured`（`E=TwinSlash x1`）以及新 Pawn 的 `Player runtime data applied`（`E=TwinSlash x1`）；技能 HUD 同步解析为 `Build: Twin Slash x1`。这证明 Capture → map travel → Apply → HUD 的链路已在 PIE 跑通。
+- **P1.5 Pure Ink**：敌人死亡事件发放 `Amount=1`，Combat 房间结算发放固定 `Amount=20`，同一房间最终余额为 `21`；房间结算仍以 RunFlow 的 `MajorStage=0 RoomIndex=0` 记录，重复事件不会重复结算。
+- **P1.5 商店基础实现**：新增 `ERoguelikeRoomType::Shop`、`ARoguelikeShopManager` 与一次性购买校验（余额、房间类型、同一物品重复购买）；默认提供恢复生命和即时额外奖励两个固定报价。`DemoRoomManager` 在非 Combat 房间跳过敌人刷怪。当前默认地图序列仍全为 Combat，因此商店购买事务尚未在默认 PIE 序列中触发，待 Shop Room 接入关卡配置后再做购买点击验证。
+- **PIE 驱动辅助**：远程 Slate 当前只点击到编辑器视口图片，无法稳定把 Q/E 或奖励按钮事件路由到 PIE；为完成可重复验证，`ARiverOfInkPlayerController` 增加了开发调试属性 `bDebugKillAllEnemiesOnNextTick` / `bDebugSelectFirstRewardAfterKill`。属性只在 PIE 中手动置 `true` 时生效，执行一次后自动复位；不改变正常游戏默认行为。
+- **构建结果**：关闭 Editor 后以正常用户权限执行完整 `Build.bat RiverOfInkEditor Win64 Development -Project=... -WaitMutex -NoHotReload`，`Result: Succeeded`、`Exit code 0`、5/5 actions；本轮没有 dotnet 弹窗、JIT 弹窗或 managed exception。保留的 C4263/C4264 是旧版 `TakeDamage` 隐藏基类虚函数警告，未在本切片修改。
+
+## 2026-08-09：P0 奖励控件迁移与 dotnet 构建复核
+
+- **P0 修复**：旧奖励 WBP 的 C++ 模块引用已在 `Config/DefaultEngine.ini` 增加 `/Script/Test_GamePlay → /Script/RiverOfInk` 的 `PackageRedirect`；原有的 WBP 包路径和 `RoguelikeRewardWidget` 类重定向继续保留。此前编辑器 UMG 检查确认 `WBP_RoguelikeReward` 已解析为 `/Script/RiverOfInk.RoguelikeRewardWidget`，两张卡片的 `Button_0/1`、`Icon_0/1`、`Title_0/1`、`Description_0/1` 绑定存在，旧控件树可走 C++ fallback。
+- **WBP 重保存结果**：回滚误删的三个蓝图后，仅针对目标包再次执行单包 `ResavePackages`。日志报告 `1/1 packages were resaved`、`0/1 packages were deleted`，资产哈希已变化；目标包内已不再出现 `/Script/Test_GamePlay`，并保留 `/Script/RiverOfInk.RoguelikeRewardWidget`。命令行总退出码仍为 1（同次加载摘要有 3 个错误/7 个警告），所以不能把它描述为“全量无错误”，但 P0.2 的旧模块引用迁移已落盘。
+- **技能构筑矩阵（P1.1）**：修复 Q `CooldownDown` 的最大层数遗漏（4 层，对应 4.0s → 2.0s）；奖励池现在能生成 Quick Reload，且仍受上限和前置条件约束。静态审计确认 `InkGrenade → AddProjectile → ExtraExplosion`、`TwinSlash` 延迟二段/角度/单次冷却、`NullRing` 施放时消除标记敌弹以及 `TwinSlash + NullRing` 组合均走同一 `ResolveSkillSpec`。本轮未新增测试专用 Gameplay 代码。
+- **构建复核**：在 Codex 沙箱身份下，UBT 在备份 `%LOCALAPPDATA%\UnrealBuildTool\Log.txt`/`Trace.uba` 时记录了 `System.UnauthorizedAccessException`（`EpicGames.Core.Log.BackupLogFile → FileSystem.MoveFile`），这正是 `0xe0434352` 的 CLR 未处理异常根因证据；不是 Gameplay C++ 或 bundled runtime 损坏。以正常用户权限再次执行完整 `Build.bat RiverOfInkEditor Win64 Development -Project=... -WaitMutex -NoHotReload`，结果为 `EXIT_CODE=0`、UBT `Result: Succeeded`、`5/5 actions`，无 dotnet 弹窗、JIT 或 managed exception。未修改系统 ACL、EventLog 或 UE bundled .NET。
+- **编辑器/PIE 复核**：正常权限启动编辑器并开放 MCP；准备房间跳过刷怪，出口推进到 `TestMap_1` Combat Room，日志确认 `RoomState Initializing → Entering → Ready → Combat`、Q 基线 `ProjectileCount=3/Payload=NormalProjectile/Cooldown=4.00`、E 基线 `HitCount=1/Radius=260/Cooldown=3.00`。本轮未通过自动 Slate 输入完成击杀，因此没有把“奖励点击、变体施放”虚报为已通过；仍需在真实可聚焦游戏视口手工完成 Room Clear 及奖励选择。
+- **当前结论**：根因是沙箱运行身份无法访问 UBT 的用户日志轮转目录；通过正常用户权限执行构建可稳定通过。两个同参数 UBT 进程不是本轮正常用户构建的必然行为，当前成功验证只观察到单条 UBT 链。为防复发，Codex 的 UE 构建应运行在正常用户/主机权限环境，避免在沙箱内直接轮转 `%LOCALAPPDATA%` 日志。
+
 ## 2026-08-08：UE5.8 bundled dotnet/UBT 异常诊断
 
 - **现象**：Codex 构建期间偶发 `dotnet.exe - 应用程序错误`，异常码为 `0xe0434352`；有时同时出现 Visual Studio JIT Debugger 提示。
