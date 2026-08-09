@@ -3,7 +3,10 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Attack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
 #include "Common/AttackAreaBase.h"
 #include "Engine/World.h"
@@ -20,14 +23,36 @@ void UEnemyState_Attack::OnEnter_Implementation()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy) return;
 
+	// Attack is re-entered after every recovery. Reset this phase flag so a
+	// later attack cannot move during its wind-up before ExecuteAttack runs.
+	bAttackExecuted = false;
+	Enemy->RefreshCombatTarget();
+	if (!Enemy->HasValidCombatTarget())
+	{
+		Enemy->SwitchState(UEnemyState_TargetLost::StaticClass());
+		return;
+	}
+
 	// 订阅直接性受击事件，受击时切 HitBack
 	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Attack::OnTakeDirectDamage);
 
-	// 锁定当前朝向，攻击期间不旋转
+	// 锁定面向目标的朝向，攻击期间不旋转；远程攻击因此会沿目标方向发射。
 	LockedRotation = Enemy->GetActorRotation();
+	if (APlayerCharacter* Target = Enemy->GetCombatTarget())
+	{
+		FVector ToTarget = Target->GetActorLocation() - Enemy->GetActorLocation();
+		ToTarget.Z = 0.0f;
+		if (!ToTarget.IsNearlyZero())
+		{
+			LockedRotation = ToTarget.Rotation();
+		}
+	}
 
-	GetWorld()->GetTimerManager().SetTimer(AttackDelayHandle, this,
-		&UEnemyState_Attack::ExecuteAttack, Enemy->AttackWindupTime, false);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(AttackDelayHandle, this,
+			&UEnemyState_Attack::ExecuteAttack, Enemy->AttackWindupTime, false);
+	}
 }
 
 void UEnemyState_Attack::OnExit_Implementation()
@@ -57,7 +82,22 @@ void UEnemyState_Attack::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
 void UEnemyState_Attack::ExecuteAttack()
 {
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
-	if (!Enemy || Enemy->bIsDead || !Enemy->AttackAreaClass) return;
+	if (!Enemy || Enemy->bIsDead) return;
+
+	if (!Enemy->HasValidCombatTarget())
+	{
+		Enemy->SwitchState(UEnemyState_TargetLost::StaticClass());
+		return;
+	}
+
+	if (!Enemy->AttackAreaClass)
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Enemy %s attack skipped: AttackAreaClass is missing; returning to Chase."),
+			*Enemy->GetName());
+		ReturnToChase();
+		return;
+	}
 
 	bAttackExecuted = true;
 
@@ -65,14 +105,21 @@ void UEnemyState_Attack::ExecuteAttack()
 	Params.Owner = Enemy;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	FVector SpawnLoc = Enemy->GetActorLocation() + Enemy->GetActorForwardVector() * Enemy->AttackAreaSpawnOffset;
+	const FVector AttackDirection = LockedRotation.Vector();
+	const FVector SpawnLoc = Enemy->GetActorLocation() + AttackDirection * Enemy->AttackAreaSpawnOffset;
 	AActor* FollowTarget = Enemy->bAttackAreaFollowOwner ? Enemy : nullptr;
 
-	if (AAttackAreaBase* AttackArea = GetWorld()->SpawnActor<AAttackAreaBase>(
+	AAttackAreaBase* SpawnedAttackArea = nullptr;
+	if (UWorld* World = GetWorld())
+	{
+		SpawnedAttackArea = World->SpawnActor<AAttackAreaBase>(
 			Enemy->AttackAreaClass,
 			SpawnLoc,
-			Enemy->GetActorRotation(),
-			Params))
+			LockedRotation,
+			Params);
+	}
+
+	if (AAttackAreaBase* AttackArea = SpawnedAttackArea)
 	{
 		AttackArea->Initialize(Enemy->AttackAreaLifeTime, Enemy->AttackAreaSpeed,
 			Enemy->bAttackAreaIsMelee, FollowTarget);
@@ -84,10 +131,24 @@ void UEnemyState_Attack::ExecuteAttack()
 		{
 			UE_LOG(LogRiverOfInk, Log, TEXT("Enemy projectile tagged for Null Ring: %s."), *AttackArea->GetName());
 		}
+
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s attack executed: Style=%s Area=%s."),
+			*Enemy->GetName(),
+			Enemy->bAttackAreaIsMelee ? TEXT("Melee") : TEXT("Ranged"),
+			*AttackArea->GetName());
+	}
+	else
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Enemy %s attack spawn failed; returning to Chase."), *Enemy->GetName());
 	}
 
-	GetWorld()->GetTimerManager().SetTimer(ReturnHandle, this,
-		&UEnemyState_Attack::ReturnToChase, Enemy->AttackRecoveryTime, false);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(ReturnHandle, this,
+			&UEnemyState_Attack::ReturnToChase, Enemy->AttackRecoveryTime, false);
+	}
 }
 
 void UEnemyState_Attack::Update_Implementation(float DeltaTime)
@@ -116,6 +177,9 @@ void UEnemyState_Attack::ReturnToChase()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (Enemy)
 	{
-		Enemy->SwitchState(UEnemyState_Chase::StaticClass());
+		Enemy->RefreshCombatTarget();
+		Enemy->SwitchState(Enemy->HasValidCombatTarget()
+			? UEnemyState_Chase::StaticClass()
+			: UEnemyState_TargetLost::StaticClass());
 	}
 }

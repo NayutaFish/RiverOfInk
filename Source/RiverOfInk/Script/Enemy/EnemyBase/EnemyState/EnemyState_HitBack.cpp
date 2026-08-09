@@ -2,6 +2,8 @@
 
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Engine/World.h"
 #include "RiverOfInk.h"
@@ -34,8 +36,11 @@ void UEnemyState_HitBack::OnEnter_Implementation()
 	HitBackDirection = KnockbackDir;
 
 	// 击退结束后回到追击
-	GetWorld()->GetTimerManager().SetTimer(HitBackTimerHandle, this,
-		&UEnemyState_HitBack::OnHitBackEnd, Enemy->HitBackDuration, false);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(HitBackTimerHandle, this,
+			&UEnemyState_HitBack::OnHitBackEnd, Enemy->HitBackDuration, false);
+	}
 }
 
 void UEnemyState_HitBack::OnExit_Implementation()
@@ -67,5 +72,8 @@ void UEnemyState_HitBack::OnHitBackEnd()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy || Enemy->bIsDead) return;
 
-	Enemy->SwitchState(UEnemyState_Chase::StaticClass());
+	Enemy->RefreshCombatTarget();
+	Enemy->SwitchState(Enemy->HasValidCombatTarget()
+		? UEnemyState_Chase::StaticClass()
+		: UEnemyState_TargetLost::StaticClass());
 }

@@ -16,10 +16,10 @@ class APlayerCharacter;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
 
 /**
- * Minimal enemy base for the first room-flow pass.
+ * Shared enemy base for the first melee state-machine pass.
  *
- * Owns health, damage, death notification, and debug death entry points.
- * AI, movement, attacks, animation, and drops are intentionally left out.
+ * Owns health, damage, state transitions, death notification, and attack
+ * configuration. Movement and attack execution remain in state components.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API AEnemyBase : public AActor
@@ -39,6 +39,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 protected:
 	/** 胶囊体（同时也是根组件） */
@@ -74,6 +75,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Enemy|State")
 	bool bIsDead = false;
 
+	/** 延迟销毁前的死亡表现/掉落窗口（秒）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Death", meta = (ClampMin = "0.0", Units = "s"))
+	float DeathDestroyDelay = 0.5f;
+
 	/** 最近一次直接性伤害的攻击者（供击退等状态读取） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
 	TObjectPtr<AActor> LastAttacker;
@@ -92,6 +97,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyDeathSignature OnEnemyDeath;
 
+	/** 一次性死亡入口；掉落生成和死亡事件均从这里发出。 */
+	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
+	FOnEnemyDeathSignature OnDead;
+
 	/** 直接性受击事件（状态类可订阅，如击退） */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnTakeDirectDamageSignature OnTakeDirectDamage;
@@ -107,6 +116,14 @@ public:
 	/** 执行攻击的距离阈值（小于此值则进入攻击状态） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
 	float AttackRange = 300.0f;
+
+	/** 远程敌人的内圈距离；近战敌人保持 0。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
+	float MinimumAttackRange = 0.0f;
+
+	/** 远程敌人的外圈距离；为 0 时复用 AttackRange。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
+	float MaximumAttackRange = 0.0f;
 
 	/** 攻击状态中执行攻击后的移动速度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
@@ -126,17 +143,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AttackArea", meta = (ClampMin = "0.01"))
 	float AttackAreaLifeTime = 3.0f;
 
-	/** 攻击区域飞行速度 */
+	/** 攻击区域飞行速度。ESM-1 的默认近战攻击保持为 0；远程蓝图覆盖该值。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AttackArea", meta = (ClampMin = "0.0"))
-	float AttackAreaSpeed = 500.0f;
+	float AttackAreaSpeed = 0.0f;
 
 	/** 攻击区域是否检测障碍物碰撞 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AttackArea")
 	bool bAttackAreaDetectObstacle = true;
 
-	/** 攻击区域是否为近战 */
+	/** 攻击区域是否为近战。远程敌人蓝图将其设为 false 并配置非零速度。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AttackArea")
-	bool bAttackAreaIsMelee = false;
+	bool bAttackAreaIsMelee = true;
 
 	/** 攻击区域是否跟随施放者 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AttackArea")
@@ -191,6 +208,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void Die();
 
+	/** Refresh the cached player when the current Pawn is gone or dead. */
+	UFUNCTION(BlueprintCallable, Category = "Enemy|AI")
+	void RefreshCombatTarget();
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|AI")
+	bool HasValidCombatTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|AI")
+	APlayerCharacter* GetCombatTarget() const { return CachedPlayer; }
+
+	/** Dead 状态的唯一进入点；保证掉落、事件和延迟销毁只执行一次。 */
+	void HandleDeadState();
+
 private:
 	void NormalizeDefenseFromLegacy();
+	void DisableStateComponentTicks();
+	UStateBase* EnsureStateComponent(TSubclassOf<UStateBase> StateClass);
+	void GenerateDropOnDead();
+	void DestroyAfterDeath();
+
+	bool bDeadHandled = false;
+	FTimerHandle DeathDestroyTimerHandle;
 };

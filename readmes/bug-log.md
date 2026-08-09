@@ -1,5 +1,21 @@
 # Bug Log
 
+## 2026-08-09：敌人状态机 ESM-2/3 远程站位与死亡收尾
+
+- **现象**：敌人 Chase 只按近战距离追击；玩家目标失效后状态仍可能停留在 Chase/Attack；死亡事件直接销毁敌人，掉落与房间计数没有独立的死亡生命周期入口。
+- **根因**：距离策略没有区分移动型攻击区域；状态机缺少 TargetLost 和 Dead 状态；`Die()` 同时承担标记、事件广播和销毁，后续加入死亡表现或掉落时容易重复调用。
+- **修复**：远程敌人以 `MinimumAttackRange/MaximumAttackRange` 形成距离带，超出外圈靠近、进入内圈后退、带内停留并攻击；新增运行时创建的 `EnemyState_TargetLost` 与 `EnemyState_Dead`；`OnDead → GenerateDropOnDead → OnEnemyDeath/EventBus` 只执行一次，Pure Ink 仍由经济子系统消费 `FNonPlayerDiedEvent`；默认延迟销毁 0.5 秒并在 EndPlay 清理计时器。
+- **验证计划**：PIE 中分别配置远程敌人的 `bAttackAreaIsMelee=false`、非零 `AttackAreaSpeed` 和距离带，观察远程站位/投射物方向；使用 `bDebugKillAllEnemiesOnNextTick` 检查 `Dead → OnDead → EnemyDrop → 延迟销毁`，再让玩家失效检查 `TargetLost`。
+- **涉及知识点**：状态组件运行时注册、状态转换中的一次性副作用、Timer 生命周期清理、状态策略与共享状态拆分、UE `TObjectPtr`/Actor 销毁前事件顺序。
+
+## 2026-08-09：敌人状态机 ESM-0 生命周期修复
+
+- **现象**：敌人状态组件同时具备原生 Component Tick 与 `AEnemyBase::Tick → CurrentState::Update` 两条更新路径；重复进入 Attack 后，旧的攻击阶段标记可能导致前摇期间移动；攻击区域类缺失时，敌人可能卡在 Attack 状态。
+- **根因**：状态组件的 Tick 开关没有由状态机统一管理；`UEnemyState_Attack::bAttackExecuted` 只在构造时初始化；`ExecuteAttack()` 对缺失类直接返回，没有恢复路径；玩家 Pawn 只在 Idle 初始化时缓存。
+- **修复**：由 `AEnemyBase` 统一驱动状态更新并关闭状态组件原生 Tick；每次进入 Attack 重置阶段标记；攻击类缺失或生成失败时记录警告并回到 Chase；新增目标刷新、死亡目标失效处理、状态切换日志和 EndPlay 计时器清理。ESM-1 默认攻击区域改为近战基线（`bAttackAreaIsMelee=true`、速度为 0），远程蓝图后续覆盖配置。
+- **PIE 验证**：`TestMap_1` 中观察到 `None → EnemyState_Idle → EnemyState_Chase → EnemyState_Attack`，攻击日志显示 `Style=Melee` 与 `AttackArea` 生成，后摇后回到 Chase；目标失效后回到 Idle。完整 UBT `Result: Succeeded`、`BUILD_EXIT=0`。
+- **涉及知识点**：`UActorComponent` 生命周期、`TObjectPtr` 的 `.Get()`、Timer/Delegate 在状态退出与 Actor EndPlay 时清理、状态驱动器唯一性，以及状态对象与攻击区域对象的职责分离。
+
 ## 2026-08-09：投掷技能穿过白盒地面
 
 - **现象**：`Ink Grenade` 的球体下沉穿过 `TestMap_1/Floor_0`；未直接撞到敌人时，随后在地面下引信爆炸，表现为“只有直接触碰敌人才生效”。
