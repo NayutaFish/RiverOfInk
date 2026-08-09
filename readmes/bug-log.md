@@ -1,5 +1,17 @@
 # Bug Log
 
+## 2026-08-08：UE5.8 bundled dotnet/UBT 异常诊断
+
+- **现象**：Codex 构建期间偶发 `dotnet.exe - 应用程序错误`，异常码为 `0xe0434352`；有时同时出现 Visual Studio JIT Debugger 提示。
+- **环境检查**：`EventLog` 当前为 `Running/Automatic`，`Get-WinEvent -LogName Application` 可用；未发现本轮构建对应的 `.NET Runtime`、`Application Error` 或 `dotnet.exe` WER 事件，因此没有修改 EventLog 注册表。
+- **历史根因线索**：2026-08-08 18:37 的 UBT 日志显示 `Intermediate/Build/Win64/x64/RiverOfInkEditor/Development/Makefile.bin` 读取失败，异常为 `System.ArgumentException`，调用栈为 `BinaryArchiveReader.ReadBulkData → ReadPrimitiveArray → ReadLogEvent → TargetMakefile.Load`。UBT 捕获该异常后重建 makefile，最终 `Result: Succeeded`；这是可恢复的 makefile 缓存读取错误，不等同于 dotnet 未处理异常。
+- **并发调查**：人工执行 `Build.bat` 时只观察到 `cmd.exe → bundled dotnet.exe → UnrealBuildTool.dll`，没有 UBT 自调用或第二个同参数 dotnet。UE 的 `Build.bat` 本身包含临时锁；两个同参数 dotnet 更可能来自 Codex/编辑器/直接 UBT 的重叠调用。历史 UBT 日志还记录过 `BuildException: Unable to build while Live Coding is active`。
+- **bundled .NET 检查**：UE 5.8 bundled .NET 10.0.203 SDK、10.0.7 runtime、`hostfxr.dll`、`hostpolicy.dll` 和 `runtimeconfig.json` 均存在；`dotnet --info`、`--list-sdks`、`--list-runtimes` 均正常。`Build.bat` 会设置 `DOTNET_ROOT` 并将 bundled runtime 放到 PATH 首位，同时关闭 multilevel lookup。
+- **修复/预防**：未修改 Gameplay C++、EventLog 或 UE bundled .NET；现有 makefile 已可正常读取。新增项目级 `AGENTS.md`，要求关闭 Editor/Live Coding、串行调用唯一的 `Build.bat`，并检查完整 UBT 日志。
+- **验证**：人工命令 `RiverOfInkEditor Win64 Development -Project=... -WaitMutex -NoHotReload` 返回 `EXIT_CODE=0`、`Result: Succeeded`；冷编译记录为 17/17 actions 成功。本轮未出现 dotnet 弹窗，构建后无残留 `UnrealEditor`/`UnrealBuildTool`/`dotnet` 进程。
+- **剩余不确定性**：没有捕获到 0xe0434352 对应的 dump 或 WER 事件，故不能证明该弹窗的唯一根因。若再次出现，应保留弹窗期间的进程树和 dotnet dump，再区分并发调用、makefile 竞争与其他 CLR 异常。
+- **涉及知识点**：批处理锁与进程树、.NET hostfxr/runtimeconfig 加载、UBT TargetMakefile 二进制缓存、Live Coding 与外部构建互斥、可恢复异常与未处理异常的区别。
+
 ## 2026-08-08：Slice 6–7 PIE 基础启动验证
 
 - **验证结果**：`RiverOfInkEditor` 冷编译成功；PIE 成功创建 `/Game/Level/UEDPIE_0_TestMap_0`，并在验证后正常停止。
