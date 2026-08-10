@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "InputCoreTypes.h"
 #include "Core/GlobalStructs.h"
 #include "RoguelikeSystem/PlayerRuntimeData.h"
 #include "PlayerCharacter.generated.h"
@@ -18,6 +19,7 @@ class UHealthComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 class UPlayerSkillWidget;
+class ARoguelikeShopManager;
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDeathSignature, AActor*, DeadPlayer);
@@ -93,6 +95,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Health")
 	bool IsDead() const;
 
+	/** Register the Shop Manager whose interaction area currently contains this player. */
+	void SetNearbyShopManager(ARoguelikeShopManager* InShopManager);
+
+	/** Clear an interaction-area registration without disrupting another nearby Shop. */
+	void ClearNearbyShopManager(ARoguelikeShopManager* InShopManager);
+
+	/** Trigger the nearby Shop interaction. Bound to the configurable J key by default. */
+	UFUNCTION(BlueprintCallable, Category = "Player|Interaction")
+	void TryInteractWithShop();
+
+	FText GetShopInteractionKeyLabel() const;
+
 	// ── 状态机 ──
 	/** 当前活跃状态组件 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
@@ -138,6 +152,12 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPlayerSkillWidget> SkillWidget;
+
+	/** Default Shop interaction key. Kept local to player input so the first UI slice needs no new input asset. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Interaction")
+	FKey ShopInteractionKey = EKeys::J;
+
+	TWeakObjectPtr<ARoguelikeShopManager> NearbyShopManager;
 
 	void Die();
 	void OnAttack();

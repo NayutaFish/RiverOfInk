@@ -64,6 +64,15 @@ enum class ERoguelikeRoomType : uint8
 	Shop
 };
 
+/** Encounter difficulty for a Combat room. Non-combat rooms keep the default Normal value. */
+UENUM(BlueprintType)
+enum class ERoguelikeEncounterTier : uint8
+{
+	Normal,
+	Elite,
+	Boss
+};
+
 /** One concrete room candidate in a major-stage pool. RoomId is an identifier, not a string to parse. */
 USTRUCT(BlueprintType)
 struct FRoguelikeRoomDefinition
@@ -76,6 +85,10 @@ struct FRoguelikeRoomDefinition
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Roguelike|Room")
 	ERoguelikeRoomType RoomType = ERoguelikeRoomType::Combat;
+
+	/** Combat encounter tier. RoomType remains Combat for Normal, Elite, and Boss encounters. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Roguelike|Room")
+	ERoguelikeEncounterTier EncounterTier = ERoguelikeEncounterTier::Normal;
 
 	/** Relative probability for this room when drawing without replacement. Values below one are invalid. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Roguelike|Room", meta = (ClampMin = "1"))
@@ -96,7 +109,11 @@ struct FMajorStageDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Roguelike|Major Stage")
 	int32 MajorStageIndex = INDEX_NONE;
 
-	/** Number of unique rooms to draw from RoomPool for this stage. */
+	/**
+	 * Number of rooms in the generated sequence. A configured Shop room is
+	 * reserved for the final slot; all remaining slots are weighted draws
+	 * from the non-Shop pool without replacement.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Roguelike|Major Stage", meta = (ClampMin = "1"))
 	int32 RoomSequenceLength = 1;
 
