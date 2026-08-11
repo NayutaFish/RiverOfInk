@@ -7,6 +7,15 @@
 #include "RoguelikeSystem/RoguelikeEconomyTypes.h"
 #include "RoguelikeShopManager.generated.h"
 
+class APlayerCharacter;
+class UBoxComponent;
+class UPrimitiveComponent;
+class UStaticMeshComponent;
+class UTextRenderComponent;
+class URoguelikeShopPromptWidget;
+class URoguelikeShopWidget;
+struct FHitResult;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FOnRoguelikeShopPurchaseCompleted,
 	FName,
@@ -34,6 +43,7 @@ public:
 	ARoguelikeShopManager();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Return the balance owned by the GameInstance economy subsystem. */
 	UFUNCTION(BlueprintPure, Category = "Roguelike|Shop")
@@ -54,6 +64,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Roguelike|Shop")
 	bool PurchaseItem(FName ItemId);
 
+	/** Open the local Shop HUD when the supplied player is inside this Shop Area. */
+	UFUNCTION(BlueprintCallable, Category = "Roguelike|Shop|Interaction")
+	bool TryOpenShop(APlayerCharacter* InPlayer);
+
+	/** Close the active Shop HUD and restore player input. Safe to call repeatedly. */
+	UFUNCTION(BlueprintCallable, Category = "Roguelike|Shop|Interaction")
+	void CloseShop();
+
 	/**
 	 * Whitebox switch for data-only tests. Production Shop Rooms keep this true;
 	 * a future test map may disable it without changing EconomySubsystem rules.
@@ -70,8 +88,51 @@ public:
 private:
 	const FShopItemDefinition* FindItem(FName ItemId) const;
 	bool IsShopRoomActive() const;
+	bool CanApplyItemEffect(const FShopItemDefinition& Item) const;
+	bool IsInteractionAvailable() const;
 	void AddDefaultOffersIfUnset();
 	void ApplyImmediateItemEffect(const FShopItemDefinition& Item);
+	void RegisterPlayerIfAlreadyInsideShopArea();
+	void ShowInteractionPrompt(APlayerCharacter* InPlayer);
+	void HideInteractionPrompt();
+
+	UFUNCTION()
+	void HandleShopAreaBeginOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void HandleShopAreaEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex);
+
+	/** Trigger volume for the white-box Trader interaction. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UBoxComponent> ShopArea;
+
+	/** Visible white-box trader marker. Replace this mesh with the final trader later. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> TraderMarker;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTextRenderComponent> TraderNameplate;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
+	FText InteractionPrompt = FText::FromString(TEXT("Talk to the Ink Trader"));
+
+	UPROPERTY(Transient)
+	TObjectPtr<URoguelikeShopPromptWidget> ActiveInteractionPrompt;
+
+	UPROPERTY(Transient)
+	TObjectPtr<URoguelikeShopWidget> ActiveShopWidget;
+
+	TWeakObjectPtr<APlayerCharacter> NearbyPlayer;
 
 	/** Map-local sold-out state; a new Shop Room creates a new manager. */
 	TSet<FName> PurchasedItemIds;

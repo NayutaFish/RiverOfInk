@@ -14,7 +14,9 @@
 #include "Engine/World.h"
 #include "Player/Skill/SkillComponent.h"
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
+#include "RoguelikeSystem/RoguelikeShopManager.h"
 #include "Input/PlayerInputComponent.h"
+#include "InputCoreTypes.h"
 #include "EnhancedInputComponent.h"
 #include "Common/StateBase.h"
 #include "Player/PlayerState/PlayerState_Idle.h"
@@ -53,6 +55,7 @@ APlayerCharacter::APlayerCharacter()
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
+	ShopInteractionKey = EKeys::J;
 
 	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
 	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
@@ -382,6 +385,43 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 			InputComp->SetupEnhancedInput(EnhancedInput, Cast<APlayerController>(GetController()));
 		}
 	}
+
+	if (PlayerInputComponent && ShopInteractionKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(
+			ShopInteractionKey,
+			IE_Pressed,
+			this,
+			&APlayerCharacter::TryInteractWithShop);
+	}
+}
+
+void APlayerCharacter::SetNearbyShopManager(ARoguelikeShopManager* InShopManager)
+{
+	NearbyShopManager = InShopManager;
+}
+
+void APlayerCharacter::ClearNearbyShopManager(ARoguelikeShopManager* InShopManager)
+{
+	if (!InShopManager || NearbyShopManager.Get() == InShopManager)
+	{
+		NearbyShopManager.Reset();
+	}
+}
+
+void APlayerCharacter::TryInteractWithShop()
+{
+	if (NearbyShopManager.IsValid())
+	{
+		NearbyShopManager->TryOpenShop(this);
+	}
+}
+
+FText APlayerCharacter::GetShopInteractionKeyLabel() const
+{
+	return ShopInteractionKey.IsValid()
+		? ShopInteractionKey.GetDisplayName(false)
+		: FText::FromString(TEXT("J"));
 }
 
 // ── 主动技能 ──

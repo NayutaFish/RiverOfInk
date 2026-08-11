@@ -84,11 +84,19 @@ void ARoguelikeExitTrigger::BeginPlay()
 		: nullptr;
 	const bool bIsPreparationRoom = RunFlow
 		&& RunFlow->GetRunState() == ERoguelikeRunState::Preparation;
+	const bool bIsShopRoom = RunFlow
+		&& RunFlow->GetCurrentRoomDefinition().RoomType == ERoguelikeRoomType::Shop;
 
 	if (bIsPreparationRoom)
 	{
 		UE_LOG(LogRoguelike, Log,
 			TEXT("Preparation start exit does not require a reward manager."));
+	}
+	else if (bIsShopRoom)
+	{
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Shop exit does not require a reward manager; activating on room entry."));
+		ActivateExit();
 	}
 	else if (ResolveRewardManager())
 	{

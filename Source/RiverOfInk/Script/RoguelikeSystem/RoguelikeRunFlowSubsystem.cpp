@@ -244,8 +244,11 @@ bool URoguelikeRunFlowSubsystem::AdvanceToNextRoom()
 	}
 
 	UE_LOG(LogRoguelikeRunFlow, Log,
-		TEXT("Loading next room. MajorStage=%d RoomIndex=%d RoomId=%s."),
-		CurrentMajorStageIndex, CurrentRoomIndex, *NextRoom.RoomId.ToString());
+		TEXT("Loading next room. MajorStage=%d RoomIndex=%d RoomId=%s EncounterTier=%d."),
+		CurrentMajorStageIndex,
+		CurrentRoomIndex,
+		*NextRoom.RoomId.ToString(),
+		static_cast<int32>(NextRoom.EncounterTier));
 	return true;
 }
 
@@ -302,10 +305,11 @@ bool URoguelikeRunFlowSubsystem::AdvanceToNextMajorStage()
 	}
 
 	UE_LOG(LogRoguelikeRunFlow, Log,
-		TEXT("Advanced to MajorStage=%d. GeneratedRooms=%d FirstRoom=%s."),
+		TEXT("Advanced to MajorStage=%d. GeneratedRooms=%d FirstRoom=%s EncounterTier=%d."),
 		CurrentMajorStageIndex,
 		ActiveRoomSequence.Num(),
-		*FirstRoom.RoomId.ToString());
+		*FirstRoom.RoomId.ToString(),
+		static_cast<int32>(FirstRoom.EncounterTier));
 	return true;
 }
 
@@ -393,14 +397,33 @@ void URoguelikeRunFlowSubsystem::ConfigureDefaultWhiteboxRoomsIfUnset()
 	{
 		FMajorStageDefinition Definition;
 		Definition.MajorStageIndex = MajorStageIndex;
-		Definition.RoomSequenceLength = 1;
+		// Whitebox topology: combat -> final combat -> shop. Until dedicated boss
+		// maps exist, the stage combat map is intentionally reused for the final
+		// placeholder room under a different RoomId.
+		Definition.RoomSequenceLength = 3;
 
-		FRoguelikeRoomDefinition Room;
-		Room.RoomId = FName(*FString::Printf(TEXT("M%02d_Combat_A"), MajorStageIndex + 1));
-		Room.RoomType = ERoguelikeRoomType::Combat;
-		Room.SelectionWeight = 1;
-		Room.RoomMap = TSoftObjectPtr<UWorld>(FSoftObjectPath(MajorStageRoomPaths[MajorStageIndex]));
-		Definition.RoomPool.Add(MoveTemp(Room));
+		FRoguelikeRoomDefinition FirstCombatRoom;
+		FirstCombatRoom.RoomId = FName(*FString::Printf(TEXT("M%02d_Combat_A"), MajorStageIndex + 1));
+		FirstCombatRoom.RoomType = ERoguelikeRoomType::Combat;
+		FirstCombatRoom.SelectionWeight = 1;
+		FirstCombatRoom.RoomMap = TSoftObjectPtr<UWorld>(FSoftObjectPath(MajorStageRoomPaths[MajorStageIndex]));
+		Definition.RoomPool.Add(MoveTemp(FirstCombatRoom));
+
+		FRoguelikeRoomDefinition FinalCombatRoom;
+		FinalCombatRoom.RoomId = FName(*FString::Printf(TEXT("M%02d_Combat_B"), MajorStageIndex + 1));
+		FinalCombatRoom.RoomType = ERoguelikeRoomType::Combat;
+		FinalCombatRoom.EncounterTier = ERoguelikeEncounterTier::Boss;
+		FinalCombatRoom.SelectionWeight = 1;
+		FinalCombatRoom.RoomMap = TSoftObjectPtr<UWorld>(FSoftObjectPath(MajorStageRoomPaths[MajorStageIndex]));
+		Definition.RoomPool.Add(MoveTemp(FinalCombatRoom));
+
+		FRoguelikeRoomDefinition ShopRoom;
+		ShopRoom.RoomId = FName(*FString::Printf(TEXT("M%02d_Shop_A"), MajorStageIndex + 1));
+		ShopRoom.RoomType = ERoguelikeRoomType::Shop;
+		ShopRoom.SelectionWeight = 1;
+		ShopRoom.RoomMap = TSoftObjectPtr<UWorld>(
+			FSoftObjectPath(TEXT("/Game/Level/TestMap_Shop.TestMap_Shop")));
+		Definition.RoomPool.Add(MoveTemp(ShopRoom));
 
 		MajorStageDefinitions.Add(MajorStageIndex, MoveTemp(Definition));
 	}
@@ -449,8 +472,11 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 	}
 
 	UE_LOG(LogRoguelikeRunFlow, Log,
-		TEXT("New run started. MajorStage=%d RoomIndex=%d RoomId=%s."),
-		CurrentMajorStageIndex, CurrentRoomIndex, *FirstRoom.RoomId.ToString());
+		TEXT("New run started. MajorStage=%d RoomIndex=%d RoomId=%s EncounterTier=%d."),
+		CurrentMajorStageIndex,
+		CurrentRoomIndex,
+		*FirstRoom.RoomId.ToString(),
+		static_cast<int32>(FirstRoom.EncounterTier));
 	return true;
 }
 
@@ -505,15 +531,41 @@ bool URoguelikeRunFlowSubsystem::BuildRoomSequence(
 	}
 
 	const int32 RequestedLength = Definition->RoomSequenceLength;
-	const int32 SequenceLength = FMath::Min(RequestedLength, Candidates.Num());
-	if (RequestedLength > Candidates.Num())
+	FRoguelikeRoomDefinition ReservedShopRoom;
+	bool bHasReservedShopRoom = false;
+	for (int32 CandidateIndex = Candidates.Num() - 1; CandidateIndex >= 0; --CandidateIndex)
 	{
-		UE_LOG(LogRoguelikeRunFlow, Warning,
-			TEXT("RoomSequenceLength=%d exceeds valid pool size=%d for MajorStage=%d; drawing without replacement."),
-			RequestedLength, Candidates.Num(), MajorStageIndex);
+		if (Candidates[CandidateIndex].RoomType != ERoguelikeRoomType::Shop)
+		{
+			continue;
+		}
+
+		if (!bHasReservedShopRoom)
+		{
+			ReservedShopRoom = Candidates[CandidateIndex];
+			bHasReservedShopRoom = true;
+		}
+		else
+		{
+			UE_LOG(LogRoguelikeRunFlow, Warning,
+				TEXT("MajorStage=%d has multiple Shop rooms; only RoomId=%s is reserved for the fixed final Shop slot."),
+				MajorStageIndex, *ReservedShopRoom.RoomId.ToString());
+		}
+
+		Candidates.RemoveAtSwap(CandidateIndex);
 	}
 
-	while (OutSequence.Num() < SequenceLength)
+	const int32 MaxSequenceLength = Candidates.Num() + (bHasReservedShopRoom ? 1 : 0);
+	const int32 SequenceLength = FMath::Min(RequestedLength, MaxSequenceLength);
+	if (RequestedLength > MaxSequenceLength)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("RoomSequenceLength=%d exceeds usable room count=%d for MajorStage=%d; drawing without replacement."),
+			RequestedLength, MaxSequenceLength, MajorStageIndex);
+	}
+
+	const int32 DrawCount = SequenceLength - (bHasReservedShopRoom ? 1 : 0);
+	while (OutSequence.Num() < DrawCount)
 	{
 		double TotalWeight = 0.0;
 		for (const FRoguelikeRoomDefinition& Candidate : Candidates)
@@ -538,8 +590,29 @@ bool URoguelikeRunFlowSubsystem::BuildRoomSequence(
 		Candidates.RemoveAtSwap(SelectedIndex);
 	}
 
+	if (bHasReservedShopRoom)
+	{
+		const int32 ShopInsertIndex = FMath::Max(0, SequenceLength - 1);
+		OutSequence.Insert(ReservedShopRoom, ShopInsertIndex);
+	}
+
+	for (int32 SequenceIndex = 0; SequenceIndex < OutSequence.Num(); ++SequenceIndex)
+	{
+		const FRoguelikeRoomDefinition& Room = OutSequence[SequenceIndex];
+		UE_LOG(LogRoguelikeRunFlow, Log,
+			TEXT("Room sequence entry. MajorStage=%d Index=%d RoomId=%s RoomType=%d EncounterTier=%d."),
+			MajorStageIndex,
+			SequenceIndex,
+			*Room.RoomId.ToString(),
+			static_cast<int32>(Room.RoomType),
+			static_cast<int32>(Room.EncounterTier));
+	}
+
 	UE_LOG(LogRoguelikeRunFlow, Log,
-		TEXT("Built room sequence. MajorStage=%d RoomCount=%d."), MajorStageIndex, OutSequence.Num());
+		TEXT("Built room sequence. MajorStage=%d RoomCount=%d ShopAtLast=%s."),
+		MajorStageIndex,
+		OutSequence.Num(),
+		bHasReservedShopRoom ? TEXT("true") : TEXT("false"));
 	return !OutSequence.IsEmpty();
 }
 

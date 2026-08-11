@@ -1,5 +1,13 @@
 # Bug Log
 
+## 2026-08-10：UE 5.8 启动时的 GameFeatures 与缺失材质包错误
+
+- **现象**：启动编辑器时出现 `Asset Manager settings do not include an entry for assets of type GameFeatureData`；加载 `SM_TargetBaseMesh` 时又报 `/Game/TopDown/MI_Colorway` 不存在。
+- **根因**：项目显式启用了 UE 5.8 的实验性 `AllToolsets` 插件，它会启用 `GameFeaturesToolset`，再连带启用项目并未使用的 `GameFeatures` 插件，因此 Asset Manager 要求 `GameFeatureData` 扫描规则。此前错误地加入该规则会扫描不存在的目录并触发 UE 5.8 启动问题。另一个错误是目标网格资产保留了对旧模板材质 `MI_Colorway` 的硬依赖，但该材质及其两级父材质未随项目同步。
+- **修复**：移除 `RiverOfInk.uproject` 中的 `AllToolsets` 显式启用项，保留独立的 `ModelContextProtocol`；从同一项目的旧模板内容恢复最小依赖链：`/Game/TopDown/MI_Colorway`、`/Game/LevelPrototyping/Materials/MI_DefaultColorway`、`/Game/LevelPrototyping/Materials/M_FlatCol`。未修改 Gameplay C++、Asset Manager 全局规则或缓存。
+- **验证计划**：重启编辑器并加载 `SM_TargetBaseMesh`，确认日志不再出现两条 LoadErrors；资产应能显示继承自 `M_FlatCol` 的颜色材质。若仍有材质加载错误，再以新日志为准补查引用链，不能重加废弃的 `GameFeatureData` 扫描规则。
+- **涉及知识点**：`.uproject` 插件依赖的传递启用、Editor-only 工具聚合插件、Asset Manager 的 Primary Asset 扫描规则、UE 包路径与硬引用、Material Instance 的父材质依赖链。
+
 ## 2026-08-09：敌人状态机 ESM-2/3 远程站位与死亡收尾
 
 - **现象**：敌人 Chase 只按近战距离追击；玩家目标失效后状态仍可能停留在 Chase/Attack；死亡事件直接销毁敌人，掉落与房间计数没有独立的死亡生命周期入口。
