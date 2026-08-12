@@ -9,7 +9,7 @@
 
 /**
  * 攻击状态：进入后 0.2s 执行攻击逻辑，再过 0.3s 回到 Chase；
- * 受直接性伤害时切 HitBack
+ * 硬值被击破时切 HitBack
  */
 UCLASS(meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API UEnemyState_Attack : public UStateBase
@@ -24,9 +24,9 @@ protected:
 	virtual void OnExit_Implementation() override;
 	virtual void Update_Implementation(float DeltaTime) override;
 
-	/** 受直接性伤害：切入击退状态 */
+	/** 硬值被击破：切入击退状态 */
 	UFUNCTION()
-	void OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo);
+	void OnHardBreak(const FEnemyDamageResult& DamageResult);
 
 private:
 	void ExecuteAttack();

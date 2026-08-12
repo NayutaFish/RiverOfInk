@@ -26,8 +26,8 @@ void UEnemyState_Idle::OnEnter_Implementation()
 
 	Enemy->RefreshCombatTarget();
 
-	// 订阅直接性受击事件，受击时切 HitBack
-	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Idle::OnTakeDirectDamage);
+	// 仅在硬值被击破时切 HitBack；普通受击不会改变状态。
+	Enemy->OnHardBreak.AddDynamic(this, &UEnemyState_Idle::OnHardBreak);
 
 	// 每 0.5s 检测一次玩家距离
 	if (UWorld* World = GetWorld())
@@ -45,7 +45,7 @@ void UEnemyState_Idle::OnExit_Implementation()
 	if (!Enemy) return;
 
 	// 取消订阅
-	Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Idle::OnTakeDirectDamage);
+	Enemy->OnHardBreak.RemoveDynamic(this, &UEnemyState_Idle::OnHardBreak);
 
 	// 停止距离检测
 	if (UWorld* World = GetWorld())
@@ -54,8 +54,9 @@ void UEnemyState_Idle::OnExit_Implementation()
 	}
 }
 
-void UEnemyState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+void UEnemyState_Idle::OnHardBreak(const FEnemyDamageResult& DamageResult)
 {
+	(void)DamageResult;
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy || Enemy->bIsDead) return;
 

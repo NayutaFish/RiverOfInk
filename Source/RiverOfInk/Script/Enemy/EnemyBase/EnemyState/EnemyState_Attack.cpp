@@ -33,8 +33,8 @@ void UEnemyState_Attack::OnEnter_Implementation()
 		return;
 	}
 
-	// 订阅直接性受击事件，受击时切 HitBack
-	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Attack::OnTakeDirectDamage);
+	// 仅在硬值被击破时切 HitBack；普通受击不会取消攻击。
+	Enemy->OnHardBreak.AddDynamic(this, &UEnemyState_Attack::OnHardBreak);
 
 	// 锁定面向目标的朝向，攻击期间不旋转；远程攻击因此会沿目标方向发射。
 	LockedRotation = Enemy->GetActorRotation();
@@ -62,7 +62,7 @@ void UEnemyState_Attack::OnExit_Implementation()
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (Enemy)
 	{
-		Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Attack::OnTakeDirectDamage);
+		Enemy->OnHardBreak.RemoveDynamic(this, &UEnemyState_Attack::OnHardBreak);
 	}
 
 	if (GetWorld())
@@ -72,8 +72,9 @@ void UEnemyState_Attack::OnExit_Implementation()
 	}
 }
 
-void UEnemyState_Attack::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+void UEnemyState_Attack::OnHardBreak(const FEnemyDamageResult& DamageResult)
 {
+	(void)DamageResult;
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy || Enemy->bIsDead) return;
 

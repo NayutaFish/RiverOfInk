@@ -55,6 +55,30 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Stats")
 	float CurrentHealth = 100.0f;
 
+	/** Maximum poise/hard value. Set to 0 to disable hard-break reactions. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Hard Value", meta = (ClampMin = "0.0"))
+	float MaxHardValue = 100.0f;
+
+	/** Current poise/hard value. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Hard Value")
+	float CurrentHardValue = 100.0f;
+
+	/** Delay after a direct hit before hard value starts regenerating. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Hard Value", meta = (ClampMin = "0.0", Units = "s"))
+	float HardValueRecoveryDelay = 0.75f;
+
+	/** Hard value regenerated per second after the recovery delay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Hard Value", meta = (ClampMin = "0.0"))
+	float HardValueRecoveryRate = 50.0f;
+
+	/** Prevents repeated hard breaks during the same hit reaction window. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Hard Value", meta = (ClampMin = "0.0", Units = "s"))
+	float HardBreakCooldown = 0.35f;
+
+	/** Fallback hard damage multiplier for legacy attacks with no explicit value. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Hard Value", meta = (ClampMin = "0.0"))
+	float DefaultHardDamageScale = 1.0f;
+
 	/** Single defense value used by the project-wide damage formula. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "0"))
 	int32 Defense = 0;
@@ -91,6 +115,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
 	TObjectPtr<AAttackAreaBase> LastAttackArea;
 
+	/** 最近一次已结算的伤害与硬值结果。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
+	FEnemyDamageResult LastDamageResult;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Attack")
 	FTimerHandle AttackTimerHandle;
 
@@ -101,9 +129,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyDeathSignature OnDead;
 
-	/** 直接性受击事件（状态类可订阅，如击退） */
+	/** 每次有效直接性受击事件（保留给 Buff、音效等通用监听者）。 */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnTakeDirectDamageSignature OnTakeDirectDamage;
+
+	/** 仅在硬值被击破时广播，状态机用此事件决定是否打断当前行为。 */
+	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
+	FOnEnemyHardBreakSignature OnHardBreak;
 
 	/** 攻击范围蓝图类（在蓝图中赋值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack")
@@ -136,6 +168,36 @@ public:
 	/** 攻击状态后摇时间（执行攻击后到返回 Chase） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Attack", meta = (ClampMin = "0.0", Units = "s"))
 	float AttackRecoveryTime = 0.3f;
+
+	// ── 冲撞型状态机 Slice 4–5 ──
+
+	/** 开启后，Chase 会在冲撞距离带内进入 EnemyState_Charge。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge")
+	bool bUseChargeAttack = false;
+
+	/** 冲撞可开始的最大距离；超出此距离继续 Chase。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0"))
+	float ChargeStartRange = 1100.0f;
+
+	/** 冲撞可开始的最小距离；太近时改走普通 Attack。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0"))
+	float ChargeMinRange = 450.0f;
+
+	/** 冲撞蓄力时间。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0", Units = "s"))
+	float ChargeWindupTime = 0.65f;
+
+	/** 冲撞阶段水平速度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0"))
+	float ChargeSpeed = 1400.0f;
+
+	/** 冲撞阶段最长持续时间。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0", Units = "s"))
+	float ChargeDuration = 0.75f;
+
+	/** 冲撞结束后的停顿时间，结束后回到 Chase。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0", Units = "s"))
+	float ChargeRecoveryTime = 0.8f;
 
 	// ── 攻击区域初始化参数 ──
 
@@ -199,6 +261,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Enemy|Economy|Pure Ink")
 	int32 GetPureInkDropAmount() const { return PureInkDropAmount; }
 
+	UFUNCTION(BlueprintPure, Category = "Enemy|Hard Value")
+	float GetMaxHardValue() const { return MaxHardValue; }
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|Hard Value")
+	float GetCurrentHardValue() const { return CurrentHardValue; }
+
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
 
@@ -218,11 +286,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Enemy|AI")
 	APlayerCharacter* GetCombatTarget() const { return CachedPlayer; }
 
+	UFUNCTION(BlueprintPure, Category = "Enemy|Charge")
+	bool IsChargeAttackInRange(float Distance) const
+	{
+		return bUseChargeAttack
+			&& Distance >= ChargeMinRange
+			&& Distance <= ChargeStartRange;
+	}
+
 	/** Dead 状态的唯一进入点；保证掉落、事件和延迟销毁只执行一次。 */
 	void HandleDeadState();
 
 private:
 	void NormalizeDefenseFromLegacy();
+	void UpdateHardValue(float DeltaTime);
+	float ResolveHardDamage(const FTakeDamageInfo& InInfo) const;
 	void DisableStateComponentTicks();
 	UStateBase* EnsureStateComponent(TSubclassOf<UStateBase> StateClass);
 	void GenerateDropOnDead();
@@ -230,4 +308,6 @@ private:
 
 	bool bDeadHandled = false;
 	FTimerHandle DeathDestroyTimerHandle;
+	float HardValueRecoveryDelayRemaining = 0.0f;
+	float HardBreakCooldownRemaining = 0.0f;
 };
