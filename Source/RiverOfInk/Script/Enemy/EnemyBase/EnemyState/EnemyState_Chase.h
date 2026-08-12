@@ -9,7 +9,7 @@
 
 /**
  * 追击状态：面向玩家 + 距离判定决定移动；
- * 受直接性伤害时切 HitBack
+ * 硬值被击破时切 HitBack
  */
 UCLASS(meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API UEnemyState_Chase : public UStateBase
@@ -24,9 +24,9 @@ protected:
 	virtual void OnExit_Implementation() override;
 	virtual void Update_Implementation(float DeltaTime) override;
 
-	/** 受直接性伤害：切入击退状态 */
+	/** 硬值被击破：切入击退状态 */
 	UFUNCTION()
-	void OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo);
+	void OnHardBreak(const FEnemyDamageResult& DamageResult);
 
 private:
 	void CheckChaseDistance();

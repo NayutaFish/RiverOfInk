@@ -2,6 +2,7 @@
 
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Attack.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Charge.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
@@ -70,8 +71,8 @@ void UEnemyState_Chase::OnEnter_Implementation()
 		return;
 	}
 
-	// 订阅直接性受击事件，受击时切 HitBack
-	Enemy->OnTakeDirectDamage.AddDynamic(this, &UEnemyState_Chase::OnTakeDirectDamage);
+	// 仅在硬值被击破时切 HitBack；普通受击不会改变状态。
+	Enemy->OnHardBreak.AddDynamic(this, &UEnemyState_Chase::OnHardBreak);
 
 	// 每 0.2s 检测一次距离，决定是否该移动
 	if (UWorld* World = GetWorld())
@@ -96,14 +97,15 @@ void UEnemyState_Chase::OnExit_Implementation()
 	if (!Enemy) return;
 
 	// 取消订阅
-	Enemy->OnTakeDirectDamage.RemoveDynamic(this, &UEnemyState_Chase::OnTakeDirectDamage);
+	Enemy->OnHardBreak.RemoveDynamic(this, &UEnemyState_Chase::OnHardBreak);
 
 	GetWorld()->GetTimerManager().ClearTimer(ChaseTimerHandle);
 	GetWorld()->GetTimerManager().ClearTimer(Enemy->AttackTimerHandle);
 }
 
-void UEnemyState_Chase::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
+void UEnemyState_Chase::OnHardBreak(const FEnemyDamageResult& DamageResult)
 {
+	(void)DamageResult;
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetOwner());
 	if (!Enemy || Enemy->bIsDead) return;
 
@@ -191,6 +193,12 @@ void UEnemyState_Chase::CheckChaseDistance()
 		return;
 	}
 
+	if (Enemy->IsChargeAttackInRange(Distance))
+	{
+		Enemy->SwitchState(UEnemyState_Charge::StaticClass());
+		return;
+	}
+
 	if (bShouldMove)
 	{
 		// 正在移动中 → 直到距离 <= 停止阈值才停
@@ -210,10 +218,16 @@ void UEnemyState_Chase::CheckChaseDistance()
 
 	// 攻击计时器没在跑（冷却已过），且距离够近 → 立即攻击
 	if (UWorld* World = GetWorld(); World
-		&& !World->GetTimerManager().IsTimerActive(Enemy->AttackTimerHandle)
-		&& IsWithinAttackRange(Enemy, Distance))
+		&& !World->GetTimerManager().IsTimerActive(Enemy->AttackTimerHandle))
 	{
-		Enemy->SwitchState(UEnemyState_Attack::StaticClass());
+		if (Enemy->IsChargeAttackInRange(Distance))
+		{
+			Enemy->SwitchState(UEnemyState_Charge::StaticClass());
+		}
+		else if (IsWithinAttackRange(Enemy, Distance))
+		{
+			Enemy->SwitchState(UEnemyState_Attack::StaticClass());
+		}
 	}
 }
 
@@ -233,7 +247,11 @@ void UEnemyState_Chase::CheckAttackTimer()
 	Delta.Z = 0.0f;
 	float Distance = Delta.Size();
 
-	if (IsWithinAttackRange(Enemy, Distance))
+	if (Enemy->IsChargeAttackInRange(Distance))
+	{
+		Enemy->SwitchState(UEnemyState_Charge::StaticClass());
+	}
+	else if (IsWithinAttackRange(Enemy, Distance))
 	{
 		Enemy->SwitchState(UEnemyState_Attack::StaticClass());
 	}

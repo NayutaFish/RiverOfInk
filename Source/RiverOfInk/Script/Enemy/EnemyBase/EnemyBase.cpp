@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Charge.h"
 #include "TimerManager.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Dead.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
@@ -44,9 +45,13 @@ void AEnemyBase::BeginPlay()
 
 	NormalizeDefenseFromLegacy();
 	CurrentHealth = MaxHealth;
+	CurrentHardValue = FMath::Max(0.0f, MaxHardValue);
+	HardValueRecoveryDelayRemaining = 0.0f;
+	HardBreakCooldownRemaining = 0.0f;
 	bIsDead = false;
 	bDeadHandled = false;
 	RefreshCombatTarget();
+	EnsureStateComponent(UEnemyState_Charge::StaticClass());
 	EnsureStateComponent(UEnemyState_TargetLost::StaticClass());
 	EnsureStateComponent(UEnemyState_Dead::StaticClass());
 	DisableStateComponentTicks();
@@ -64,6 +69,7 @@ void AEnemyBase::Tick(float DeltaTime)
 		return;
 	}
 
+	UpdateHardValue(DeltaTime);
 	RefreshCombatTarget();
 	if (CurrentState)
 	{
@@ -148,11 +154,31 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	LastDamageInfo = InInfo;
 	LastAttackArea = InAttackArea;
 
-	// 直接性伤害通报（供状态类订阅，如击退）
-	if (InInfo.bIsDirectDamage)
+	const float HardValueBefore = CurrentHardValue;
+	const bool bHardBreakSuppressed = HardBreakCooldownRemaining > KINDA_SMALL_NUMBER;
+	const float HardDamage = !bHardBreakSuppressed
+		? ResolveHardDamage(InInfo)
+		: 0.0f;
+
+	if (HardDamage > KINDA_SMALL_NUMBER)
 	{
-		LastAttacker = InInfo.Attacker;
-		OnTakeDirectDamage.Broadcast(InInfo);
+		CurrentHardValue = FMath::Max(0.0f, CurrentHardValue - HardDamage);
+		HardValueRecoveryDelayRemaining = HardValueRecoveryDelay;
+	}
+
+	const bool bHardBreak = !bHardBreakSuppressed
+		&& MaxHardValue > KINDA_SMALL_NUMBER
+		&& HardDamage > KINDA_SMALL_NUMBER
+		&& HardValueBefore > KINDA_SMALL_NUMBER
+		&& CurrentHardValue <= KINDA_SMALL_NUMBER;
+
+	// Reset the resource for the next reaction window. The resolved result
+	// still reports HardValueAfter=0 so VFX/UI can identify the break.
+	if (bHardBreak)
+	{
+		CurrentHardValue = FMath::Max(0.0f, MaxHardValue);
+		HardBreakCooldownRemaining = HardBreakCooldown;
+		HardValueRecoveryDelayRemaining = HardValueRecoveryDelay;
 	}
 
 	// DamageType remains legacy metadata; all damage uses one defense formula.
@@ -160,14 +186,36 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - static_cast<float>(FinalDamage));
 
+	FEnemyDamageResult DamageResult;
+	DamageResult.DamageInfo = InInfo;
+	DamageResult.FinalDamage = FinalDamage;
+	DamageResult.HardValueBefore = HardValueBefore;
+	DamageResult.HardValueAfter = bHardBreak ? 0.0f : CurrentHardValue;
+	DamageResult.HardDamageApplied = HardDamage;
+	DamageResult.bHardBreak = bHardBreak;
+	DamageResult.bKilled = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
+	LastDamageResult = DamageResult;
+
+	// Keep this raw damage event for existing systems such as the temporary
+	// bonus-damage buff. State interruption is handled by OnHardBreak below.
+	if (InInfo.bIsDirectDamage)
+	{
+		LastAttacker = InInfo.Attacker;
+		OnTakeDirectDamage.Broadcast(InInfo);
+	}
+
 	UE_LOG(
 		LogRiverOfInk,
 		Log,
-		TEXT("Enemy %s took %d damage with Defense=%d. CurrentHealth = %.1f"),
+		TEXT("Enemy %s took %d damage with Defense=%d. CurrentHealth=%.1f HardValue=%.1f/%.1f HardDamage=%.1f HardBreak=%s."),
 		*GetName(),
 		FinalDamage,
 		Defense,
-		CurrentHealth
+		CurrentHealth,
+		CurrentHardValue,
+		MaxHardValue,
+		HardDamage,
+		bHardBreak ? TEXT("true") : TEXT("false")
 	);
 
 	if (CurrentHealth <= 0.0f)
@@ -180,6 +228,13 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 		{
 			CurrentHealth = 1.0f;
 		}
+	}
+
+	// A nested damage listener may have killed the enemy or already caused a
+	// reaction. Death always wins over a hard-break response.
+	if (!bIsDead && bHardBreak)
+	{
+		OnHardBreak.Broadcast(DamageResult);
 	}
 }
 
@@ -275,6 +330,48 @@ void AEnemyBase::NormalizeDefenseFromLegacy()
 	Defense = RiverOfInkDamage::ResolveLegacyDefense(Defense, PhysicalResistance, MagicResistance);
 	PhysicalResistance = Defense;
 	MagicResistance = Defense;
+}
+
+void AEnemyBase::UpdateHardValue(float DeltaTime)
+{
+	if (MaxHardValue <= KINDA_SMALL_NUMBER || bIsDead)
+	{
+		return;
+	}
+
+	if (HardBreakCooldownRemaining > 0.0f)
+	{
+		HardBreakCooldownRemaining = FMath::Max(0.0f, HardBreakCooldownRemaining - DeltaTime);
+		return;
+	}
+
+	if (HardValueRecoveryDelayRemaining > 0.0f)
+	{
+		HardValueRecoveryDelayRemaining = FMath::Max(0.0f, HardValueRecoveryDelayRemaining - DeltaTime);
+		return;
+	}
+
+	if (HardValueRecoveryRate > KINDA_SMALL_NUMBER && CurrentHardValue < MaxHardValue)
+	{
+		CurrentHardValue = FMath::Min(
+			MaxHardValue,
+			CurrentHardValue + HardValueRecoveryRate * DeltaTime);
+	}
+}
+
+float AEnemyBase::ResolveHardDamage(const FTakeDamageInfo& InInfo) const
+{
+	if (!InInfo.bIsDirectDamage || MaxHardValue <= KINDA_SMALL_NUMBER)
+	{
+		return 0.0f;
+	}
+
+	if (InInfo.HardDamageValue > KINDA_SMALL_NUMBER)
+	{
+		return InInfo.HardDamageValue;
+	}
+
+	return FMath::Max(0.0f, InInfo.DamageValue * DefaultHardDamageScale);
 }
 
 void AEnemyBase::RefreshCombatTarget()
