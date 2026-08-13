@@ -52,7 +52,7 @@ public:
 
 	// 开始攻击
 	UFUNCTION(BlueprintCallable, Category = "Attack")
-	void BeginAttack();
+	void BeginAttack(bool bRestartMontage = false);
 
 	// 结束攻击
 	UFUNCTION(BlueprintCallable, Category = "Attack")

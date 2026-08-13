@@ -505,9 +505,9 @@ void APlayerCharacter::SetActionState(EHikariActionState NewState)
 
 // ── 攻击动画（左键） ──
 
-void APlayerCharacter::BeginAttack()
+void APlayerCharacter::BeginAttack(bool bRestartMontage)
 {
-	if (!CanStartAction()) return;
+	if (!bRestartMontage && !CanStartAction()) return;
 	if (!AttackMontage)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AttackMontage is not set."));
@@ -516,6 +516,14 @@ void APlayerCharacter::BeginAttack()
 
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (!AnimInstance) return;
+
+	// A buffered combo step reuses the current montage when no second montage
+	// asset exists. Stop the old section first so the second step restarts at
+	// the beginning instead of continuing from the previous frame.
+	if (bRestartMontage && AnimInstance->Montage_IsPlaying(AttackMontage))
+	{
+		AnimInstance->Montage_Stop(0.0f, AttackMontage);
+	}
 
 	SetActionState(EHikariActionState::Attacking);
 
