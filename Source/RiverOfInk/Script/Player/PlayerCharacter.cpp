@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
@@ -61,7 +61,7 @@ APlayerCharacter::APlayerCharacter()
 	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
 	CreateDefaultSubobject<UPlayerState_Idle>(TEXT("PlayerState_Idle"));
 	CreateDefaultSubobject<UPlayerState_Move>(TEXT("PlayerState_Move"));
-	CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1"));
+	PlayerState_Attack1 = CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1"));
 	CreateDefaultSubobject<UPlayerState_Attack2>(TEXT("PlayerState_Attack2"));
 	CreateDefaultSubobject<UPlayerState_Dash>(TEXT("PlayerState_Dash"));
 	CreateDefaultSubobject<UPlayerState_HitBack>(TEXT("PlayerState_HitBack"));
@@ -578,11 +578,11 @@ void APlayerCharacter::OnAttack()
 
 	if (AAttackArea_PlayerAttack1* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
 			AttackAreaClass,
-			GetActorLocation() + GetActorForwardVector() * 100.0f,
+			GetActorLocation(),
 			GetActorRotation(),
 			Params))
 	{
-		AttackArea->Initialize(0.5f, 0.0f, true);
+		AttackArea->Initialize(0.5f, 0.0f, true, this);
 	}
 }
 

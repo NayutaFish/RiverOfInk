@@ -11,6 +11,7 @@
 #include "Player/Attack/AttackArea_PlayerAttack2.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
+#include "Kismet/GameplayStatics.h"
 
 void UPlayerState_Attack2::OnEnter_Implementation()
 {
@@ -46,27 +47,32 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 		}
 	}
 
-	// 在面前生成攻击区域（射弹：非近战，带飞行速度，命中即销毁）
+	// 生成沿玩家朝向移动的球形弹幕；Hitbox 与蓝图中的火球 VFX 由同一个 Actor 驱动。
 	if (Player->Attack2AreaClass)
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = Player;
-		SpawnParams.Instigator = Player;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		const FVector SpawnLocation = Player->GetActorLocation()
+			+ Player->GetActorForwardVector() * ProjectileSpawnForwardOffset;
+		const FTransform SpawnTransform(Player->GetActorRotation(), SpawnLocation);
 
-		if (AAttackArea_PlayerAttack2* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack2>(
+		// Deferred spawn 让投射物在 BeginPlay 前完成速度、半径和形状配置，避免蓝图旧默认值抢先生效。
+		if (AAttackArea_PlayerAttack2* AttackArea = GetWorld()->SpawnActorDeferred<AAttackArea_PlayerAttack2>(
 				Player->Attack2AreaClass,
-				Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f,
-				Player->GetActorRotation(),
-				SpawnParams))
+				SpawnTransform,
+				Player,
+				Player,
+				ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
-		// 射弹：生命周期 0.5s，飞行速度 900，非近战（命中即销毁）。
-		// 注意：不传 FollowTarget——射弹有独立飞行，跟随玩家会导致每帧被拉回原位
-		AttackArea->Initialize(0.5f, 900.0f, false);
+			AttackArea->Initialize(ProjectileLifeTime, ProjectileSpeed, false, nullptr);
+			AttackArea->Radius = ProjectileHitboxRadius;
+			AttackArea->CollisionSphere->SetSphereRadius(ProjectileHitboxRadius);
+			// 运行时强制使用球形投射物，避免蓝图旧默认值恢复扇形/玩家跟随行为。
+			AttackArea->bUseFanHitbox = false;
+			AttackArea->bIsMeleeAttack = false;
+			AttackArea->bFollowTargetRotation = false;
 			AttackArea->bDetectObstacle = true;
+			UGameplayStatics::FinishSpawningActor(AttackArea, SpawnTransform);
 		}
 	}
-
 	// 0.3s 后检测是否需要切换状态
 	bHadMoveInput = false;
 	GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &UPlayerState_Attack2::OnAttackTimer, 0.3f, false);

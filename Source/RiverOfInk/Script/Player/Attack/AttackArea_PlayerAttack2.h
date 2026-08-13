@@ -18,6 +18,7 @@ class RIVEROFINK_API AAttackArea_PlayerAttack2 : public AAttackAreaBase
 	GENERATED_BODY()
 
 public:
+	AAttackArea_PlayerAttack2();
 	/** 命中敌人时生成的特殊 Buff 类（蓝图赋值，可空） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Buff")
 	TSubclassOf<ASpecialBuff_PlayerAttack2> SpecialBuffClass;

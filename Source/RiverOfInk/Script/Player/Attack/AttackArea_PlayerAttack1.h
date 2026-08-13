@@ -15,6 +15,8 @@ class RIVEROFINK_API AAttackArea_PlayerAttack1 : public AAttackAreaBase
 	GENERATED_BODY()
 
 public:
+
+	AAttackArea_PlayerAttack1();
 	/** 普攻命中时的短顿帧；二段攻击复用同一攻击范围类。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback|HitStop", meta = (ClampMin = "0.0", Units = "s"))
 	float HitStopDuration = 0.045f;

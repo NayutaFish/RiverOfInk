@@ -1,14 +1,19 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Common/AttackAreaBase.h"
 #include "RiverOfInk.h"
 #include "Core/GlobalStructs.h"
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
+#include "Components/StaticMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
+#include "Engine/StaticMesh.h"
+#include "DrawDebugHelpers.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 AAttackAreaBase::AAttackAreaBase()
 {
@@ -26,6 +31,28 @@ AAttackAreaBase::AAttackAreaBase()
 	CollisionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Overlap);    // EnemyHitbox
 	CollisionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);    // PlayerHitbox
 	CollisionSphere->OnComponentBeginOverlap.AddDynamic(this, &AAttackAreaBase::OnCollisionOverlap);
+
+	// 复用 UE 内置 WireframeMaterial，避免为调试功能新增项目资产。
+	DebugHitboxMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DebugHitboxWireframe"));
+	DebugHitboxMesh->SetupAttachment(CollisionSphere);
+	DebugHitboxMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DebugHitboxMesh->SetGenerateOverlapEvents(false);
+	DebugHitboxMesh->SetCastShadow(false);
+	DebugHitboxMesh->SetVisibility(false);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DebugSphereMesh(
+		TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (DebugSphereMesh.Succeeded())
+	{
+		DebugHitboxMesh->SetStaticMesh(DebugSphereMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> WireframeMaterial(
+		TEXT("/Engine/EngineDebugMaterials/WireframeMaterial.WireframeMaterial"));
+	if (WireframeMaterial.Succeeded())
+	{
+		DebugHitboxMesh->SetMaterial(0, WireframeMaterial.Object);
+	}
 }
 
 void AAttackAreaBase::BeginPlay()
@@ -33,6 +60,7 @@ void AAttackAreaBase::BeginPlay()
 	Super::BeginPlay();
 	ElapsedTime = 0.0f;
 	CollisionSphere->SetSphereRadius(Radius);
+	UpdateDebugHitboxVisualization();
 }
 
 void AAttackAreaBase::Tick(float DeltaTime)
@@ -78,9 +106,91 @@ void AAttackAreaBase::Tick(float DeltaTime)
 	if (FollowTarget)
 	{
 		SetActorLocation(FollowTarget->GetActorLocation() + FollowOffset);
+		if (bFollowTargetRotation)
+		{
+			SetActorRotation(FollowTarget->GetActorRotation());
+		}
+	}
+
+	UpdateDebugHitboxVisualization();
+	if (bDrawDebugHitbox && GetWorld())
+	{
+		if (bUseFanHitbox)
+		{
+			DrawDebugFanHitbox();
+		}
+		else
+		{
+			DrawDebugSphere(
+				GetWorld(),
+				CollisionSphere->GetComponentLocation(),
+				CollisionSphere->GetScaledSphereRadius(),
+				FMath::Clamp(DebugHitboxSegments, 8, 64),
+				DebugHitboxColor,
+				false,
+				0.0f,
+				0,
+				FMath::Max(0.1f, DebugHitboxLineThickness));
+		}
 	}
 }
 
+void AAttackAreaBase::UpdateDebugHitboxVisualization()
+{
+	if (!DebugHitboxMesh || !CollisionSphere)
+	{
+		return;
+	}
+
+	// BasicShapes/Sphere 的默认半径为 50 cm；按碰撞体的实际半径同步缩放。
+	const float MeshScale = FMath::Max(0.01f, CollisionSphere->GetUnscaledSphereRadius() / 50.0f);
+	DebugHitboxMesh->SetRelativeScale3D(FVector(MeshScale));
+	DebugHitboxMesh->SetVisibility(bDrawDebugHitbox && !bUseFanHitbox, true);
+}
+
+void AAttackAreaBase::DrawDebugFanHitbox() const
+{
+	if (!GetWorld() || !CollisionSphere)
+	{
+		return;
+	}
+
+	const FVector Origin = CollisionSphere->GetComponentLocation() + FVector(0.0f, 0.0f, 3.0f);
+	const float WorldRadius = CollisionSphere->GetScaledSphereRadius();
+	const float HalfAngle = FMath::Clamp(FanHalfAngleDegrees, 0.0f, 180.0f);
+	const int32 SegmentCount = FMath::Clamp(DebugHitboxSegments, 8, 64);
+	const float AngleStep = (HalfAngle * 2.0f) / static_cast<float>(SegmentCount);
+
+	FVector Forward = GetActorForwardVector();
+	Forward.Z = 0.0f;
+	Forward.Normalize();
+	if (Forward.IsNearlyZero())
+	{
+		Forward = FVector::ForwardVector;
+	}
+
+	FVector Previous = Origin + Forward.RotateAngleAxis(-HalfAngle, FVector::UpVector) * WorldRadius;
+	for (int32 Index = 1; Index <= SegmentCount; ++Index)
+	{
+		const float Angle = -HalfAngle + AngleStep * static_cast<float>(Index);
+		const FVector Current = Origin + Forward.RotateAngleAxis(Angle, FVector::UpVector) * WorldRadius;
+		DrawDebugLine(
+			GetWorld(),
+			Previous,
+			Current,
+			DebugHitboxColor,
+			false,
+			0.0f,
+			0,
+			FMath::Max(0.1f, DebugHitboxLineThickness));
+		Previous = Current;
+	}
+
+	const FVector LeftEdge = Origin + Forward.RotateAngleAxis(-HalfAngle, FVector::UpVector) * WorldRadius;
+	const FVector RightEdge = Origin + Forward.RotateAngleAxis(HalfAngle, FVector::UpVector) * WorldRadius;
+	DrawDebugLine(GetWorld(), Origin, LeftEdge, DebugHitboxColor, false, 0.0f, 0, FMath::Max(0.1f, DebugHitboxLineThickness));
+	DrawDebugLine(GetWorld(), Origin, RightEdge, DebugHitboxColor, false, 0.0f, 0, FMath::Max(0.1f, DebugHitboxLineThickness));
+}
 void AAttackAreaBase::OnCollisionOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
@@ -205,6 +315,45 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	}
 }
 
+bool AAttackAreaBase::IsTargetWithinFanHitbox(const AActor* Target) const
+{
+	if (!bUseFanHitbox)
+	{
+		return true;
+	}
+
+	if (!Target || !CollisionSphere)
+	{
+		return false;
+	}
+
+	const FVector Origin = CollisionSphere->GetComponentLocation();
+	FVector ToTarget = Target->GetActorLocation() - Origin;
+	ToTarget.Z = 0.0f;
+	if (ToTarget.IsNearlyZero())
+	{
+		return true;
+	}
+
+	if (ToTarget.SizeSquared() > FMath::Square(CollisionSphere->GetScaledSphereRadius()) + KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	FVector Forward = GetActorForwardVector();
+	Forward.Z = 0.0f;
+	Forward.Normalize();
+	if (Forward.IsNearlyZero())
+	{
+		Forward = FVector::ForwardVector;
+	}
+
+	ToTarget.Normalize();
+	const float HalfAngle = FMath::Clamp(FanHalfAngleDegrees, 0.0f, 180.0f);
+	const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(HalfAngle));
+	return FVector::DotProduct(Forward, ToTarget) >= MinimumDot - KINDA_SMALL_NUMBER;
+}
+
 bool AAttackAreaBase::IsValidTarget_Implementation(AActor* Target)
 {
 	// 如果目标是玩家且正在闪避，跳过
@@ -216,14 +365,18 @@ bool AAttackAreaBase::IsValidTarget_Implementation(AActor* Target)
 		if (PlayerTarget->IsInvincible()) return false;
 	}
 
-	if (!bDamageOpponentOnly) return true;
+	bool bValidFaction = true;
+	if (bDamageOpponentOnly)
+	{
+		if (GetOwner() && GetOwner()->IsA<APlayerCharacter>())
+		{
+			bValidFaction = Target->IsA<AEnemyBase>();
+		}
+		else
+		{
+			bValidFaction = Target->IsA<APlayerCharacter>();
+		}
+	}
 
-	if (GetOwner() && GetOwner()->IsA<APlayerCharacter>())
-	{
-		return Target->IsA<AEnemyBase>();
-	}
-	else
-	{
-		return Target->IsA<APlayerCharacter>();
-	}
+	return bValidFaction && IsTargetWithinFanHitbox(Target);
 }
