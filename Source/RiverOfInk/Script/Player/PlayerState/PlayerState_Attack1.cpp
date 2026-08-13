@@ -1,72 +1,59 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Attack1.h"
 #include "RiverOfInk.h"
+#include "Player/PlayerState/PlayerState_Dash.h"
 #include "Player/PlayerState/PlayerState_Idle.h"
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Input/PlayerInputComponent.h"
 #include "Player/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Common/AttackAreaBase.h"
 #include "Player/Attack/AttackArea_PlayerAttack1.h"
 #include "Engine/World.h"
-#include "Engine/LocalPlayer.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
+
+UPlayerState_Attack1::UPlayerState_Attack1()
+{
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CommonSlashVFX(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/CommonSlash/NS/NS_CommonSlash.NS_CommonSlash"));
+	if (CommonSlashVFX.Succeeded())
+	{
+		AttackVFX = CommonSlashVFX.Object;
+	}
+}
 
 void UPlayerState_Attack1::OnEnter_Implementation()
 {
 	Super::OnEnter_Implementation();
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
+	if (!Player)
+	{
+		return;
+	}
 
-	// 订阅 WASD 输入，跟踪是否有移动
-	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
-	if (Input)
+	if (UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>())
 	{
 		Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Attack1::OnMoveX);
 		Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Attack1::OnMoveY);
+		Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Attack1::OnLmb);
+		Input->OnSpaceDelegate.AddUObject(this, &UPlayerState_Attack1::OnSpace);
 	}
 
-	// 播放攻击动画
-	Player->BeginAttack();
-
-	// 旋转朝向鼠标方向（仅 Yaw）
-	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-	{
-		FHitResult Hit;
-		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
-		if (Hit.bBlockingHit)
-		{
-			FVector ToTarget = Hit.Location - Player->GetActorLocation();
-			ToTarget.Z = 0.0f;
-			if (!ToTarget.IsNearlyZero())
-			{
-				Player->SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
-			}
-		}
-	}
-
-	// 在面前生成攻击区域（近战：无速度，持续存在至生命周期结束）
-	if (Player->AttackAreaClass)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = Player;
-		SpawnParams.Instigator = Player;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		if (AAttackArea_PlayerAttack1* AttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
-				Player->AttackAreaClass,
-				Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f,
-				Player->GetActorRotation(),
-				SpawnParams))
-		{
-			AttackArea->Initialize(0.3f, 0.0f, true, Player);
-		}
-	}
-
-	// 0.3s 后检测是否需要切换状态
 	bHadMoveInput = false;
-	GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &UPlayerState_Attack1::OnAttackTimer, 0.3f, false);
+	bAttackQueued = false;
+	AttackInputBufferAge = -1.0f;
+	MoveInputX = 0.0f;
+	MoveInputY = 0.0f;
+	ComboStep = 1;
+	CurrentPhase = EPlayerAttackPhase::Startup;
+
+	FaceAttackDirection();
+	StartAttackStep();
 }
 
 void UPlayerState_Attack1::OnExit_Implementation()
@@ -74,29 +61,89 @@ void UPlayerState_Attack1::OnExit_Implementation()
 	Super::OnExit_Implementation();
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
-
-	// 取消订阅
-	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
-	if (Input)
+	if (Player)
 	{
-		Input->OnMoveXDelegate.RemoveAll(this);
-		Input->OnMoveYDelegate.RemoveAll(this);
+		if (UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>())
+		{
+			Input->OnMoveXDelegate.RemoveAll(this);
+			Input->OnMoveYDelegate.RemoveAll(this);
+			Input->OnLmbDelegate.RemoveAll(this);
+			Input->OnSpaceDelegate.RemoveAll(this);
+		}
+
+		// 防止状态被受击等外部事件打断后残留 Attacking 动作状态。
+		Player->EndAttack();
+		Player->StartAttack1Cooldown();
 	}
 
-	// 取消计时器
-	if (GetWorld())
+	if (UWorld* World = GetWorld())
 	{
-		GetWorld()->GetTimerManager().ClearTimer(AttackTimerHandle);
+		World->GetTimerManager().ClearTimer(AttackTimerHandle);
 	}
 
-	// 退出攻击状态时启动攻击冷却
-	Player->StartAttack1Cooldown();
-
-	// 清零移动输入记忆，避免下次进入攻击状态残留旧方向产生速度
+	ClearActiveAttackArea();
 	bHadMoveInput = false;
+	bAttackQueued = false;
+	AttackInputBufferAge = -1.0f;
 	MoveInputX = 0.0f;
 	MoveInputY = 0.0f;
+	ComboStep = 1;
+	CurrentPhase = EPlayerAttackPhase::Startup;
+}
+
+void UPlayerState_Attack1::Update_Implementation(float DeltaTime)
+{
+	Super::Update_Implementation(DeltaTime);
+
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	if (bAttackQueued)
+	{
+		AttackInputBufferAge += DeltaTime;
+		if (AttackInputBufferAge > AttackInputBufferWindow)
+		{
+			bAttackQueued = false;
+			AttackInputBufferAge = -1.0f;
+		}
+	}
+
+	FVector MoveDirection = FVector::ZeroVector;
+	if (!FMath::IsNearlyZero(MoveInputX))
+	{
+		MoveDirection += (FVector::RightVector - FVector::ForwardVector).GetSafeNormal() * MoveInputX;
+	}
+	if (!FMath::IsNearlyZero(MoveInputY))
+	{
+		MoveDirection += (FVector::ForwardVector + FVector::RightVector).GetSafeNormal() * MoveInputY;
+	}
+
+	if (MoveDirection.IsNearlyZero())
+	{
+		Player->GetCharacterMovement()->Velocity = FVector::ZeroVector;
+		return;
+	}
+
+	float MoveSpeed = AttackRecoveryMoveSpeed;
+	switch (CurrentPhase)
+	{
+	case EPlayerAttackPhase::Startup:
+		MoveSpeed = AttackStartupMoveSpeed;
+		break;
+	case EPlayerAttackPhase::Active:
+		MoveSpeed = AttackActiveMoveSpeed;
+		break;
+	case EPlayerAttackPhase::Recovery:
+		MoveSpeed = AttackRecoveryMoveSpeed;
+		break;
+	default:
+		break;
+	}
+
+	Player->GetCharacterMovement()->Velocity = MoveDirection.GetSafeNormal() * MoveSpeed;
 }
 
 void UPlayerState_Attack1::OnMoveX(float Value)
@@ -125,46 +172,262 @@ void UPlayerState_Attack1::OnMoveY(float Value)
 	}
 }
 
-void UPlayerState_Attack1::Update_Implementation(float DeltaTime)
+void UPlayerState_Attack1::OnLmb()
 {
-	Super::Update_Implementation(DeltaTime);
+	if (ComboStep >= FMath::Clamp(MaxComboSteps, 1, 2))
+	{
+		return;
+	}
 
+	bAttackQueued = true;
+	AttackInputBufferAge = 0.0f;
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Player Attack1 input buffered: Step=%d Phase=%s Window=%.2f."),
+		ComboStep,
+		*UEnum::GetValueAsString(CurrentPhase),
+		AttackInputBufferWindow);
+}
+
+void UPlayerState_Attack1::OnSpace()
+{
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
-
-	// 按当前 WASD 输入方向移动（与 Move 状态相同的方向映射）
-	FVector MoveDir = FVector::ZeroVector;
-	if (!FMath::IsNearlyZero(MoveInputX))
+	if (!Player)
 	{
-		MoveDir += (FVector::RightVector - FVector::ForwardVector).GetSafeNormal() * MoveInputX;
-	}
-	if (!FMath::IsNearlyZero(MoveInputY))
-	{
-		MoveDir += (FVector::ForwardVector + FVector::RightVector).GetSafeNormal() * MoveInputY;
+		return;
 	}
 
-	if (!MoveDir.IsNearlyZero())
+	if (!bAllowDashCancelInRecovery || CurrentPhase != EPlayerAttackPhase::Recovery)
 	{
-		Player->GetCharacterMovement()->Velocity = MoveDir.GetSafeNormal() * AttackMoveSpeed;
+		UE_LOG(LogRiverOfInk, Verbose,
+			TEXT("Player Attack1 dash cancel ignored: Phase=%s."),
+			*UEnum::GetValueAsString(CurrentPhase));
+		return;
 	}
-	else
+
+	if (!Player->bCanDash)
 	{
-		Player->GetCharacterMovement()->Velocity = FVector::ZeroVector;
+		UE_LOG(LogRiverOfInk, Verbose, TEXT("Player Attack1 dash cancel ignored: DashCooldown."));
+		return;
+	}
+
+	bAttackQueued = false;
+	AttackInputBufferAge = -1.0f;
+	Player->EndAttack();
+	UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 recovery canceled into Dash: Step=%d."), ComboStep);
+	Player->SwitchState(UPlayerState_Dash::StaticClass());
+}
+
+void UPlayerState_Attack1::StartAttackStep()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	ClearActiveAttackArea();
+	CurrentPhase = EPlayerAttackPhase::Startup;
+
+	// 第一段使用普通进入；二段强制重播当前攻击 Montage。
+	Player->BeginAttack(ComboStep > 1);
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Player Attack1 step started: Step=%d Startup=%.2f Active=%.2f Recovery=%.2f."),
+		ComboStep,
+		AttackStartupTime,
+		AttackActiveTime,
+		AttackRecoveryTime);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			AttackTimerHandle,
+			this,
+			&UPlayerState_Attack1::BeginActivePhase,
+			FMath::Max(0.0f, AttackStartupTime),
+			false);
 	}
 }
 
-void UPlayerState_Attack1::OnAttackTimer()
+void UPlayerState_Attack1::BeginActivePhase()
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
-
-	if (bHadMoveInput)
+	if (!Player || Player->IsDead())
 	{
-		Player->SwitchState(UPlayerState_Move::StaticClass());
+		return;
 	}
-	else
+
+	CurrentPhase = EPlayerAttackPhase::Active;
+	ClearActiveAttackArea();
+
+	if (Player->AttackAreaClass)
 	{
-		Player->SwitchState(UPlayerState_Idle::StaticClass());
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = Player;
+		SpawnParams.Instigator = Player;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		const FVector SpawnLocation = Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f;
+		ActiveAttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
+			Player->AttackAreaClass,
+			SpawnLocation,
+			Player->GetActorRotation(),
+			SpawnParams);
+
+		if (ActiveAttackArea)
+		{
+			if (ComboStep > 1)
+			{
+				ActiveAttackArea->DamageInfo.DamageValue *= ComboSecondDamageMultiplier;
+				ActiveAttackArea->DamageInfo.HardDamageValue *= ComboSecondDamageMultiplier;
+			}
+
+			ActiveAttackArea->Initialize(AttackActiveTime, 0.0f, true, Player);
+		}
+	}
+
+	SpawnAttackVFX();
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Player Attack1 active: Step=%d Hitbox=%s Duration=%.2f."),
+		ComboStep,
+		IsValid(ActiveAttackArea) ? *ActiveAttackArea->GetName() : TEXT("none"),
+		AttackActiveTime);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			AttackTimerHandle,
+			this,
+			&UPlayerState_Attack1::BeginRecoveryPhase,
+			FMath::Max(0.0f, AttackActiveTime),
+			false);
 	}
 }
 
+void UPlayerState_Attack1::BeginRecoveryPhase()
+{
+	CurrentPhase = EPlayerAttackPhase::Recovery;
+	ClearActiveAttackArea();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			AttackTimerHandle,
+			this,
+			&UPlayerState_Attack1::FinishAttackStep,
+			FMath::Max(0.0f, AttackRecoveryTime),
+			false);
+	}
+}
+
+void UPlayerState_Attack1::FinishAttackStep()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	ClearActiveAttackArea();
+
+	const bool bCanContinueCombo = ComboStep < FMath::Clamp(MaxComboSteps, 1, 2);
+	const bool bBufferedInWindow = bAttackQueued
+		&& AttackInputBufferAge >= 0.0f
+		&& AttackInputBufferAge <= AttackInputBufferWindow;
+	if (bCanContinueCombo && bBufferedInWindow)
+	{
+		++ComboStep;
+		bAttackQueued = false;
+		AttackInputBufferAge = -1.0f;
+		FaceAttackDirection();
+		StartAttackStep();
+		return;
+	}
+
+	bAttackQueued = false;
+	AttackInputBufferAge = -1.0f;
+	Player->EndAttack();
+	UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 finished: Steps=%d."), ComboStep);
+	SwitchAfterAttack();
+}
+
+void UPlayerState_Attack1::ClearActiveAttackArea()
+{
+	if (IsValid(ActiveAttackArea))
+	{
+		ActiveAttackArea->Destroy();
+	}
+	ActiveAttackArea = nullptr;
+}
+
+void UPlayerState_Attack1::SpawnAttackVFX()
+{
+	UWorld* World = GetWorld();
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!World || !Player)
+	{
+		return;
+	}
+
+	UNiagaraSystem* VFX = ComboStep > 1 && ComboSecondVFX
+		? ComboSecondVFX
+		: AttackVFX;
+	if (!VFX)
+	{
+		UE_LOG(LogRiverOfInk, Verbose,
+			TEXT("Player Attack1 VFX skipped: Step=%d has no Niagara asset."),
+			ComboStep);
+		return;
+	}
+
+	const FVector SpawnLocation = Player->GetActorLocation()
+		+ Player->GetActorForwardVector() * 60.0f;
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		VFX,
+		SpawnLocation,
+		Player->GetActorRotation());
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Player Attack1 VFX spawned: Step=%d Asset=%s%s."),
+		ComboStep,
+		*VFX->GetName(),
+		ComboStep > 1 && !ComboSecondVFX ? TEXT(" (first-step placeholder)") : TEXT(""));
+}
+
+void UPlayerState_Attack1::FaceAttackDirection()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+	{
+		FHitResult Hit;
+		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
+		if (Hit.bBlockingHit)
+		{
+			FVector ToTarget = Hit.Location - Player->GetActorLocation();
+			ToTarget.Z = 0.0f;
+			if (!ToTarget.IsNearlyZero())
+			{
+				Player->SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
+			}
+		}
+	}
+}
+
+void UPlayerState_Attack1::SwitchAfterAttack()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	Player->SwitchState(bHadMoveInput
+		? UPlayerState_Move::StaticClass()
+		: UPlayerState_Idle::StaticClass());
+}
