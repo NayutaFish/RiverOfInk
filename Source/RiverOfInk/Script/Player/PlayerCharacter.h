@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -14,6 +14,7 @@ class AAttackAreaBase;
 class AAttackArea_PlayerAttack1;
 class AAttackArea_PlayerAttack2;
 class UStateBase;
+class UPlayerState_Attack1;
 class USkillComponent;
 class UHealthComponent;
 class UPlayerInputComponent;
@@ -111,6 +112,10 @@ public:
 	/** 当前活跃状态组件 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	TObjectPtr<UStateBase> CurrentState;
+
+	/** Native attack state component; exposed so inherited player Blueprints can edit its defaults. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State|Attack")
+	TObjectPtr<UPlayerState_Attack1> PlayerState_Attack1;
 
 	/** 切换到指定状态（查找对应组件并切入） */
 	UFUNCTION(BlueprintCallable, Category = "State")
@@ -212,7 +217,7 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	TSubclassOf<AAttackArea_PlayerAttack1> AttackAreaClass;
 
-	/** Attack2 攻击范围类（射弹，特攻；在蓝图中赋值） */
+	/** Attack2 攻击范围类（玩家中心扇形特攻；在蓝图中赋值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	TSubclassOf<AAttackArea_PlayerAttack2> Attack2AreaClass;
 

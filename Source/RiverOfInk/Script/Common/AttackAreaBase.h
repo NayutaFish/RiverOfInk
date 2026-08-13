@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -10,6 +10,7 @@
 
 class UNiagaraSystem;
 class APlayerCharacter;
+class UStaticMeshComponent;
 
 UENUM()
 enum class EAttackAreaDisappearReason : uint8
@@ -41,6 +42,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "5.0"))
 	float Radius = 50.0f;
 
+	/** 是否使用以攻击区域中心为圆心的扇形判定；碰撞球仅作为候选筛选范围。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Shape")
+	bool bUseFanHitbox = false;
+
+	/** 扇形半角，最终总角度为此值的两倍。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Shape", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float FanHalfAngleDegrees = 45.0f;
 	/** 伤害信息（编辑器手动赋值，Attacker 由代码填充为施放者） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	FTakeDamageInfo DamageInfo;
@@ -66,6 +74,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Projectile")
 	bool bIsEnemyProjectile = false;
 
+	/** 跟随目标时是否同步目标朝向；扇形判定通常需要开启。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Follow")
+	bool bFollowTargetRotation = false;
+
 	/** 命中特效（在敌人位置生成，朝向=攻击者→受击者方向） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
 	TObjectPtr<UNiagaraSystem> HitSpark;
@@ -74,6 +86,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
 	FString HitSoundName = TEXT("AttackHit");
 
+	/**
+     * PIE 调试用 Hitbox 描线。显示的是 CollisionSphere 的真实世界半径，
+     * 不参与碰撞，也不会改变攻击判定。
+     */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Hitbox")
+	bool bDrawDebugHitbox = false;
+
+	/** 调试描线颜色；DrawDebugSphere 使用此颜色。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Hitbox")
+	FColor DebugHitboxColor = FColor(60, 220, 255, 220);
+
+	/** 球形描线的分段数；只影响调试显示，不影响碰撞。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Hitbox", meta = (ClampMin = "8", ClampMax = "64"))
+	int32 DebugHitboxSegments = 24;
+
+	/** DrawDebugSphere 线宽。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Hitbox", meta = (ClampMin = "0.1"))
+	float DebugHitboxLineThickness = 2.0f;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
@@ -87,6 +117,12 @@ public:
 protected:
 	/** 统一销毁入口，带原因屏幕输出 */
 	void Disappear(EAttackAreaDisappearReason Reason);
+
+	/** 同步线框球体的尺寸和可见性；线框球体不会参与碰撞。 */
+	void UpdateDebugHitboxVisualization();
+
+	/** 绘制与真实扇形判定一致的边界线。 */
+	void DrawDebugFanHitbox() const;
 
 	UFUNCTION(BlueprintNativeEvent, Category = "Attack")
 	void ApplyDamage(AActor* Target);
@@ -106,7 +142,7 @@ private:
 	/** 障碍物检测（射线，只查 WorldStatic，不依赖碰撞通道） */
 	void PerformObstacleScan(float DeltaTime);
 
-	/** 跟随的目标（非空则每帧同步位置） */
+	/** 跟随的目标（非空则每帧同步位置；可选同步朝向） */
 	UPROPERTY()
 	TObjectPtr<AActor> FollowTarget;
 
@@ -115,4 +151,11 @@ private:
 
 	/** 已命中的目标（近战攻击在生命期内持续存在，保证同一目标只结算一次伤害） */
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+
+	/** 扇形角度过滤；CollisionSphere 负责粗筛，最终命中由此函数决定。 */
+	bool IsTargetWithinFanHitbox(const AActor* Target) const;
+
+	/** 使用 UE 内置 WireframeMaterial 的可视化球体；DrawDebugSphere 负责颜色和高亮。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug|Hitbox", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> DebugHitboxMesh;
 };

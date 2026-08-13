@@ -6,6 +6,20 @@
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/Attack/SpecialBuff_PlayerAttack2.h"
 
+AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
+{
+	// Attack2 is a moving projectile. Its hitbox is the inherited sphere, not a player-centered fan.
+	bUseFanHitbox = false;
+	bIsMeleeAttack = false;
+	bFollowTargetRotation = false;
+	bDetectObstacle = true;
+	LifeTime = 1.5f;
+	Speed = 900.0f;
+	Radius = 50.0f;
+	bDrawDebugHitbox = true;
+	DebugHitboxColor = FColor(255, 90, 220, 220);
+}
+
 void AAttackArea_PlayerAttack2::ApplyDamage_Implementation(AActor* Target)
 {
 	// 先记录目标是否为敌人（伤害结算可能直接击杀敌人，之后无法再 Cast）

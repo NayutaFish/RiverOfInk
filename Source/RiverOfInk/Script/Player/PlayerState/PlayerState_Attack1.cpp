@@ -11,6 +11,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Common/AttackAreaBase.h"
 #include "Player/Attack/AttackArea_PlayerAttack1.h"
+#include "Components/SphereComponent.h"
 #include "Engine/World.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -266,7 +267,8 @@ void UPlayerState_Attack1::BeginActivePhase()
 		SpawnParams.Instigator = Player;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		const FVector SpawnLocation = Player->GetActorLocation() + Player->GetActorForwardVector() * 100.0f;
+		// 扇形以玩家为圆心；VFX 的前向偏移仍由 SpawnAttackVFX 单独控制。
+		const FVector SpawnLocation = Player->GetActorLocation();
 		ActiveAttackArea = GetWorld()->SpawnActor<AAttackArea_PlayerAttack1>(
 			Player->AttackAreaClass,
 			SpawnLocation,
@@ -277,9 +279,26 @@ void UPlayerState_Attack1::BeginActivePhase()
 		{
 			if (ComboStep > 1)
 			{
+				const float SecondHitboxRadius = ActiveAttackArea->Radius
+					* FMath::Max(1.0f, ComboSecondHitboxRadiusMultiplier);
+				ActiveAttackArea->Radius = SecondHitboxRadius;
+				if (ActiveAttackArea->CollisionSphere)
+				{
+					ActiveAttackArea->CollisionSphere->SetSphereRadius(
+						SecondHitboxRadius,
+						ActiveAttackArea->HasActorBegunPlay());
+				}
+
 				ActiveAttackArea->DamageInfo.DamageValue *= ComboSecondDamageMultiplier;
 				ActiveAttackArea->DamageInfo.HardDamageValue *= ComboSecondDamageMultiplier;
 			}
+
+			// 调试球体直接读取 CollisionSphere，确保观察到的描线与真实 Hitbox 一致。
+			ActiveAttackArea->bDrawDebugHitbox = bDebugDrawHitbox;
+			ActiveAttackArea->DebugHitboxColor = ComboStep > 1
+				? SecondHitboxDebugColor
+				: FirstHitboxDebugColor;
+			ActiveAttackArea->DebugHitboxLineThickness = DebugHitboxLineThickness;
 
 			ActiveAttackArea->Initialize(AttackActiveTime, 0.0f, true, Player);
 		}
@@ -288,9 +307,10 @@ void UPlayerState_Attack1::BeginActivePhase()
 	SpawnAttackVFX();
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Player Attack1 active: Step=%d Hitbox=%s Duration=%.2f."),
+		TEXT("Player Attack1 active: Step=%d Hitbox=%s Radius=%.1f Duration=%.2f."),
 		ComboStep,
 		IsValid(ActiveAttackArea) ? *ActiveAttackArea->GetName() : TEXT("none"),
+		IsValid(ActiveAttackArea) ? ActiveAttackArea->Radius : 0.0f,
 		AttackActiveTime);
 
 	if (UWorld* World = GetWorld())
@@ -380,19 +400,29 @@ void UPlayerState_Attack1::SpawnAttackVFX()
 		return;
 	}
 
+	const bool bIsSecondStep = ComboStep > 1;
+	const float VFXForwardOffset = bIsSecondStep
+		? ComboSecondVFXForwardOffset
+		: AttackVFXForwardOffset;
+	const float VFXScale = FMath::Max(0.01f, bIsSecondStep
+		? ComboSecondVFXScale
+		: AttackVFXScale);
 	const FVector SpawnLocation = Player->GetActorLocation()
-		+ Player->GetActorForwardVector() * 60.0f;
+		+ Player->GetActorForwardVector() * VFXForwardOffset;
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		VFX,
 		SpawnLocation,
-		Player->GetActorRotation());
+		Player->GetActorRotation(),
+		FVector(VFXScale));
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Player Attack1 VFX spawned: Step=%d Asset=%s%s."),
+		TEXT("Player Attack1 VFX spawned: Step=%d Asset=%s Scale=%.2f Offset=%.1f%s."),
 		ComboStep,
 		*VFX->GetName(),
-		ComboStep > 1 && !ComboSecondVFX ? TEXT(" (first-step placeholder)") : TEXT(""));
+		VFXScale,
+		VFXForwardOffset,
+		bIsSecondStep && !ComboSecondVFX ? TEXT(" (first-step placeholder)") : TEXT(""));
 }
 
 void UPlayerState_Attack1::FaceAttackDirection()

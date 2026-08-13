@@ -7,6 +7,15 @@
 #include "FreezeFrameManager/FreezeFrameManager.h"
 #include "RiverOfInk.h"
 
+AAttackArea_PlayerAttack1::AAttackArea_PlayerAttack1()
+{
+	bUseFanHitbox = true;
+	// Set before BeginPlay so an initial overlap cannot treat the fan as a projectile.
+	bIsMeleeAttack = true;
+	FanHalfAngleDegrees = 55.0f;
+	bDrawDebugHitbox = true;
+	DebugHitboxColor = FColor(60, 220, 255, 220);
+}
 void AAttackArea_PlayerAttack1::ApplyDamage_Implementation(AActor* Target)
 {
 	Super::ApplyDamage_Implementation(Target);
