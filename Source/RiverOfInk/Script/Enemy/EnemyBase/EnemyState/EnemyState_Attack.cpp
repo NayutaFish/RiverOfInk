@@ -10,6 +10,7 @@
 #include "RiverOfInk.h"
 #include "Common/AttackAreaBase.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 
 UEnemyState_Attack::UEnemyState_Attack()
 {
@@ -102,22 +103,20 @@ void UEnemyState_Attack::ExecuteAttack()
 
 	bAttackExecuted = true;
 
-	FActorSpawnParameters Params;
-	Params.Owner = Enemy;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
 	const FVector AttackDirection = LockedRotation.Vector();
 	const FVector SpawnLoc = Enemy->GetActorLocation() + AttackDirection * Enemy->AttackAreaSpawnOffset;
 	AActor* FollowTarget = Enemy->bAttackAreaFollowOwner ? Enemy : nullptr;
+	const FTransform SpawnTransform(LockedRotation, SpawnLoc);
 
 	AAttackAreaBase* SpawnedAttackArea = nullptr;
 	if (UWorld* World = GetWorld())
 	{
-		SpawnedAttackArea = World->SpawnActor<AAttackAreaBase>(
+		SpawnedAttackArea = World->SpawnActorDeferred<AAttackAreaBase>(
 			Enemy->AttackAreaClass,
-			SpawnLoc,
-			LockedRotation,
-			Params);
+			SpawnTransform,
+			Enemy,
+			nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	}
 
 	if (AAttackAreaBase* AttackArea = SpawnedAttackArea)
@@ -128,6 +127,7 @@ void UEnemyState_Attack::ExecuteAttack()
 		AttackArea->bDetectObstacle = Enemy->bAttackAreaDetectObstacle;
 		AttackArea->bIsEnemyProjectile = !Enemy->bAttackAreaIsMelee
 			&& Enemy->AttackAreaSpeed > KINDA_SMALL_NUMBER;
+		UGameplayStatics::FinishSpawningActor(AttackArea, SpawnTransform);
 		if (AttackArea->bIsEnemyProjectile)
 		{
 			UE_LOG(LogRiverOfInk, Log, TEXT("Enemy projectile tagged for Null Ring: %s."), *AttackArea->GetName());

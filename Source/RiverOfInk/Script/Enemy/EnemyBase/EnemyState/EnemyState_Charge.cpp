@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
+#include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
 UEnemyState_Charge::UEnemyState_Charge()
@@ -156,31 +157,34 @@ void UEnemyState_Charge::BeginCharge()
 
 	if (Enemy->AttackAreaClass)
 	{
-		FActorSpawnParameters Params;
-		Params.Owner = Enemy;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
 		const FVector SpawnLocation = Enemy->GetActorLocation()
 			+ ChargeDirection * Enemy->AttackAreaSpawnOffset;
+		const FTransform SpawnTransform(ChargeDirection.Rotation(), SpawnLocation);
 		if (UWorld* World = GetWorld())
 		{
-			ChargeAttackArea = World->SpawnActor<AAttackAreaBase>(
+			ChargeAttackArea = World->SpawnActorDeferred<AAttackAreaBase>(
 				Enemy->AttackAreaClass,
-				SpawnLocation,
-				ChargeDirection.Rotation(),
-				Params);
+				SpawnTransform,
+				Enemy,
+				nullptr,
+				ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+			if (ChargeAttackArea)
+			{
+				ChargeAttackArea->Initialize(
+					FMath::Max(0.01f, Enemy->ChargeDuration),
+					0.0f,
+					true,
+					Enemy);
+				ChargeAttackArea->bDamageOpponentOnly = true;
+				ChargeAttackArea->bDetectObstacle = false;
+				ChargeAttackArea->bIsEnemyProjectile = false;
+				UGameplayStatics::FinishSpawningActor(ChargeAttackArea, SpawnTransform);
+			}
 		}
 
 		if (ChargeAttackArea)
 		{
-			ChargeAttackArea->Initialize(
-				FMath::Max(0.01f, Enemy->ChargeDuration),
-				0.0f,
-				true,
-				Enemy);
-			ChargeAttackArea->bDamageOpponentOnly = true;
-			ChargeAttackArea->bDetectObstacle = false;
-			ChargeAttackArea->bIsEnemyProjectile = false;
 			UE_LOG(LogRiverOfInk, Log,
 				TEXT("Enemy %s charge hitbox spawned: %s."),
 				*Enemy->GetName(),
