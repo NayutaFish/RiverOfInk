@@ -4,15 +4,19 @@
 
 #include "Common/AttackAreaBase.h"
 #include "Common/StateBase.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "Core/CombatDamageCalculator.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
+#include "UI/EnemyHealthWidget.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Charge.h"
 #include "TimerManager.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Dead.h"
@@ -37,6 +41,18 @@ AEnemyBase::AEnemyBase()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(CapsuleCollision);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	HealthWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthWidgetComponent"));
+	HealthWidgetComponent->SetupAttachment(CapsuleCollision);
+	HealthWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+	HealthWidgetComponent->SetDrawSize(HealthWidgetDrawSize);
+	HealthWidgetComponent->SetPivot(FVector2D(0.5f, 1.0f));
+	HealthWidgetComponent->SetRelativeScale3D(FVector(HealthWidgetWorldScale));
+	HealthWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HealthWidgetComponent->SetTwoSided(true);
+	HealthWidgetComponent->SetVisibility(false);
+	HealthWidgetClass = UEnemyHealthWidget::StaticClass();
+	HealthWidgetComponent->SetWidgetClass(HealthWidgetClass);
 }
 
 void AEnemyBase::BeginPlay()
@@ -50,6 +66,36 @@ void AEnemyBase::BeginPlay()
 	HardBreakCooldownRemaining = 0.0f;
 	bIsDead = false;
 	bDeadHandled = false;
+	if (HealthWidgetComponent)
+	{
+		HealthWidgetComponent->SetRelativeLocation(FVector(
+			0.0f,
+			0.0f,
+			CapsuleCollision->GetScaledCapsuleHalfHeight() + HealthWidgetHeightOffset));
+		TSubclassOf<UEnemyHealthWidget> WidgetClass = HealthWidgetClass;
+		if (!WidgetClass)
+		{
+			WidgetClass = UEnemyHealthWidget::StaticClass();
+		}
+		HealthWidgetComponent->SetDrawSize(HealthWidgetDrawSize);
+		HealthWidgetComponent->SetRelativeScale3D(FVector(HealthWidgetWorldScale));
+		HealthWidgetComponent->SetWidgetClass(WidgetClass);
+		HealthWidgetComponent->InitWidget();
+		HealthWidgetComponent->SetVisibility(false);
+
+		if (UEnemyHealthWidget* HealthWidget = Cast<UEnemyHealthWidget>(
+			HealthWidgetComponent->GetUserWidgetObject()))
+		{
+			HealthWidget->InitializeForEnemy(this);
+		}
+
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s health widget initialized: Widget=%s Scale=%.2f ComponentVisible=%s."),
+			*GetName(),
+			*GetNameSafe(HealthWidgetComponent->GetUserWidgetObject()),
+			HealthWidgetWorldScale,
+			HealthWidgetComponent->IsVisible() ? TEXT("true") : TEXT("false"));
+	}
 	RefreshCombatTarget();
 	EnsureStateComponent(UEnemyState_Charge::StaticClass());
 	EnsureStateComponent(UEnemyState_TargetLost::StaticClass());
@@ -68,6 +114,7 @@ void AEnemyBase::Tick(float DeltaTime)
 	{
 		return;
 	}
+	UpdateHealthWidgetFacingCamera();
 
 	UpdateHardValue(DeltaTime);
 	RefreshCombatTarget();
@@ -196,6 +243,24 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	DamageResult.bKilled = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
 	LastDamageResult = DamageResult;
 
+	if (FinalDamage > 0)
+	{
+		if (HealthWidgetComponent && CurrentHealth < MaxHealth)
+		{
+			HealthWidgetComponent->SetVisibility(true);
+			UpdateHealthWidgetFacingCamera();
+		}
+		OnEnemyHealthChanged.Broadcast(CurrentHealth, MaxHealth);
+
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s health widget damage refresh: ComponentVisible=%s WidgetVisible=%s Health=%.1f/%.1f."),
+			*GetName(),
+			HealthWidgetComponent && HealthWidgetComponent->IsVisible() ? TEXT("true") : TEXT("false"),
+			HealthWidgetComponent && HealthWidgetComponent->IsWidgetVisible() ? TEXT("true") : TEXT("false"),
+			CurrentHealth,
+			MaxHealth);
+	}
+
 	// Keep this raw damage event for existing systems such as the temporary
 	// bonus-damage buff. State interruption is handled by OnHardBreak below.
 	if (InInfo.bIsDirectDamage)
@@ -252,6 +317,10 @@ void AEnemyBase::Die()
 
 	bIsDead = true;
 	CurrentHealth = 0.0f;
+	if (HealthWidgetComponent)
+	{
+		HealthWidgetComponent->SetVisibility(false);
+	}
 	if (CapsuleCollision)
 	{
 		CapsuleCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -374,6 +443,35 @@ float AEnemyBase::ResolveHardDamage(const FTakeDamageInfo& InInfo) const
 	return FMath::Max(0.0f, InInfo.DamageValue * DefaultHardDamageScale);
 }
 
+void AEnemyBase::UpdateHealthWidgetFacingCamera()
+{
+	if (!bHealthWidgetFaceCamera || !HealthWidgetComponent || !HealthWidgetComponent->IsVisible())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	APlayerController* PlayerController = World
+		? UGameplayStatics::GetPlayerController(World, 0)
+		: nullptr;
+	if (!PlayerController || !PlayerController->PlayerCameraManager)
+	{
+		return;
+	}
+
+	const FVector ToCamera = PlayerController->PlayerCameraManager->GetCameraLocation()
+		- HealthWidgetComponent->GetComponentLocation();
+	if (ToCamera.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator DesiredRotation = ToCamera.Rotation();
+	if (!HealthWidgetComponent->GetComponentRotation().Equals(DesiredRotation, 0.1f))
+	{
+		HealthWidgetComponent->SetWorldRotation(DesiredRotation);
+	}
+}
 void AEnemyBase::RefreshCombatTarget()
 {
 	if (IsValid(CachedPlayer.Get()) && !CachedPlayer->IsDead())

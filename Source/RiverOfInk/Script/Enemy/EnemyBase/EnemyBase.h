@@ -12,8 +12,11 @@ class UCapsuleComponent;
 class AAttackAreaBase;
 class UStateBase;
 class APlayerCharacter;
+class UEnemyHealthWidget;
+class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnemyHealthChangedSignature, float, CurrentHealth, float, MaxHealth);
 
 /**
  * Shared enemy base for the first melee state-machine pass.
@@ -48,6 +51,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
 	TObjectPtr<UStaticMeshComponent> Mesh;
+
+	/** 世界空间敌人血条组件；首次有效受伤前隐藏。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|UI")
+	TObjectPtr<UWidgetComponent> HealthWidgetComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
@@ -119,6 +126,26 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|State")
 	FEnemyDamageResult LastDamageResult;
 
+	/** 血条使用的 Widget 类；默认使用 C++ 原生 EnemyHealthWidget。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
+	TSubclassOf<UEnemyHealthWidget> HealthWidgetClass;
+
+	/** 血条锚点相对胶囊体顶部的高度偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.0"))
+	float HealthWidgetHeightOffset = 25.0f;
+
+	/** 世界空间血条尺寸；支持在敌人蓝图中按镜头距离调节。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
+	FVector2D HealthWidgetDrawSize = FVector2D(180.0f, 24.0f);
+
+	/** 世界空间血条缩放；默认值避免俯视相机下血条过小。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float HealthWidgetWorldScale = 0.25f;
+
+	/** 使血条始终朝向当前玩家相机。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
+	bool bHealthWidgetFaceCamera = true;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Attack")
 	FTimerHandle AttackTimerHandle;
 
@@ -128,6 +155,10 @@ public:
 	/** 一次性死亡入口；掉落生成和死亡事件均从这里发出。 */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyDeathSignature OnDead;
+
+	/** 有效伤害结算后广播；EnemyHealthWidget 只在此事件触发时刷新。 */
+	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
+	FOnEnemyHealthChangedSignature OnEnemyHealthChanged;
 
 	/** 每次有效直接性受击事件（保留给 Buff、音效等通用监听者）。 */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
@@ -261,6 +292,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Enemy|Economy|Pure Ink")
 	int32 GetPureInkDropAmount() const { return PureInkDropAmount; }
 
+	UFUNCTION(BlueprintPure, Category = "Enemy|Stats")
+	float GetMaxHealth() const { return MaxHealth; }
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|Stats")
+	float GetCurrentHealth() const { return CurrentHealth; }
+
 	UFUNCTION(BlueprintPure, Category = "Enemy|Hard Value")
 	float GetMaxHardValue() const { return MaxHardValue; }
 
@@ -300,6 +337,7 @@ public:
 private:
 	void NormalizeDefenseFromLegacy();
 	void UpdateHardValue(float DeltaTime);
+	void UpdateHealthWidgetFacingCamera();
 	float ResolveHardDamage(const FTakeDamageInfo& InInfo) const;
 	void DisableStateComponentTicks();
 	UStateBase* EnsureStateComponent(TSubclassOf<UStateBase> StateClass);
