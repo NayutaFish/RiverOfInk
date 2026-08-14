@@ -7,6 +7,7 @@
 #include "LevelRoomManager/DemoRoomManager.h"
 #include "Player/PlayerCharacter.h"
 #include "CameraManager/CameraManager.h"
+#include "Camera/PlayerCameraManager.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
@@ -49,6 +50,23 @@ void ARiverOfInkGameMode::BeginPlay()
 
 	// 生成纯 C++ 相机管理器（玩家生成后由它自动接管并跟随）
 	GetWorld()->SpawnActor<ACameraManager>(ACameraManager::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+
+	// RunFlow travels from the black screen created by the Stage 1 intro.
+	// PlayerCameraManager survives the map transition, while the old menu
+	// camera does not, so every gameplay room owns this minimal fade-in.
+	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		if (IsValid(PlayerController->PlayerCameraManager))
+		{
+			PlayerController->PlayerCameraManager->StartCameraFade(
+				1.0f,
+				0.0f,
+				0.45f,
+				FLinearColor::Black,
+				false,
+				true);
+		}
+	}
 }
 
 void ARiverOfInkGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
