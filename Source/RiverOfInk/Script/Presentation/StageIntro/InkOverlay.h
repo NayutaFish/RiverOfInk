@@ -31,7 +31,7 @@ public:
 	TObjectPtr<UStaticMeshComponent> OverlayPlane;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Ink")
-	FLinearColor InkColor = FLinearColor(0.008f, 0.004f, 0.002f, 1.0f);
+	FLinearColor InkColor = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Ink", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float InkNoiseStrength = 0.35f;
