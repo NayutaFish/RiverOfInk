@@ -36,9 +36,11 @@ void UPlayerSkillSlotWidget::NativeConstruct()
 	SetIsFocusable(false);
 	BuildDefaultWidgetTree();
 	EnsureCooldownMaterial();
-	SetVisibility(ESlateVisibility::Collapsed);
-	SetRenderOpacity(0.0f);
+	// The skill icon is persistent HUD content; only the ink ring changes with cooldown.
+	SetVisibility(ESlateVisibility::HitTestInvisible);
+	SetRenderOpacity(1.0f);
 	SetVisualScale(1.0f);
+	SetCooldownProgress(0.0f);
 }
 
 void UPlayerSkillSlotWidget::NativeDestruct()
@@ -91,8 +93,9 @@ void UPlayerSkillSlotWidget::StartCooldown(float InCooldownDuration)
 
 	if (!bCooldownActive)
 	{
-		SetVisibility(ESlateVisibility::Collapsed);
-		SetRenderOpacity(0.0f);
+		SetVisibility(ESlateVisibility::HitTestInvisible);
+		SetRenderOpacity(1.0f);
+		SetVisualScale(1.0f);
 		SetCooldownProgress(0.0f);
 		return;
 	}
@@ -100,8 +103,8 @@ void UPlayerSkillSlotWidget::StartCooldown(float InCooldownDuration)
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetRenderOpacity(1.0f);
 	SetVisualScale(1.0f);
-	// The ring represents remaining cooldown: a newly cast skill starts fully inked.
-	SetCooldownProgress(1.0f);
+	// The ring represents completed cooldown: a newly cast skill starts with no ink.
+	SetCooldownProgress(0.0f);
 }
 
 void UPlayerSkillSlotWidget::UpdateCooldown(float InCooldownRemaining, float InCooldownDuration)
@@ -117,7 +120,7 @@ void UPlayerSkillSlotWidget::UpdateCooldown(float InCooldownRemaining, float InC
 		}
 
 		CooldownDuration = SafeDuration;
-		SetCooldownProgress(SafeRemaining / SafeDuration);
+		SetCooldownProgress(1.0f - (SafeRemaining / SafeDuration));
 		return;
 	}
 
@@ -135,7 +138,7 @@ void UPlayerSkillSlotWidget::FinishCooldown()
 	}
 
 	bCooldownActive = false;
-	SetCooldownProgress(0.0f);
+	SetCooldownProgress(1.0f);
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetRenderOpacity(1.0f);
 	SetVisualScale(1.0f);
@@ -289,12 +292,12 @@ void UPlayerSkillSlotWidget::UpdateReadyFeedback()
 	if (SlotState == EPlayerSkillHudSlotState::FadeOut)
 	{
 		const float FadeAlpha = FMath::Clamp((Now - FadeStartTime) / FadeOutDuration, 0.0f, 1.0f);
-		SetRenderOpacity(1.0f - FadeAlpha);
 		if (FadeAlpha >= 1.0f)
 		{
 			ClearFeedbackTimer();
 			SlotState = EPlayerSkillHudSlotState::Hidden;
-			SetVisibility(ESlateVisibility::Collapsed);
+			SetVisibility(ESlateVisibility::HitTestInvisible);
+			SetRenderOpacity(1.0f);
 			SetCooldownProgress(0.0f);
 		}
 	}

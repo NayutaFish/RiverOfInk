@@ -64,7 +64,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void SetCooldownProgress(float InProgress);
 
-	/** Remaining cooldown fraction: 1.0 immediately after cast, 0.0 when ready. */
+	/** Completed cooldown fraction: 0.0 immediately after cast, 1.0 when ready. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Skill Slot")
 	float GetCooldownProgress() const { return CooldownProgress; }
 
@@ -73,11 +73,11 @@ public:
 
 	/** Appearance is intentionally exposed so a Blueprint skin can tune colors and scale. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	/** Existing project icons are intentionally tinted black to match the ink-ring reference. */
-	FLinearColor SkillIconColor = FLinearColor(0.02f, 0.02f, 0.02f, 1.0f);
+	/** Preserve the original project icon artwork; the cooldown ink is a separate layer. */
+	FLinearColor SkillIconColor = FLinearColor::White;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	FLinearColor CooldownInkColor = FLinearColor(0.015f, 0.012f, 0.01f, 1.0f);
+	FLinearColor CooldownInkColor = FLinearColor::Black;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor KeyTextColor = FLinearColor::White;
