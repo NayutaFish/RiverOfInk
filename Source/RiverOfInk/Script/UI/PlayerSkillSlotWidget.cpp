@@ -100,7 +100,8 @@ void UPlayerSkillSlotWidget::StartCooldown(float InCooldownDuration)
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetRenderOpacity(1.0f);
 	SetVisualScale(1.0f);
-	SetCooldownProgress(0.0f);
+	// The ring represents remaining cooldown: a newly cast skill starts fully inked.
+	SetCooldownProgress(1.0f);
 }
 
 void UPlayerSkillSlotWidget::UpdateCooldown(float InCooldownRemaining, float InCooldownDuration)
@@ -116,7 +117,7 @@ void UPlayerSkillSlotWidget::UpdateCooldown(float InCooldownRemaining, float InC
 		}
 
 		CooldownDuration = SafeDuration;
-		SetCooldownProgress(1.0f - (SafeRemaining / SafeDuration));
+		SetCooldownProgress(SafeRemaining / SafeDuration);
 		return;
 	}
 
@@ -134,7 +135,7 @@ void UPlayerSkillSlotWidget::FinishCooldown()
 	}
 
 	bCooldownActive = false;
-	SetCooldownProgress(1.0f);
+	SetCooldownProgress(0.0f);
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetRenderOpacity(1.0f);
 	SetVisualScale(1.0f);

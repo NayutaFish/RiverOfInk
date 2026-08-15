@@ -64,6 +64,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void SetCooldownProgress(float InProgress);
 
+	/** Remaining cooldown fraction: 1.0 immediately after cast, 0.0 when ready. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Skill Slot")
 	float GetCooldownProgress() const { return CooldownProgress; }
 
@@ -82,14 +83,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "64.0", ClampMax = "160.0"))
 	/** The slot is deliberately larger than the icon so the ink reads as an outer ring. */
-	float SlotSize = 116.0f;
+	float SlotSize = 140.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "32.0", ClampMax = "120.0"))
-	float IconSize = 56.0f;
+	float IconSize = 48.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "48.0", ClampMax = "140.0"))
 	/** Keep the ink layer larger than the icon; its transparent center frames the icon. */
-	float CooldownInkSize = 110.0f;
+	float CooldownInkSize = 132.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "8", ClampMax = "48"))
 	int32 KeyFontSize = 20;
