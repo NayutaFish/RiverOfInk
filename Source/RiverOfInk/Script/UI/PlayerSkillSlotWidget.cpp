@@ -217,24 +217,32 @@ void UPlayerSkillSlotWidget::EnsureCooldownMaterial()
 		return;
 	}
 
-	UMaterialInterface* CooldownMaterial = LoadObject<UMaterialInterface>(nullptr, CooldownMaterialPath);
-	CooldownInkTexture = LoadObject<UTexture2D>(nullptr, CooldownTexturePath);
-	if (!CooldownMaterial)
+	UMaterialInterface* BaseMaterial = CooldownMaterial;
+	if (!BaseMaterial)
+	{
+		BaseMaterial = LoadObject<UMaterialInterface>(nullptr, CooldownMaterialPath);
+	}
+	LoadedCooldownTexture = CooldownTexture;
+	if (!LoadedCooldownTexture)
+	{
+		LoadedCooldownTexture = LoadObject<UTexture2D>(nullptr, CooldownTexturePath);
+	}
+	if (!BaseMaterial)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Skill cooldown material missing: %s."), CooldownMaterialPath);
 		return;
 	}
 
-	CooldownMaterialInstance = UMaterialInstanceDynamic::Create(CooldownMaterial, this);
+	CooldownMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 	if (!CooldownMaterialInstance)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Skill cooldown MID creation failed for %s."), *GetNameSafe(this));
 		return;
 	}
 
-	if (CooldownInkTexture)
+	if (LoadedCooldownTexture)
 	{
-		CooldownMaterialInstance->SetTextureParameterValue(InkTextureParameter, CooldownInkTexture);
+		CooldownMaterialInstance->SetTextureParameterValue(InkTextureParameter, LoadedCooldownTexture);
 	}
 	CooldownMaterialInstance->SetScalarParameterValue(CooldownProgressParameter, CooldownProgress);
 	ImageCooldownInk->SetBrushFromMaterial(CooldownMaterialInstance);
@@ -242,7 +250,7 @@ void UPlayerSkillSlotWidget::EnsureCooldownMaterial()
 	UE_LOG(LogTemp, Verbose, TEXT("Skill cooldown MID ready: Slot=%s MID=%s Texture=%s."),
 		*GetNameSafe(this),
 		*GetNameSafe(CooldownMaterialInstance),
-		*GetNameSafe(CooldownInkTexture));
+		*GetNameSafe(LoadedCooldownTexture));
 }
 
 void UPlayerSkillSlotWidget::SetVisualScale(float Scale)

@@ -9,6 +9,7 @@
 
 class UImage;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UOverlay;
 class USizeBox;
 class UTextBlock;
@@ -91,6 +92,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "8", ClampMax = "48"))
 	int32 KeyFontSize = 20;
 
+	/** Optional Blueprint overrides; null falls back to the stable project asset paths. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cooldown")
+	TObjectPtr<UMaterialInterface> CooldownMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cooldown")
+	TObjectPtr<UTexture2D> CooldownTexture;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -122,7 +130,7 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CooldownMaterialInstance;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTexture2D> CooldownInkTexture;
+	TObjectPtr<UTexture2D> LoadedCooldownTexture;
 
 	EPlayerSkillID SkillID = EPlayerSkillID::None;
 	EPlayerSkillHudSlotState SlotState = EPlayerSkillHudSlotState::Hidden;
