@@ -223,14 +223,44 @@ bool AStage01IntroDirector::PlayIntro()
 		ResetIntroCamera();
 		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 		{
-			PC->SetViewTargetWithBlend(IntroCamera, 0.15f);
+			// The menu uses a separate camera composition. Give the handoff enough
+			// time to read as a deliberate move into the Stage 1 establishing shot.
+			PC->SetViewTargetWithBlend(IntroCamera, FMath::Max(0.1f, CameraTransitionDuration));
 		}
 	}
 
 	SetMenuCinematicState(true);
-	SequencePlayer->Play();
-	UE_LOG(LogTemp, Log, TEXT("Stage01 intro started. Duration=%.2fs."), IntroDuration);
+	const float TransitionDuration = FMath::Max(0.1f, CameraTransitionDuration);
+	if (TransitionDuration > KINDA_SMALL_NUMBER && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			CameraTransitionTimer,
+			this,
+			&AStage01IntroDirector::StartSequenceAfterCameraTransition,
+			TransitionDuration,
+			false);
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("Stage01 camera handoff started. Duration=%.2fs; sequence will start after handoff."),
+			TransitionDuration);
+	}
+	else
+	{
+		StartSequenceAfterCameraTransition();
+	}
 	return true;
+}
+
+void AStage01IntroDirector::StartSequenceAfterCameraTransition()
+{
+	if (!bIntroPlaying || IntroState != EStage01IntroState::Playing || !IsValid(SequencePlayer))
+	{
+		return;
+	}
+
+	SequencePlayer->Play();
+	UE_LOG(LogTemp, Log, TEXT("Stage01 intro started after camera handoff. Duration=%.2fs."), IntroDuration);
 }
 
 void AStage01IntroDirector::OnSequenceFinished()
@@ -580,6 +610,7 @@ void AStage01IntroDirector::ClearIntroTimers()
 {
 	if (GetWorld())
 	{
+		GetWorld()->GetTimerManager().ClearTimer(CameraTransitionTimer);
 		GetWorld()->GetTimerManager().ClearTimer(FadeTimer);
 	}
 }

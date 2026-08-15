@@ -67,6 +67,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.1"))
 	float FadeDuration = 0.45f;
 
+	/** Smooth handoff from the menu camera into the Stage 1 establishing shot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.1", ClampMax = "3.0"))
+	float CameraTransitionDuration = 2.25f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Camera")
 	FVector CameraPushOffset = FVector(300.0f, 0.0f, -260.0f);
 
@@ -88,6 +92,9 @@ protected:
 
 	UFUNCTION()
 	void HandleFadeTimer();
+
+	UFUNCTION()
+	void StartSequenceAfterCameraTransition();
 
 private:
 	bool ResolveSceneReferences();
@@ -113,6 +120,7 @@ private:
 	TArray<TObjectPtr<UButton>> BoundNewGameButtons;
 
 	FTimerHandle MainMenuBindTimer;
+	FTimerHandle CameraTransitionTimer;
 	FTimerHandle FadeTimer;
 	FTransform InitialCameraTransform;
 	FTransform FinalCameraTransform;
