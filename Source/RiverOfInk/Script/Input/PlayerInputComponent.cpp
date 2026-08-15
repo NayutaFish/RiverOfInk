@@ -6,6 +6,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
+#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
@@ -164,6 +165,22 @@ void UPlayerInputComponent::OnShift(const FInputActionValue& Value)
 
 void UPlayerInputComponent::OnLmb()
 {
+	DispatchLmb();
+}
+
+void UPlayerInputComponent::DispatchPrimaryAttackInput()
+{
+	DispatchLmb();
+}
+
+void UPlayerInputComponent::DispatchLmb()
+{
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (LastLmbDispatchTime >= 0.0 && (Now - LastLmbDispatchTime) < 0.02)
+	{
+		return;
+	}
+	LastLmbDispatchTime = Now;
 	OnLmbDelegate.Broadcast();
 }
 
