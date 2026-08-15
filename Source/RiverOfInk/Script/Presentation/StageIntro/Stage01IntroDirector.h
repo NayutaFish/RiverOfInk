@@ -34,6 +34,7 @@ public:
 	AStage01IntroDirector();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Stage Intro")
@@ -95,7 +96,7 @@ private:
 	void SetMenuCinematicState(bool bCinematic);
 	void RestoreMainMenuAfterFailure();
 	void UpdateIntroPresentation(float SequenceSeconds);
-	void ApplyCameraTransform(float Alpha);
+	void ResetIntroCamera();
 	void StartFadeToBlack();
 	void ClearIntroTimers();
 
@@ -118,4 +119,5 @@ private:
 	int32 MainMenuBindAttempts = 0;
 	bool bMainMenuBound = false;
 	bool bTravelRequested = false;
+	bool bInitialCameraTransformCached = false;
 };

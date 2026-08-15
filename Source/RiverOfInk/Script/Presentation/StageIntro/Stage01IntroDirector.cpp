@@ -5,9 +5,11 @@
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
+#include "CameraManager/CameraManager.h"
 #include "CineCameraActor.h"
 #include "Components/Button.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -48,6 +50,29 @@ void AStage01IntroDirector::BeginPlay()
 			true,
 			0.10f);
 	}
+}
+
+void AStage01IntroDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Sequencer may have possessed the camera when PIE is torn down. Remove
+	// the delegate before stopping, then restore the editor-authored transform
+	// so a later PIE starts from the same shot instead of an accumulated pose.
+	if (IsValid(SequencePlayer))
+	{
+		SequencePlayer->OnFinished.RemoveDynamic(this, &AStage01IntroDirector::OnSequenceFinished);
+		SequencePlayer->Stop();
+	}
+
+	ClearIntroTimers();
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
+	}
+	ResetIntroCamera();
+	SequencePlayer = nullptr;
+	SequenceActor = nullptr;
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AStage01IntroDirector::Tick(float DeltaTime)
@@ -112,9 +137,13 @@ bool AStage01IntroDirector::ResolveSceneReferences()
 
 	if (IsValid(IntroCamera))
 	{
-		InitialCameraTransform = IntroCamera->GetActorTransform();
-		FinalCameraTransform = InitialCameraTransform;
-		FinalCameraTransform.AddToTranslation(CameraPushOffset);
+		if (!bInitialCameraTransformCached)
+		{
+			InitialCameraTransform = IntroCamera->GetActorTransform();
+			FinalCameraTransform = InitialCameraTransform;
+			FinalCameraTransform.AddToTranslation(CameraPushOffset);
+			bInitialCameraTransformCached = true;
+		}
 	}
 
 	const bool bValid = IsValid(IntroSequence) && IsValid(IntroCamera) && IsValid(InkOverlay);
@@ -138,6 +167,14 @@ bool AStage01IntroDirector::CreateSequencePlayer()
 
 	FMovieSceneSequencePlaybackSettings PlaybackSettings;
 	PlaybackSettings.bAutoPlay = false;
+	PlaybackSettings.FinishCompletionStateOverride = EMovieSceneCompletionModeOverride::ForceRestoreState;
+
+	if (IsValid(SequencePlayer))
+	{
+		SequencePlayer->OnFinished.RemoveDynamic(this, &AStage01IntroDirector::OnSequenceFinished);
+		SequencePlayer->Stop();
+	}
+
 	ALevelSequenceActor* CreatedSequenceActor = nullptr;
 	SequencePlayer = ULevelSequencePlayer::CreateLevelSequencePlayer(
 		GetWorld(),
@@ -183,7 +220,7 @@ bool AStage01IntroDirector::PlayIntro()
 	}
 	if (IsValid(IntroCamera))
 	{
-		IntroCamera->SetActorTransform(InitialCameraTransform);
+		ResetIntroCamera();
 		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 		{
 			PC->SetViewTargetWithBlend(IntroCamera, 0.15f);
@@ -211,6 +248,10 @@ void AStage01IntroDirector::HandleSequenceFinished()
 	if (IsValid(InkOverlay))
 	{
 		InkOverlay->SetInkProgress(1.0f);
+	}
+	if (IsValid(IntroCamera) && bInitialCameraTransformCached)
+	{
+		IntroCamera->SetActorTransform(FinalCameraTransform);
 	}
 	IntroState = EStage01IntroState::Fading;
 	StartFadeToBlack();
@@ -292,6 +333,7 @@ void AStage01IntroDirector::AbortIntro()
 	}
 
 	ClearIntroTimers();
+	ResetIntroCamera();
 	bIntroPlaying = false;
 	bTravelRequested = false;
 	IntroState = EStage01IntroState::Failed;
@@ -440,6 +482,17 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 		}
 	}
 
+	// The menu game mode owns a follow camera actor that normally claims the
+	// PlayerController every tick. Pause that one owner while the explicit
+	// intro CineCamera is active, otherwise the camera cut is overwritten.
+	if (GetWorld())
+	{
+		for (TActorIterator<ACameraManager> It(GetWorld()); It; ++It)
+		{
+			It->SetActorTickEnabled(!bCinematic);
+		}
+	}
+
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	if (!IsValid(PC))
 	{
@@ -484,24 +537,13 @@ void AStage01IntroDirector::UpdateIntroPresentation(float SequenceSeconds)
 	{
 		InkOverlay->SetInkProgress(Progress);
 	}
-
-	const float CameraAlpha = FMath::GetMappedRangeValueClamped(
-		FVector2D(1.5f, IntroDuration),
-		FVector2D(0.0f, 1.0f),
-		SequenceSeconds);
-	ApplyCameraTransform(CameraAlpha);
 }
 
-void AStage01IntroDirector::ApplyCameraTransform(float Alpha)
+void AStage01IntroDirector::ResetIntroCamera()
 {
-	if (IsValid(IntroCamera))
+	if (IsValid(IntroCamera) && bInitialCameraTransformCached)
 	{
-		FTransform BlendedTransform;
-		BlendedTransform.Blend(
-			InitialCameraTransform,
-			FinalCameraTransform,
-			FMath::Clamp(Alpha, 0.0f, 1.0f));
-		IntroCamera->SetActorTransform(BlendedTransform);
+		IntroCamera->SetActorTransform(InitialCameraTransform);
 	}
 }
 
