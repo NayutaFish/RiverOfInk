@@ -223,6 +223,16 @@ void APlayerCharacter::BeginPlay()
 	}
 }
 
+void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (HealthWidget)
+    {
+        HealthWidget->RemoveFromParent();
+        HealthWidget = nullptr;
+    }
+
+    Super::EndPlay(EndPlayReason);
+}
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
