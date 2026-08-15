@@ -73,7 +73,8 @@ public:
 
 	/** Appearance is intentionally exposed so a Blueprint skin can tune colors and scale. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	FLinearColor SkillIconColor = FLinearColor::White;
+	/** Existing project icons are intentionally tinted black to match the ink-ring reference. */
+	FLinearColor SkillIconColor = FLinearColor(0.02f, 0.02f, 0.02f, 1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor CooldownInkColor = FLinearColor(0.015f, 0.012f, 0.01f, 1.0f);
