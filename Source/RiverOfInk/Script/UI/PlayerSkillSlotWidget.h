@@ -81,13 +81,15 @@ public:
 	FLinearColor KeyTextColor = FLinearColor::White;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "64.0", ClampMax = "160.0"))
-	float SlotSize = 94.0f;
+	/** The slot is deliberately larger than the icon so the ink reads as an outer ring. */
+	float SlotSize = 116.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "32.0", ClampMax = "120.0"))
 	float IconSize = 56.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "48.0", ClampMax = "140.0"))
-	float CooldownInkSize = 90.0f;
+	/** Keep the ink layer larger than the icon; its transparent center frames the icon. */
+	float CooldownInkSize = 110.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "8", ClampMax = "48"))
 	int32 KeyFontSize = 20;
