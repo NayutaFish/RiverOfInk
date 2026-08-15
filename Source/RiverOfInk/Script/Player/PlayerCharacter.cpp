@@ -383,6 +383,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		if (UPlayerInputComponent* InputComp = FindComponentByClass<UPlayerInputComponent>())
 		{
 			InputComp->SetupEnhancedInput(EnhancedInput, Cast<APlayerController>(GetController()));
+			// Keep a raw UInputComponent fallback for the first click after a PIE
+			// viewport captures the mouse. DispatchPrimaryAttackInput de-duplicates
+			// this path against Enhanced Input when both receive the same press.
+			PlayerInputComponent->BindKey(
+				EKeys::LeftMouseButton,
+				IE_Pressed,
+				InputComp,
+				&UPlayerInputComponent::DispatchPrimaryAttackInput);
 		}
 	}
 

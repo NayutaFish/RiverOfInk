@@ -68,7 +68,7 @@ public:
 	float FadeDuration = 0.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Camera")
-	FVector CameraPushOffset = FVector(0.0f, 0.0f, -230.0f);
+	FVector CameraPushOffset = FVector(300.0f, 0.0f, -260.0f);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Intro|Runtime")
 	bool bIntroPlaying = false;

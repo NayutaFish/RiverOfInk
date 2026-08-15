@@ -19,6 +19,10 @@ AInkOverlay::AInkOverlay()
 	OverlayPlane->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	OverlayPlane->SetCastShadow(false);
 	OverlayPlane->bReceivesDecals = false;
+	// Keep the translucent ink layer in front of the opaque paper plane at
+	// this close separation. This avoids depth/sort ambiguity when the camera
+	// is nearly orthographic to the scroll surface.
+	OverlayPlane->TranslucencySortPriority = 100;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneFinder(
 		TEXT("/Engine/BasicShapes/Plane.Plane"));

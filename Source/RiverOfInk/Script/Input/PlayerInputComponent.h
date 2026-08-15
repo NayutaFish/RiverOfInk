@@ -25,6 +25,9 @@ public:
 	/** 注册到 Enhanced Input 子系统并绑定回调（由 SetupPlayerInputComponent 调用） */
 	void SetupEnhancedInput(UEnhancedInputComponent* EnhancedInput, APlayerController* PC);
 
+	/** Compatibility entry point for the raw UInputComponent mouse path. */
+	void DispatchPrimaryAttackInput();
+
 	// ── 委托实例 ──
 	FOnPlayerInputAxis OnMoveXDelegate;
 	FOnPlayerInputAxis OnMoveYDelegate;
@@ -92,4 +95,10 @@ protected:
 	void OnQ();
 	void OnE();
 	void OnF();
+	void DispatchLmb();
+
+	// Enhanced Input and the legacy key path can both observe the same physical
+	// click while a PIE viewport is gaining focus. Keep one dispatch per short
+	// input window so the compatibility path cannot double-trigger a combo.
+	double LastLmbDispatchTime = -1.0;
 };

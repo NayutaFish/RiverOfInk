@@ -12,6 +12,7 @@
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 
 ARiverOfInkGameMode::ARiverOfInkGameMode()
@@ -56,6 +57,18 @@ void ARiverOfInkGameMode::BeginPlay()
 	// camera does not, so every gameplay room owns this minimal fade-in.
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
 	{
+		// Stage01IntroDirector switches the persistent PlayerController to
+		// GameOnly before OpenLevel. Re-apply it in the destination map and do
+		// not consume the first LMB press as viewport recapture; otherwise the
+		// first attack click can be lost while keyboard input still works.
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PlayerController->SetInputMode(InputMode);
+		PlayerController->SetIgnoreMoveInput(false);
+		PlayerController->SetIgnoreLookInput(false);
+		PlayerController->SetShowMouseCursor(true);
+
 		if (IsValid(PlayerController->PlayerCameraManager))
 		{
 			PlayerController->PlayerCameraManager->StartCameraFade(

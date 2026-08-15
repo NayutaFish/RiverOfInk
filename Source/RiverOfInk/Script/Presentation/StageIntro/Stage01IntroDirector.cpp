@@ -436,6 +436,10 @@ bool AStage01IntroDirector::TryBindMainMenu()
 			BoundMainMenuWidget = Candidate;
 			bMainMenuBound = true;
 			GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
+			// The menu widget is created by the Level Blueprint. Explicitly
+			// establish the UI input mode after binding so the first mouse click
+			// is not spent only giving Slate focus to the viewport.
+			SetMenuCinematicState(false);
 			UE_LOG(LogTemp, Log,
 				TEXT("Stage01 intro bound MainMenu widget '%s' to %d New Game button(s)."),
 				*Candidate->GetName(), BoundNewGameButtons.Num());
@@ -506,6 +510,10 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 		PC->bShowMouseCursor = false;
 		FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
 		FInputModeGameOnly InputMode;
+		// Switching from UIOnly to GameOnly must not consume the first mouse
+		// button press as a viewport recapture. The intro owns the input lock;
+		// the target gameplay map will apply the same policy after travel.
+		InputMode.SetConsumeCaptureMouseDown(false);
 		PC->SetInputMode(InputMode);
 	}
 	else
@@ -513,11 +521,12 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 		PC->SetIgnoreMoveInput(false);
 		PC->SetIgnoreLookInput(false);
 		PC->bShowMouseCursor = true;
-		FInputModeUIOnly InputMode;
-		if (IsValid(BoundMainMenuWidget))
-		{
-			InputMode.SetWidgetToFocus(BoundMainMenuWidget->TakeWidget());
-		}
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		// Keep the cursor outside viewport capture until the first New Game click
+		// reaches the Slate button. No gameplay pawn exists on this map, so the
+		// GameAndUI fallback is harmless while it keeps mouse routing reliable.
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		PC->SetInputMode(InputMode);
 	}
 }
@@ -529,10 +538,30 @@ void AStage01IntroDirector::RestoreMainMenuAfterFailure()
 
 void AStage01IntroDirector::UpdateIntroPresentation(float SequenceSeconds)
 {
-	const float Progress = FMath::GetMappedRangeValueClamped(
-		FVector2D(0.8f, IntroDuration),
-		FVector2D(0.0f, 1.0f),
-		SequenceSeconds);
+	// Match the review storyboard: hold the clean establishing shot for
+	// 0.0-0.8s, reveal the first ink mark by 1.5s, then let the stain take
+	// over as the camera pushes through 2.5-4.3s.
+	float Progress = 0.0f;
+	if (SequenceSeconds >= 0.8f && SequenceSeconds < 1.5f)
+	{
+		Progress = FMath::GetMappedRangeValueClamped(
+			FVector2D(0.8f, 1.5f), FVector2D(0.0f, 0.2f), SequenceSeconds);
+	}
+	else if (SequenceSeconds >= 1.5f && SequenceSeconds < 2.5f)
+	{
+		Progress = FMath::GetMappedRangeValueClamped(
+			FVector2D(1.5f, 2.5f), FVector2D(0.2f, 0.55f), SequenceSeconds);
+	}
+	else if (SequenceSeconds >= 2.5f && SequenceSeconds < 3.8f)
+	{
+		Progress = FMath::GetMappedRangeValueClamped(
+			FVector2D(2.5f, 3.8f), FVector2D(0.55f, 0.88f), SequenceSeconds);
+	}
+	else if (SequenceSeconds >= 3.8f)
+	{
+		Progress = FMath::GetMappedRangeValueClamped(
+			FVector2D(3.8f, FMath::Max(3.8f, IntroDuration)), FVector2D(0.88f, 1.0f), SequenceSeconds);
+	}
 	if (IsValid(InkOverlay))
 	{
 		InkOverlay->SetInkProgress(Progress);
