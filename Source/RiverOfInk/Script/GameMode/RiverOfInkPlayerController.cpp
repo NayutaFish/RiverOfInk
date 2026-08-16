@@ -82,3 +82,23 @@ void ARiverOfInkPlayerController::DebugShowRewardSelection()
 
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugShowRewardSelection found no RoguelikeRewardManager."));
 }
+
+void ARiverOfInkPlayerController::DebugSelectFirstReward()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeRewardManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeRewardManager* RewardManager = *It)
+		{
+			RewardManager->SelectReward(0);
+			UE_LOG(LogRoguelike, Log, TEXT("DebugSelectFirstReward requested reward option 0."));
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectFirstReward found no RoguelikeRewardManager."));
+}

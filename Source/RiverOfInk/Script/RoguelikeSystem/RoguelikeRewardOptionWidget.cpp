@@ -455,9 +455,9 @@ bool URoguelikeRewardOptionWidget::PlaySelectionFeedback()
 			FVector2D(1.0f, 1.0f),
 			FVector2D::ZeroVector,
 			0.0f));
-		FWidgetAnimationDynamicEvent FinishedEvent;
-		FinishedEvent.BindDynamic(this, &URoguelikeRewardOptionWidget::HandleSelectionAnimationFinished);
-		BindToAnimationFinished(SelectionBrushAnimation, FinishedEvent);
+		// This animation is created at runtime. Completion is intentionally
+		// timer-driven below; binding a dynamic UMG delegate here requires a
+		// reflected UFUNCTION and can assert in editor builds.
 		PlayAnimation(SelectionBrushAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward, 1.0f, false);
 	}
 	else
@@ -814,28 +814,6 @@ void URoguelikeRewardOptionWidget::FinishSelectionFeedback()
 		World->GetTimerManager().ClearTimer(SelectionHoldTimer);
 	}
 	SelectionFinishedCallback.ExecuteIfBound();
-}
-
-void URoguelikeRewardOptionWidget::HandleSelectionAnimationFinished()
-{
-	if (!bSelectionPlaying)
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			SelectionHoldTimer,
-			this,
-			&URoguelikeRewardOptionWidget::HandleSelectionHoldFinished,
-			FMath::Max(0.0f, SelectionHoldDuration),
-			false);
-	}
-	else
-	{
-		FinishSelectionFeedback();
-	}
 }
 
 void URoguelikeRewardOptionWidget::HandleSelectionHoldFinished()

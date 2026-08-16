@@ -83,7 +83,6 @@ private:
 	void SetButtonStyle();
 	void SetVisualScale(float Scale);
 	void FinishSelectionFeedback();
-	void HandleSelectionAnimationFinished();
 	void HandleSelectionHoldFinished();
 
 	UFUNCTION()

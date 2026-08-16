@@ -24,6 +24,10 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugShowRewardSelection();
 
+	/** Development-only PIE helper used to select the first currently shown reward. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugSelectFirstReward();
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;
