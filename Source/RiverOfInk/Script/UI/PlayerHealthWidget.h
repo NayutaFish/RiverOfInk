@@ -105,6 +105,14 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UOverlay> HealthOverlay;
 
+    /** Full-size root for the health bar and frame layers. */
+    UPROPERTY(Transient)
+    TObjectPtr<UOverlay> HealthBarLayer;
+
+    /** Independent full-size layer for the ink frame. */
+    UPROPERTY(Transient)
+    TObjectPtr<UOverlay> HealthFrameLayer;
+
     UPROPERTY(Transient, meta = (BindWidgetOptional))
     TObjectPtr<UProgressBar> ProgressBar_EmptyHealth;
 
@@ -128,6 +136,14 @@ private:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
     FVector2D HealthWidgetMargin;
 
+    /** Inner pixel inset applied to the entire health bar layer; the frame keeps the full widget size. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+    FMargin HealthBarInset;
+
+    /** Positive expansion applied symmetrically to the Frame layer so it visually surrounds the bar. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+    FVector2D HealthFrameExpansion;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
     FLinearColor CurrentHealthColor;
 
@@ -148,9 +164,13 @@ private:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UTexture2D> HealthPaperTexture;
 
-    /** Normalized Box-brush margins: X preserves left/right ink caps, Y preserves top/bottom rails. */
+    /** Normalized horizontal Box-brush margin. Vertical slicing is intentionally disabled; Y is ignored at runtime. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "0.5"))
     FVector2D HealthFrameSliceFraction;
+
+    /** Normalized horizontal crop applied to the frame texture UVs to remove transparent side gutters. Y remains uncropped. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "0.49"))
+    FVector2D HealthFrameHorizontalUVCrop;
 
     /** Overall color for the runtime health text, including numbers and separators. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))

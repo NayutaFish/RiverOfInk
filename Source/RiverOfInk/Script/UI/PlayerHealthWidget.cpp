@@ -24,13 +24,16 @@ UPlayerHealthWidget::UPlayerHealthWidget(const FObjectInitializer& ObjectInitial
     : Super(ObjectInitializer)
     , HealthWidgetSize(350.0f, 30.0f)
     , HealthWidgetMargin(36.0f, 32.0f)
+    , HealthBarInset(2.0f)
+    , HealthFrameExpansion(8.0f, 5.0f)
     , CurrentHealthColor(FLinearColor::FromSRGBColor(FColor(255, 255, 255, 255)))
     , RecentDamageColor(FLinearColor::FromSRGBColor(FColor(188, 64, 36, 255)))
     , EmptyHealthColor(FLinearColor::FromSRGBColor(FColor(42, 39, 37, 255)))
     , HealthFrameColor(FLinearColor::FromSRGBColor(FColor(18, 16, 15, 255)))
     , HealthFrameTexture(nullptr)
     , HealthPaperTexture(nullptr)
-    , HealthFrameSliceFraction(0.12f, 0.20f)
+    , HealthFrameSliceFraction(0.12f, 0.0f)
+    , HealthFrameHorizontalUVCrop(0.06f, 0.0f)
     , HealthTextColor(FLinearColor::FromSRGBColor(FColor(255, 255, 255, 255)))
     , RecentDamageHoldTime(0.35f)
     , RecentDamageCollapseDuration(1.15f)
@@ -151,43 +154,56 @@ void UPlayerHealthWidget::BuildDefaultWidgetTree()
         HealthSlot->SetZOrder(10);
     }
 
-    HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_Health"));
+    HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_HealthRoot"));
     HealthSizeBox->SetContent(HealthOverlay);
 
-    auto AddFillChild = [this](UWidget* InWidget) -> UOverlaySlot*
+    HealthBarLayer = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_HealthBar"));
+    HealthFrameLayer = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_HealthFrame"));
+
+    auto AddOverlayChild = [](UOverlay* InParent, UWidget* InWidget, const FMargin& InPadding) -> UOverlaySlot*
     {
-        if (!HealthOverlay || !InWidget)
+        if (!InParent || !InWidget)
         {
             return nullptr;
         }
 
-        UOverlaySlot* Slot = HealthOverlay->AddChildToOverlay(InWidget);
+        UOverlaySlot* Slot = InParent->AddChildToOverlay(InWidget);
         if (Slot)
         {
             Slot->SetHorizontalAlignment(HAlign_Fill);
             Slot->SetVerticalAlignment(VAlign_Fill);
-            Slot->SetPadding(FMargin(0.0f));
+            Slot->SetPadding(InPadding);
         }
         return Slot;
     };
 
+    const FVector2D ClampedFrameExpansion(
+        FMath::Max(0.0f, HealthFrameExpansion.X),
+        FMath::Max(0.0f, HealthFrameExpansion.Y));
+    const FMargin FrameLayerPadding(
+        -ClampedFrameExpansion.X, -ClampedFrameExpansion.Y,
+        -ClampedFrameExpansion.X, -ClampedFrameExpansion.Y);
+
+    AddOverlayChild(HealthOverlay, HealthBarLayer, HealthBarInset);
+    AddOverlayChild(HealthOverlay, HealthFrameLayer, FrameLayerPadding);
+
     ProgressBar_EmptyHealth = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_EmptyHealth"));
-    AddFillChild(ProgressBar_EmptyHealth);
+    AddOverlayChild(HealthBarLayer, ProgressBar_EmptyHealth, FMargin(0.0f));
 
     ProgressBar_RecentDamage = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_RecentDamage"));
-    AddFillChild(ProgressBar_RecentDamage);
+    AddOverlayChild(HealthBarLayer, ProgressBar_RecentDamage, FMargin(0.0f));
 
     ProgressBar_CurrentHealth = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_CurrentHealth"));
-    AddFillChild(ProgressBar_CurrentHealth);
+    AddOverlayChild(HealthBarLayer, ProgressBar_CurrentHealth, FMargin(0.0f));
 
     Image_HealthFrame = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Image_HealthFrame"));
-    AddFillChild(Image_HealthFrame);
+    AddOverlayChild(HealthFrameLayer, Image_HealthFrame, FMargin(0.0f));
 
     Text_HealthDebug = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Text_HealthDebug"));
     Text_HealthDebug->SetJustification(ETextJustify::Center);
     Text_HealthDebug->SetColorAndOpacity(FSlateColor(HealthTextColor));
     Text_HealthDebug->SetVisibility(ESlateVisibility::Collapsed);
-    if (UOverlaySlot* DebugSlot = HealthOverlay->AddChildToOverlay(Text_HealthDebug))
+    if (UOverlaySlot* DebugSlot = AddOverlayChild(HealthOverlay, Text_HealthDebug, FMargin(0.0f)))
     {
         DebugSlot->SetHorizontalAlignment(HAlign_Center);
         DebugSlot->SetVerticalAlignment(VAlign_Center);
@@ -207,6 +223,21 @@ void UPlayerHealthWidget::ConfigureWidgetTree()
         }
     }
 
+    if (UOverlaySlot* HealthBarLayerSlot = Cast<UOverlaySlot>(HealthBarLayer ? HealthBarLayer->Slot : nullptr))
+    {
+        HealthBarLayerSlot->SetPadding(HealthBarInset);
+    }
+
+    if (UOverlaySlot* HealthFrameLayerSlot = Cast<UOverlaySlot>(HealthFrameLayer ? HealthFrameLayer->Slot : nullptr))
+    {
+        const FVector2D ClampedFrameExpansion(
+            FMath::Max(0.0f, HealthFrameExpansion.X),
+            FMath::Max(0.0f, HealthFrameExpansion.Y));
+        HealthFrameLayerSlot->SetPadding(FMargin(
+            -ClampedFrameExpansion.X, -ClampedFrameExpansion.Y,
+            -ClampedFrameExpansion.X, -ClampedFrameExpansion.Y));
+    }
+
     ConfigureProgressBar(ProgressBar_EmptyHealth, EmptyHealthColor, 1.0f);
     ConfigureProgressBar(ProgressBar_RecentDamage, RecentDamageColor, DamageGhostRatio);
     ConfigureProgressBar(ProgressBar_CurrentHealth, CurrentHealthColor, CurrentHealthRatio, HealthPaperTexture);
@@ -218,11 +249,12 @@ void UPlayerHealthWidget::ConfigureWidgetTree()
         {
             FrameBrush.SetResourceObject(HealthFrameTexture);
             FrameBrush.DrawAs = ESlateBrushDrawType::Box;
-            FrameBrush.Margin = FMargin(
-                FMath::Clamp(HealthFrameSliceFraction.X, 0.0f, 0.5f),
-                FMath::Clamp(HealthFrameSliceFraction.Y, 0.0f, 0.5f),
-                FMath::Clamp(HealthFrameSliceFraction.X, 0.0f, 0.5f),
-                FMath::Clamp(HealthFrameSliceFraction.Y, 0.0f, 0.5f));
+            const float HorizontalUVCrop = FMath::Clamp(HealthFrameHorizontalUVCrop.X, 0.0f, 0.49f);
+            FrameBrush.SetUVRegion(FBox2f(
+                FVector2f(HorizontalUVCrop, 0.0f),
+                FVector2f(1.0f - HorizontalUVCrop, 1.0f)));
+            const float HorizontalSlice = FMath::Clamp(HealthFrameSliceFraction.X, 0.0f, 0.5f);
+            FrameBrush.Margin = FMargin(HorizontalSlice, 0.0f, HorizontalSlice, 0.0f);
         }
         else
         {
