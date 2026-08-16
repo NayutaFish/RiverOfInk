@@ -64,7 +64,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void SetCooldownProgress(float InProgress);
 
-	/** Completed cooldown fraction: 0.0 immediately after cast, 1.0 when ready. */
+	/** Completed cooldown fraction: 0.0 immediately after cast, 1.0 at cooldown completion. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Skill Slot")
 	float GetCooldownProgress() const { return CooldownProgress; }
 
@@ -117,6 +117,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> SlotSizeBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> CooldownRingBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> SkillIconBox;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> OverlayRoot;
