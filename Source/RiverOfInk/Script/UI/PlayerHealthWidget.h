@@ -15,6 +15,7 @@ class UProgressBar;
 class USafeZone;
 class USizeBox;
 class UTextBlock;
+class UTexture2D;
 
 enum class EHealthDamageTrailState : uint8
 {
@@ -65,7 +66,7 @@ protected:
 private:
     void BuildDefaultWidgetTree();
     void ConfigureWidgetTree();
-    void ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent);
+    void ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent, UTexture2D* InFillTexture = nullptr);
 
     void BindToHealthComponent(UHealthComponent* InHealthComponent);
     void UnbindFromHealthComponent();
@@ -119,7 +120,7 @@ private:
     UPROPERTY(Transient, meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> Text_HealthDebug;
 
-    /** World-independent UI design size; the project DPI curve scales it per viewport. */
+    /** RectFull-compatible design size; X can be freely adjusted because the frame uses a Box/nine-slice brush. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
     FVector2D HealthWidgetSize;
 
@@ -138,6 +139,22 @@ private:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
     FLinearColor HealthFrameColor;
+
+    /** Transparent ink frame. Horizontal and vertical edges are preserved by the Box brush. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UTexture2D> HealthFrameTexture;
+
+    /** Low-contrast xuan paper used only by the current-health fill. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UTexture2D> HealthPaperTexture;
+
+    /** Normalized Box-brush margins: X preserves left/right ink caps, Y preserves top/bottom rails. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "0.5"))
+    FVector2D HealthFrameSliceFraction;
+
+    /** Overall color for the runtime health text, including numbers and separators. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor HealthTextColor;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|DamageTrail", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
     float RecentDamageHoldTime;

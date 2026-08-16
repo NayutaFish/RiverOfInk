@@ -15,17 +15,23 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
+#include "Engine/Texture2D.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Player/PlayerCharacter.h"
 #include "Styling/SlateTypes.h"
 
 UPlayerHealthWidget::UPlayerHealthWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
-    , HealthWidgetSize(340.0f, 34.0f)
+    , HealthWidgetSize(350.0f, 30.0f)
     , HealthWidgetMargin(36.0f, 32.0f)
     , CurrentHealthColor(FLinearColor::FromSRGBColor(FColor(255, 255, 255, 255)))
     , RecentDamageColor(FLinearColor::FromSRGBColor(FColor(188, 64, 36, 255)))
     , EmptyHealthColor(FLinearColor::FromSRGBColor(FColor(42, 39, 37, 255)))
     , HealthFrameColor(FLinearColor::FromSRGBColor(FColor(18, 16, 15, 255)))
+    , HealthFrameTexture(nullptr)
+    , HealthPaperTexture(nullptr)
+    , HealthFrameSliceFraction(0.12f, 0.20f)
+    , HealthTextColor(FLinearColor::FromSRGBColor(FColor(255, 255, 255, 255)))
     , RecentDamageHoldTime(0.35f)
     , RecentDamageCollapseDuration(1.15f)
 #if UE_BUILD_SHIPPING
@@ -34,6 +40,17 @@ UPlayerHealthWidget::UPlayerHealthWidget(const FObjectInitializer& ObjectInitial
     , bShowHealthDebugText(true)
 #endif
 {
+    static ConstructorHelpers::FObjectFinder<UTexture2D> FrameTexture(TEXT("/Game/RawContent/UI/Health/Textures/T_UI_PlayerHealth_Frame.T_UI_PlayerHealth_Frame"));
+    if (FrameTexture.Succeeded())
+    {
+        HealthFrameTexture = FrameTexture.Object;
+    }
+
+    static ConstructorHelpers::FObjectFinder<UTexture2D> PaperTexture(TEXT("/Game/RawContent/UI/Health/Textures/T_UI_PlayerHealth_Paper.T_UI_PlayerHealth_Paper"));
+    if (PaperTexture.Succeeded())
+    {
+        HealthPaperTexture = PaperTexture.Object;
+    }
 }
 
 TSharedRef<SWidget> UPlayerHealthWidget::RebuildWidget()
@@ -137,21 +154,38 @@ void UPlayerHealthWidget::BuildDefaultWidgetTree()
     HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_Health"));
     HealthSizeBox->SetContent(HealthOverlay);
 
+    auto AddFillChild = [this](UWidget* InWidget) -> UOverlaySlot*
+    {
+        if (!HealthOverlay || !InWidget)
+        {
+            return nullptr;
+        }
+
+        UOverlaySlot* Slot = HealthOverlay->AddChildToOverlay(InWidget);
+        if (Slot)
+        {
+            Slot->SetHorizontalAlignment(HAlign_Fill);
+            Slot->SetVerticalAlignment(VAlign_Fill);
+            Slot->SetPadding(FMargin(0.0f));
+        }
+        return Slot;
+    };
+
     ProgressBar_EmptyHealth = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_EmptyHealth"));
-    HealthOverlay->AddChildToOverlay(ProgressBar_EmptyHealth);
+    AddFillChild(ProgressBar_EmptyHealth);
 
     ProgressBar_RecentDamage = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_RecentDamage"));
-    HealthOverlay->AddChildToOverlay(ProgressBar_RecentDamage);
+    AddFillChild(ProgressBar_RecentDamage);
 
     ProgressBar_CurrentHealth = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ProgressBar_CurrentHealth"));
-    HealthOverlay->AddChildToOverlay(ProgressBar_CurrentHealth);
+    AddFillChild(ProgressBar_CurrentHealth);
 
     Image_HealthFrame = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Image_HealthFrame"));
-    HealthOverlay->AddChildToOverlay(Image_HealthFrame);
+    AddFillChild(Image_HealthFrame);
 
     Text_HealthDebug = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Text_HealthDebug"));
     Text_HealthDebug->SetJustification(ETextJustify::Center);
-    Text_HealthDebug->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    Text_HealthDebug->SetColorAndOpacity(FSlateColor(HealthTextColor));
     Text_HealthDebug->SetVisibility(ESlateVisibility::Collapsed);
     if (UOverlaySlot* DebugSlot = HealthOverlay->AddChildToOverlay(Text_HealthDebug))
     {
@@ -166,27 +200,52 @@ void UPlayerHealthWidget::ConfigureWidgetTree()
     {
         HealthSizeBox->SetWidthOverride(HealthWidgetSize.X);
         HealthSizeBox->SetHeightOverride(HealthWidgetSize.Y);
+
+        if (UCanvasPanelSlot* HealthSlot = Cast<UCanvasPanelSlot>(HealthSizeBox->Slot))
+        {
+            HealthSlot->SetSize(HealthWidgetSize);
+        }
     }
 
     ConfigureProgressBar(ProgressBar_EmptyHealth, EmptyHealthColor, 1.0f);
     ConfigureProgressBar(ProgressBar_RecentDamage, RecentDamageColor, DamageGhostRatio);
-    ConfigureProgressBar(ProgressBar_CurrentHealth, CurrentHealthColor, CurrentHealthRatio);
+    ConfigureProgressBar(ProgressBar_CurrentHealth, CurrentHealthColor, CurrentHealthRatio, HealthPaperTexture);
 
     if (Image_HealthFrame)
     {
-        FSlateBrush FrameBrush = FProgressBarStyle::GetDefault().FillImage;
-        FrameBrush.DrawAs = ESlateBrushDrawType::Border;
-        FrameBrush.Margin = FMargin(0.2f);
+        FSlateBrush FrameBrush;
+        if (HealthFrameTexture)
+        {
+            FrameBrush.SetResourceObject(HealthFrameTexture);
+            FrameBrush.DrawAs = ESlateBrushDrawType::Box;
+            FrameBrush.Margin = FMargin(
+                FMath::Clamp(HealthFrameSliceFraction.X, 0.0f, 0.5f),
+                FMath::Clamp(HealthFrameSliceFraction.Y, 0.0f, 0.5f),
+                FMath::Clamp(HealthFrameSliceFraction.X, 0.0f, 0.5f),
+                FMath::Clamp(HealthFrameSliceFraction.Y, 0.0f, 0.5f));
+        }
+        else
+        {
+            // Keep a visible fallback when the optional imported texture is absent.
+            FrameBrush = FProgressBarStyle::GetDefault().FillImage;
+            FrameBrush.DrawAs = ESlateBrushDrawType::Border;
+            FrameBrush.Margin = FMargin(0.2f);
+        }
         FrameBrush.TintColor = FSlateColor(HealthFrameColor);
         Image_HealthFrame->SetBrush(FrameBrush);
         Image_HealthFrame->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+
+    if (Text_HealthDebug)
+    {
+        Text_HealthDebug->SetColorAndOpacity(FSlateColor(HealthTextColor));
     }
 
     RefreshDebugText();
     ApplyHealthVisuals();
 }
 
-void UPlayerHealthWidget::ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent)
+void UPlayerHealthWidget::ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent, UTexture2D* InFillTexture)
 {
     if (!InProgressBar)
     {
@@ -196,6 +255,11 @@ void UPlayerHealthWidget::ConfigureProgressBar(UProgressBar* InProgressBar, cons
     FProgressBarStyle Style = FProgressBarStyle::GetDefault();
     Style.BackgroundImage = FSlateBrush();
     Style.BackgroundImage.DrawAs = ESlateBrushDrawType::NoDrawType;
+    if (InFillTexture)
+    {
+        Style.FillImage = FSlateBrush();
+        Style.FillImage.SetResourceObject(InFillTexture);
+    }
     Style.FillImage.DrawAs = ESlateBrushDrawType::Box;
     Style.FillImage.Margin = FMargin(0.0f);
     Style.MarqueeImage = Style.FillImage;
