@@ -11,8 +11,6 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -62,13 +60,7 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 
 	if (VisualPlane)
 	{
-		VisualPlane->SetVisibility(true, true);
-		if (UMaterialInterface* BaseMaterial = VisualPlane->GetMaterial(0))
-		{
-			UMaterialInstanceDynamic* BlueMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-			BlueMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.05f, 0.25f, 1.0f, 1.0f));
-			VisualPlane->SetMaterial(0, BlueMaterial);
-		}
+		VisualPlane->SetVisibility(false, true);
 	}
 
 #if ENABLE_DRAW_DEBUG

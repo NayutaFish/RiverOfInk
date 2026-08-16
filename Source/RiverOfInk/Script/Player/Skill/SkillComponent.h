@@ -138,7 +138,7 @@ public:
 	float CircularSlashRadius = 260.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.01"))
-	float CircularSlashLifeTime = 0.25f;
+	float CircularSlashLifeTime = 1.0f;
 
 	/** Twin Slash repeats the E hit after this short delay. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "s"))

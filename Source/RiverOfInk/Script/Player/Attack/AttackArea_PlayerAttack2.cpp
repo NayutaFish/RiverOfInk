@@ -16,8 +16,7 @@ AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
 	LifeTime = 1.5f;
 	Speed = 900.0f;
 	Radius = 50.0f;
-	bDrawDebugHitbox = true;
-	DebugHitboxColor = FColor(255, 90, 220, 220);
+	bDrawDebugHitbox = false;
 }
 
 void AAttackArea_PlayerAttack2::ApplyDamage_Implementation(AActor* Target)
