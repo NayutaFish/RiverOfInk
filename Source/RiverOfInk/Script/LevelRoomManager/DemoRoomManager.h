@@ -11,6 +11,7 @@ class AEnemySpawnPoint;
 class AActor;
 class USceneComponent;
 class ARoguelikeRewardManager;
+class UNiagaraSystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDemoRoomStarted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDemoRoomCleared);
@@ -34,6 +35,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room|Spawn")
 	TArray<TSubclassOf<AEnemyBase>> EnemyClasses;
+
+	/** 刷怪前播放的诞生特效（未设置则直接生成敌人） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room|Spawn")
+	TObjectPtr<UNiagaraSystem> SpawnVFX;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Room|Spawn")
 	bool bAutoStart = true;
@@ -99,6 +104,9 @@ private:
 
 	/** 定时检测刷新 */
 	void CheckAndSpawn();
+
+	/** 在指定位置生成敌人（含计数与日志） */
+	void SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform);
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Room")

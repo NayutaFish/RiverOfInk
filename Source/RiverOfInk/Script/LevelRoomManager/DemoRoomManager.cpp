@@ -7,10 +7,14 @@
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "LevelRoomManager/EnemySpawnPoint.h"
+#include "NiagaraFunctionLibrary.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RiverOfInk.h"
 #include "TimerManager.h"
+
+/** 刷怪特效播放后延迟生成敌人的时长（秒） */
+static constexpr float SpawnVFXDelaySeconds = 1.0f;
 
 ADemoRoomManager::ADemoRoomManager()
 {
@@ -175,22 +179,52 @@ void ADemoRoomManager::CheckAndSpawn()
 		TSubclassOf<AEnemyBase> ClassToSpawn = EnemyClasses[FMath::RandRange(0, EnemyClasses.Num() - 1)];
 		if (!ClassToSpawn) continue;
 
-		AEnemyBase* SpawnedEnemy = World->SpawnActor<AEnemyBase>(
-			ClassToSpawn,
-			SpawnPoint->GetSpawnTransform()
-		);
+		const FTransform SpawnTransform = SpawnPoint->GetSpawnTransform();
 
-		if (!IsValid(SpawnedEnemy)) continue;
+		// 刷怪前在刷怪点播放诞生特效（未配置则跳过）
+		if (SpawnVFX)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World, SpawnVFX, SpawnTransform.GetLocation());
+		}
 
-		SpawnedEnemy->OnEnemyDeath.AddDynamic(this, &ADemoRoomManager::HandleEnemyDeath);
-
-		ActiveEnemyList.Add(SpawnedEnemy);
-		++AliveEnemyCount;
-		--SpawnQuota;
-
-		UE_LOG(LogRiverOfInk, Log, TEXT("Spawned enemy: %s (alive=%d, quota=%d)"),
-			*SpawnedEnemy->GetName(), AliveEnemyCount, SpawnQuota);
+		// 特效播放 1 秒后再真正生成敌人（配额在生成时扣除）
+		FTimerHandle SpawnDelayTimerHandle;
+		GetWorldTimerManager().SetTimer(
+			SpawnDelayTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this, ClassToSpawn, SpawnTransform]()
+			{
+				SpawnEnemy(ClassToSpawn, SpawnTransform);
+			}),
+			SpawnVFXDelaySeconds,
+			false);
 	}
+}
+
+void ADemoRoomManager::SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform)
+{
+	if (bRoomCleared || SpawnQuota <= 0 || !ClassToSpawn)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AEnemyBase* SpawnedEnemy = World->SpawnActor<AEnemyBase>(ClassToSpawn, SpawnTransform);
+	if (!IsValid(SpawnedEnemy)) return;
+
+	SpawnedEnemy->OnEnemyDeath.AddDynamic(this, &ADemoRoomManager::HandleEnemyDeath);
+
+	ActiveEnemyList.Add(SpawnedEnemy);
+	++AliveEnemyCount;
+	--SpawnQuota;
+
+	UE_LOG(LogRiverOfInk, Log, TEXT("Spawned enemy: %s (alive=%d, quota=%d)"),
+		*SpawnedEnemy->GetName(), AliveEnemyCount, SpawnQuota);
 }
 
 void ADemoRoomManager::HandleEnemyDeath(AActor* DeadEnemy)
