@@ -16,12 +16,15 @@
 namespace
 {
 	static const FName CooldownProgressParameter(TEXT("CooldownProgress"));
+	static const FName RevealStartAngleParameter(TEXT("RevealStartAngle"));
+	static const FName RevealSweepAngleParameter(TEXT("RevealSweepAngle"));
 	static const FName InkTextureParameter(TEXT("InkTexture"));
 	static const TCHAR* CooldownMaterialPath = TEXT("/Game/Blueprint/GameSystem/UI/Skill/M_UI_SkillCooldown.M_UI_SkillCooldown");
 	static const TCHAR* CooldownTexturePath = TEXT("/Game/RawContent/UI/Texture/T_UI_SkillCooldown_Ink.T_UI_SkillCooldown_Ink");
 
 	constexpr float ReadyFeedbackDuration = 0.20f;
 	constexpr float FadeOutDuration = 0.65f;
+	constexpr float ReadyPulseScale = 1.04f;
 }
 
 TSharedRef<SWidget> UPlayerSkillSlotWidget::RebuildWidget()
@@ -36,9 +39,9 @@ void UPlayerSkillSlotWidget::NativeConstruct()
 	SetIsFocusable(false);
 	BuildDefaultWidgetTree();
 	EnsureCooldownMaterial();
-	// The skill icon is persistent HUD content; only the ink ring changes with cooldown.
-	SetVisibility(ESlateVisibility::HitTestInvisible);
-	SetRenderOpacity(1.0f);
+	// Ready slots are hidden independently. Starting a cooldown reveals only this slot.
+	SetVisibility(ESlateVisibility::Collapsed);
+	SetRenderOpacity(0.0f);
 	SetVisualScale(1.0f);
 	SetCooldownProgress(0.0f);
 }
@@ -93,8 +96,8 @@ void UPlayerSkillSlotWidget::StartCooldown(float InCooldownDuration)
 
 	if (!bCooldownActive)
 	{
-		SetVisibility(ESlateVisibility::HitTestInvisible);
-		SetRenderOpacity(1.0f);
+		SetVisibility(ESlateVisibility::Collapsed);
+		SetRenderOpacity(0.0f);
 		SetVisualScale(1.0f);
 		SetCooldownProgress(0.0f);
 		return;
@@ -166,6 +169,14 @@ void UPlayerSkillSlotWidget::SetCooldownProgress(float InProgress)
 	}
 }
 
+void UPlayerSkillSlotWidget::SetCooldownRevealAngleRange(float InStartAngle, float InSweepAngle)
+{
+	CooldownRevealStartAngle = FMath::Clamp(InStartAngle, -360.0f, 360.0f);
+	CooldownRevealSweepAngle = FMath::Clamp(InSweepAngle, 0.0f, 360.0f);
+	EnsureCooldownMaterial();
+	ApplyCooldownRevealParameters();
+}
+
 void UPlayerSkillSlotWidget::BuildDefaultWidgetTree()
 {
 	if (!WidgetTree || WidgetTree->RootWidget)
@@ -181,19 +192,25 @@ void UPlayerSkillSlotWidget::BuildDefaultWidgetTree()
 	OverlayRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Overlay_Root"));
 	SlotSizeBox->AddChild(OverlayRoot);
 
+	CooldownRingBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CooldownRing"));
+	CooldownRingBox->SetWidthOverride(CooldownInkSize);
+	CooldownRingBox->SetHeightOverride(CooldownInkSize);
 	ImageCooldownInk = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Image_CooldownInk"));
-	ImageCooldownInk->SetDesiredSizeOverride(FVector2D(CooldownInkSize, CooldownInkSize));
 	ImageCooldownInk->SetColorAndOpacity(CooldownInkColor);
-	if (UOverlaySlot* InkSlot = OverlayRoot->AddChildToOverlay(ImageCooldownInk))
+	CooldownRingBox->AddChild(ImageCooldownInk);
+	if (UOverlaySlot* InkSlot = OverlayRoot->AddChildToOverlay(CooldownRingBox))
 	{
 		InkSlot->SetHorizontalAlignment(HAlign_Center);
 		InkSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
+	SkillIconBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SkillIcon"));
+	SkillIconBox->SetWidthOverride(IconSize);
+	SkillIconBox->SetHeightOverride(IconSize);
 	ImageSkillIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Image_SkillIcon"));
-	ImageSkillIcon->SetDesiredSizeOverride(FVector2D(IconSize, IconSize));
 	ImageSkillIcon->SetColorAndOpacity(SkillIconColor);
-	if (UOverlaySlot* IconSlot = OverlayRoot->AddChildToOverlay(ImageSkillIcon))
+	SkillIconBox->AddChild(ImageSkillIcon);
+	if (UOverlaySlot* IconSlot = OverlayRoot->AddChildToOverlay(SkillIconBox))
 	{
 		IconSlot->SetHorizontalAlignment(HAlign_Center);
 		IconSlot->SetVerticalAlignment(VAlign_Center);
@@ -249,12 +266,28 @@ void UPlayerSkillSlotWidget::EnsureCooldownMaterial()
 		CooldownMaterialInstance->SetTextureParameterValue(InkTextureParameter, LoadedCooldownTexture);
 	}
 	CooldownMaterialInstance->SetScalarParameterValue(CooldownProgressParameter, CooldownProgress);
+	ApplyCooldownRevealParameters();
 	ImageCooldownInk->SetBrushFromMaterial(CooldownMaterialInstance);
 	ImageCooldownInk->SetColorAndOpacity(CooldownInkColor);
 	UE_LOG(LogTemp, Verbose, TEXT("Skill cooldown MID ready: Slot=%s MID=%s Texture=%s."),
 		*GetNameSafe(this),
 		*GetNameSafe(CooldownMaterialInstance),
 		*GetNameSafe(LoadedCooldownTexture));
+}
+
+void UPlayerSkillSlotWidget::ApplyCooldownRevealParameters()
+{
+	if (!CooldownMaterialInstance)
+	{
+		return;
+	}
+
+	CooldownMaterialInstance->SetScalarParameterValue(
+		RevealStartAngleParameter,
+		FMath::Clamp(CooldownRevealStartAngle, -360.0f, 360.0f));
+	CooldownMaterialInstance->SetScalarParameterValue(
+		RevealSweepAngleParameter,
+		FMath::Clamp(CooldownRevealSweepAngle, 0.0f, 360.0f));
 }
 
 void UPlayerSkillSlotWidget::SetVisualScale(float Scale)
@@ -280,7 +313,7 @@ void UPlayerSkillSlotWidget::UpdateReadyFeedback()
 		if (Elapsed < ReadyFeedbackDuration)
 		{
 			const float Alpha = FMath::Clamp(Elapsed / ReadyFeedbackDuration, 0.0f, 1.0f);
-			SetVisualScale(1.0f + 0.05f * FMath::Sin(Alpha * PI));
+			SetVisualScale(1.0f + (ReadyPulseScale - 1.0f) * FMath::Sin(Alpha * PI));
 			return;
 		}
 
@@ -292,12 +325,14 @@ void UPlayerSkillSlotWidget::UpdateReadyFeedback()
 	if (SlotState == EPlayerSkillHudSlotState::FadeOut)
 	{
 		const float FadeAlpha = FMath::Clamp((Now - FadeStartTime) / FadeOutDuration, 0.0f, 1.0f);
+		SetRenderOpacity(1.0f - FadeAlpha);
 		if (FadeAlpha >= 1.0f)
 		{
 			ClearFeedbackTimer();
 			SlotState = EPlayerSkillHudSlotState::Hidden;
-			SetVisibility(ESlateVisibility::HitTestInvisible);
-			SetRenderOpacity(1.0f);
+			SetVisibility(ESlateVisibility::Collapsed);
+			SetRenderOpacity(0.0f);
+			SetVisualScale(1.0f);
 			SetCooldownProgress(0.0f);
 		}
 	}

@@ -64,7 +64,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void SetCooldownProgress(float InProgress);
 
-	/** Completed cooldown fraction: 0.0 immediately after cast, 1.0 when ready. */
+	/** Set the Alpha Reveal start angle and clockwise sweep range in degrees. */
+	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot|Cooldown")
+	void SetCooldownRevealAngleRange(float InStartAngle, float InSweepAngle);
+
+	/** Completed cooldown fraction: 0.0 immediately after cast, 1.0 at cooldown completion. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Skill Slot")
 	float GetCooldownProgress() const { return CooldownProgress; }
 
@@ -103,6 +107,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cooldown")
 	TObjectPtr<UTexture2D> CooldownTexture;
 
+	/** Alpha Reveal start angle in degrees. The current default begins around 8 o'clock. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cooldown|Reveal", meta = (ClampMin = "-360.0", ClampMax = "360.0", UIMin = "-360.0", UIMax = "360.0"))
+	float CooldownRevealStartAngle = 150.0f;
+
+	/** Total clockwise Alpha Reveal range in degrees. 360 degrees reveals a complete ring. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cooldown|Reveal", meta = (ClampMin = "0.0", ClampMax = "360.0", UIMin = "0.0", UIMax = "360.0"))
+	float CooldownRevealSweepAngle = 360.0f;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -111,12 +123,19 @@ protected:
 private:
 	void BuildDefaultWidgetTree();
 	void EnsureCooldownMaterial();
+	void ApplyCooldownRevealParameters();
 	void SetVisualScale(float Scale);
 	void UpdateReadyFeedback();
 	void ClearFeedbackTimer();
 
 	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> SlotSizeBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> CooldownRingBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> SkillIconBox;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> OverlayRoot;
