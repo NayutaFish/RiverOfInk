@@ -2,7 +2,7 @@
 
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 
-#include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/GameInstance.h"
@@ -18,19 +18,19 @@ ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
-	RootComponent = TriggerBox;
-	TriggerBox->SetBoxExtent(FVector(220.0f, 220.0f, 120.0f));
-	TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	TriggerSphere = CreateDefaultSubobject<USphereComponent>(TEXT("TriggerSphere"));
+	RootComponent = TriggerSphere;
+	TriggerSphere->SetSphereRadius(TriggerRadius);
+	TriggerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	TriggerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	// PlayerCharacter uses the project's long-term PlayerHitbox channel.
 	// Keep this explicit instead of relying on the built-in Pawn channel.
-	TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
-	TriggerBox->SetGenerateOverlapEvents(true);
-	TriggerBox->ShapeColor = FColor(40, 220, 90, 180);
+	TriggerSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
+	TriggerSphere->SetGenerateOverlapEvents(true);
+	TriggerSphere->ShapeColor = FColor(40, 220, 90, 180);
 
 	ExitMarkerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExitMarkerMesh"));
-	ExitMarkerMesh->SetupAttachment(TriggerBox);
+	ExitMarkerMesh->SetupAttachment(TriggerSphere);
 	ExitMarkerMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ExitMarkerMesh->SetGenerateOverlapEvents(false);
 	ExitMarkerMesh->SetRelativeScale3D(FVector(3.0f, 3.0f, 2.0f));
@@ -56,18 +56,31 @@ void ARoguelikeExitTrigger::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (TriggerBox)
+	if (TriggerSphere)
 	{
 		// Re-assert the project collision contract at runtime. The placed actor or
 		// a derived Blueprint can serialize an older response table over constructor defaults.
-		TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-		TriggerBox->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
-		TriggerBox->SetGenerateOverlapEvents(true);
-		TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
+		TriggerSphere->SetSphereRadius(TriggerRadius);
+		TriggerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		TriggerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+		TriggerSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel3, ECR_Overlap);
+		TriggerSphere->SetGenerateOverlapEvents(true);
+		TriggerSphere->OnComponentBeginOverlap.AddDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
 	}
 
-	if (ExitMarkerMesh)
+	if (ExitVisualClass)
+	{
+		// 生成美术配置的传送门蓝图（替代代码圆柱）
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		ExitVisualActor = GetWorld()->SpawnActor<AActor>(ExitVisualClass, GetActorLocation(), GetActorRotation(), Params);
+		if (ExitVisualActor)
+		{
+			ExitVisualActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+			ExitVisualActor->SetActorHiddenInGame(!bIsActivated);
+		}
+	}
+	else if (ExitMarkerMesh)
 	{
 		ExitMarkerMesh->SetHiddenInGame(!bIsActivated);
 		if (UMaterialInterface* BaseMaterial = ExitMarkerMesh->GetMaterial(0))
@@ -106,9 +119,9 @@ void ARoguelikeExitTrigger::BeginPlay()
 
 void ARoguelikeExitTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (TriggerBox)
+	if (TriggerSphere)
 	{
-		TriggerBox->OnComponentBeginOverlap.RemoveDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
+		TriggerSphere->OnComponentBeginOverlap.RemoveDynamic(this, &ARoguelikeExitTrigger::HandleBeginOverlap);
 	}
 
 	if (IsValid(RewardManager))
@@ -160,7 +173,11 @@ void ARoguelikeExitTrigger::ActivateExit()
 	}
 
 	bIsActivated = true;
-	if (ExitMarkerMesh)
+	if (ExitVisualActor)
+	{
+		ExitVisualActor->SetActorHiddenInGame(false);
+	}
+	else if (ExitMarkerMesh)
 	{
 		ExitMarkerMesh->SetHiddenInGame(false);
 	}
@@ -168,10 +185,10 @@ void ARoguelikeExitTrigger::ActivateExit()
 
 	// If the player was already standing inside the whitebox volume when the
 	// reward was chosen, no new BeginOverlap event is guaranteed to arrive.
-	if (TriggerBox && !bHasTriggered)
+	if (TriggerSphere && !bHasTriggered)
 	{
 		TArray<AActor*> OverlappingPlayers;
-		TriggerBox->GetOverlappingActors(OverlappingPlayers, APlayerCharacter::StaticClass());
+		TriggerSphere->GetOverlappingActors(OverlappingPlayers, APlayerCharacter::StaticClass());
 		for (AActor* Actor : OverlappingPlayers)
 		{
 			if (APlayerCharacter* Player = Cast<APlayerCharacter>(Actor))

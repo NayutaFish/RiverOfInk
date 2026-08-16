@@ -58,6 +58,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Exit")
 	TSubclassOf<ARoguelikeExitTrigger> ExitTriggerClass;
 
+	/** 传送门视觉蓝图（赋值后生成出口时替换默认绿色圆柱；未设置则用圆柱） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Exit")
+	TSubclassOf<AActor> ExitVisualClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Exit")
 	FVector ExitTriggerSpawnOffset = FVector(0.0f, 500.0f, 120.0f);
 

@@ -80,6 +80,11 @@ void ARoguelikeRewardManager::EnsureExitTrigger()
 	}
 
 	ActiveExitTrigger->RewardManager = this;
+	if (ExitVisualClass)
+	{
+		// 生成前把视觉蓝图类传给出口，BeginPlay 时按此类生成传送门视觉
+		ActiveExitTrigger->ExitVisualClass = ExitVisualClass;
+	}
 	UGameplayStatics::FinishSpawningActor(ActiveExitTrigger, SpawnTransform);
 	UE_LOG(LogRoguelike, Log, TEXT("Roguelike exit trigger ready: %s at %s."),
 		*ActiveExitTrigger->GetName(), *SpawnLocation.ToString());
