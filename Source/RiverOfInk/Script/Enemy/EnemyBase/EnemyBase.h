@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/GlobalStructs.h"
+#include "Enemy/EnemyBase/EnemyHealthTypes.h"
 #include "EnemyBase.generated.h"
 
 class UStaticMeshComponent;
@@ -16,7 +17,12 @@ class UEnemyHealthWidget;
 class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnemyHealthChangedSignature, float, CurrentHealth, float, MaxHealth);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
+	FOnEnemyHealthChangedSignature,
+	float, PreviousHealth,
+	float, CurrentHealth,
+	float, MaxHealth,
+	EEnemyHealthChangeReason, ChangeReason);
 
 /**
  * Shared enemy base for the first melee state-machine pass.
@@ -52,9 +58,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
-	/** 世界空间敌人血条组件；首次有效受伤前隐藏。 */
+	/** Screen-space enemy health widget component; visibility is owned by the enemy lifecycle. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|UI")
 	TObjectPtr<UWidgetComponent> HealthWidgetComponent;
+
+	/** Gameplay-owned rank consumed by the shared Enemy Health widget. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Identity")
+	EEnemyRank EnemyRank = EEnemyRank::Normal;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
@@ -134,17 +144,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.0"))
 	float HealthWidgetHeightOffset = 25.0f;
 
-	/** 世界空间血条尺寸；支持在敌人蓝图中按镜头距离调节。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
-	FVector2D HealthWidgetDrawSize = FVector2D(180.0f, 24.0f);
+	/**
+	 * 血条锚点的左右偏移，使用敌人组件本地 Y 轴。
+	 * 正值向本地右侧偏移，负值向本地左侧偏移，单位为厘米。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (UIMin = "-100.0", UIMax = "100.0"))
+	float HealthWidgetHorizontalOffset = 0.0f;
 
-	/** 世界空间血条缩放；默认值避免俯视相机下血条过小。 */
+	/** Screen-space normal enemy widget size in pixels. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
+	FVector2D HealthWidgetDrawSize = FVector2D(100.0f, 10.0f);
+
+	/** Screen-space elite enemy widget size in pixels. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
+	FVector2D EliteHealthWidgetDrawSize = FVector2D(130.0f, 16.0f);
+
+	/** Optional screen-space scale for both normal and elite widgets. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.05", ClampMax = "1.0"))
-	float HealthWidgetWorldScale = 0.25f;
-
-	/** 使血条始终朝向当前玩家相机。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
-	bool bHealthWidgetFaceCamera = true;
+	float HealthWidgetWorldScale = 1.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Attack")
 	FTimerHandle AttackTimerHandle;
@@ -156,7 +173,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyDeathSignature OnDead;
 
-	/** 有效伤害结算后广播；EnemyHealthWidget 只在此事件触发时刷新。 */
+	/** Final health changes; the widget consumes this event instead of polling or raw hit input. */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnEnemyHealthChangedSignature OnEnemyHealthChanged;
 
@@ -298,6 +315,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Enemy|Stats")
 	float GetCurrentHealth() const { return CurrentHealth; }
 
+	UFUNCTION(BlueprintPure, Category = "Enemy|Identity")
+	EEnemyRank GetEnemyRank() const { return EnemyRank; }
+
 	UFUNCTION(BlueprintPure, Category = "Enemy|Hard Value")
 	float GetMaxHardValue() const { return MaxHardValue; }
 
@@ -306,6 +326,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
+
+	/** Minimal gameplay healing entry point used by the Phase 1 health contract. */
+	UFUNCTION(BlueprintCallable, Category = "Enemy|Health")
+	void Heal(float Amount);
 
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TestDie();
@@ -336,8 +360,8 @@ public:
 
 private:
 	void NormalizeDefenseFromLegacy();
+	void BroadcastHealthChanged(float PreviousHealth, EEnemyHealthChangeReason ChangeReason);
 	void UpdateHardValue(float DeltaTime);
-	void UpdateHealthWidgetFacingCamera();
 	float ResolveHardDamage(const FTakeDamageInfo& InInfo) const;
 	void DisableStateComponentTicks();
 	UStateBase* EnsureStateComponent(TSubclassOf<UStateBase> StateClass);

@@ -4,7 +4,6 @@
 
 #include "Common/AttackAreaBase.h"
 #include "Common/StateBase.h"
-#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -12,11 +11,11 @@
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Engine/World.h"
-#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
 #include "UI/EnemyHealthWidget.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Charge.h"
 #include "TimerManager.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Dead.h"
@@ -44,14 +43,23 @@ AEnemyBase::AEnemyBase()
 
 	HealthWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthWidgetComponent"));
 	HealthWidgetComponent->SetupAttachment(CapsuleCollision);
-	HealthWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+	HealthWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
 	HealthWidgetComponent->SetDrawSize(HealthWidgetDrawSize);
 	HealthWidgetComponent->SetPivot(FVector2D(0.5f, 1.0f));
 	HealthWidgetComponent->SetRelativeScale3D(FVector(HealthWidgetWorldScale));
 	HealthWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HealthWidgetComponent->SetTwoSided(true);
 	HealthWidgetComponent->SetVisibility(false);
-	HealthWidgetClass = UEnemyHealthWidget::StaticClass();
+	static ConstructorHelpers::FClassFinder<UEnemyHealthWidget> EnemyHealthWidgetClassFinder(
+		TEXT("/Game/Blueprint/GamePlay/Enemy/WBP_EnemyHealth"));
+	if (EnemyHealthWidgetClassFinder.Succeeded())
+	{
+		HealthWidgetClass = EnemyHealthWidgetClassFinder.Class;
+	}
+	else
+	{
+		HealthWidgetClass = UEnemyHealthWidget::StaticClass();
+	}
 	HealthWidgetComponent->SetWidgetClass(HealthWidgetClass);
 }
 
@@ -70,32 +78,39 @@ void AEnemyBase::BeginPlay()
 	{
 		HealthWidgetComponent->SetRelativeLocation(FVector(
 			0.0f,
-			0.0f,
+			HealthWidgetHorizontalOffset,
 			CapsuleCollision->GetScaledCapsuleHalfHeight() + HealthWidgetHeightOffset));
+		HealthWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
 		TSubclassOf<UEnemyHealthWidget> WidgetClass = HealthWidgetClass;
 		if (!WidgetClass)
 		{
 			WidgetClass = UEnemyHealthWidget::StaticClass();
 		}
-		HealthWidgetComponent->SetDrawSize(HealthWidgetDrawSize);
+		const FVector2D WidgetDrawSize = EnemyRank == EEnemyRank::Elite
+			? EliteHealthWidgetDrawSize
+			: HealthWidgetDrawSize;
+		HealthWidgetComponent->SetDrawSize(WidgetDrawSize);
 		HealthWidgetComponent->SetRelativeScale3D(FVector(HealthWidgetWorldScale));
 		HealthWidgetComponent->SetWidgetClass(WidgetClass);
 		HealthWidgetComponent->InitWidget();
-		HealthWidgetComponent->SetVisibility(false);
 
 		if (UEnemyHealthWidget* HealthWidget = Cast<UEnemyHealthWidget>(
 			HealthWidgetComponent->GetUserWidgetObject()))
 		{
 			HealthWidget->InitializeForEnemy(this);
 		}
+		HealthWidgetComponent->SetVisibility(true);
 
 		UE_LOG(LogRiverOfInk, Log,
-			TEXT("Enemy %s health widget initialized: Widget=%s Scale=%.2f ComponentVisible=%s."),
+			TEXT("Enemy %s health widget initialized: Widget=%s Space=Screen Rank=%d Size=(%.0f,%.0f) ComponentVisible=%s."),
 			*GetName(),
 			*GetNameSafe(HealthWidgetComponent->GetUserWidgetObject()),
-			HealthWidgetWorldScale,
+			static_cast<int32>(EnemyRank),
+			WidgetDrawSize.X,
+			WidgetDrawSize.Y,
 			HealthWidgetComponent->IsVisible() ? TEXT("true") : TEXT("false"));
 	}
+	BroadcastHealthChanged(CurrentHealth, EEnemyHealthChangeReason::Initialize);
 	RefreshCombatTarget();
 	EnsureStateComponent(UEnemyState_Charge::StaticClass());
 	EnsureStateComponent(UEnemyState_TargetLost::StaticClass());
@@ -114,7 +129,6 @@ void AEnemyBase::Tick(float DeltaTime)
 	{
 		return;
 	}
-	UpdateHealthWidgetFacingCamera();
 
 	UpdateHardValue(DeltaTime);
 	RefreshCombatTarget();
@@ -201,6 +215,7 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	LastDamageInfo = InInfo;
 	LastAttackArea = InAttackArea;
 
+	const float PreviousHealth = CurrentHealth;
 	const float HardValueBefore = CurrentHardValue;
 	const bool bHardBreakSuppressed = HardBreakCooldownRemaining > KINDA_SMALL_NUMBER;
 	const float HardDamage = !bHardBreakSuppressed
@@ -243,14 +258,19 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	DamageResult.bKilled = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
 	LastDamageResult = DamageResult;
 
+	const bool bWillEnterDeadState = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
+	if (CurrentHealth <= 0.0f && !bWillEnterDeadState)
+	{
+		CurrentHealth = 1.0f;
+	}
+
 	if (FinalDamage > 0)
 	{
-		if (HealthWidgetComponent && CurrentHealth < MaxHealth)
+		if (HealthWidgetComponent)
 		{
 			HealthWidgetComponent->SetVisibility(true);
-			UpdateHealthWidgetFacingCamera();
 		}
-		OnEnemyHealthChanged.Broadcast(CurrentHealth, MaxHealth);
+		BroadcastHealthChanged(PreviousHealth, EEnemyHealthChangeReason::Damage);
 
 		UE_LOG(LogRiverOfInk, Log,
 			TEXT("Enemy %s health widget damage refresh: ComponentVisible=%s WidgetVisible=%s Health=%.1f/%.1f."),
@@ -289,10 +309,6 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 		{
 			Die();
 		}
-		else
-		{
-			CurrentHealth = 1.0f;
-		}
 	}
 
 	// A nested damage listener may have killed the enemy or already caused a
@@ -308,6 +324,21 @@ void AEnemyBase::TestDie()
 	Die();
 }
 
+void AEnemyBase::Heal(float Amount)
+{
+	if (bIsDead || Amount <= 0.0f || CurrentHealth >= MaxHealth)
+	{
+		return;
+	}
+
+	const float PreviousHealth = CurrentHealth;
+	CurrentHealth = FMath::Min(MaxHealth, CurrentHealth + Amount);
+	if (CurrentHealth > PreviousHealth + KINDA_SMALL_NUMBER)
+	{
+		BroadcastHealthChanged(PreviousHealth, EEnemyHealthChangeReason::Heal);
+	}
+}
+
 void AEnemyBase::Die()
 {
 	if (bIsDead)
@@ -315,11 +346,18 @@ void AEnemyBase::Die()
 		return;
 	}
 
+	const float PreviousHealth = CurrentHealth;
 	bIsDead = true;
 	CurrentHealth = 0.0f;
+	if (PreviousHealth > KINDA_SMALL_NUMBER)
+	{
+		BroadcastHealthChanged(PreviousHealth, EEnemyHealthChangeReason::Death);
+	}
 	if (HealthWidgetComponent)
 	{
-		HealthWidgetComponent->SetVisibility(false);
+		// Keep the zero-health bar visible through the existing death window;
+		// actor destruction owns the final widget teardown.
+		HealthWidgetComponent->SetVisibility(true);
 	}
 	if (CapsuleCollision)
 	{
@@ -401,6 +439,18 @@ void AEnemyBase::NormalizeDefenseFromLegacy()
 	MagicResistance = Defense;
 }
 
+void AEnemyBase::BroadcastHealthChanged(float PreviousHealth, EEnemyHealthChangeReason ChangeReason)
+{
+	const float SafeMaxHealth = FMath::Max(1.0f, MaxHealth);
+	const float SafePreviousHealth = FMath::Clamp(PreviousHealth, 0.0f, SafeMaxHealth);
+	const float SafeCurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, SafeMaxHealth);
+	OnEnemyHealthChanged.Broadcast(
+		SafePreviousHealth,
+		SafeCurrentHealth,
+		SafeMaxHealth,
+		ChangeReason);
+}
+
 void AEnemyBase::UpdateHardValue(float DeltaTime)
 {
 	if (MaxHardValue <= KINDA_SMALL_NUMBER || bIsDead)
@@ -443,35 +493,6 @@ float AEnemyBase::ResolveHardDamage(const FTakeDamageInfo& InInfo) const
 	return FMath::Max(0.0f, InInfo.DamageValue * DefaultHardDamageScale);
 }
 
-void AEnemyBase::UpdateHealthWidgetFacingCamera()
-{
-	if (!bHealthWidgetFaceCamera || !HealthWidgetComponent || !HealthWidgetComponent->IsVisible())
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	APlayerController* PlayerController = World
-		? UGameplayStatics::GetPlayerController(World, 0)
-		: nullptr;
-	if (!PlayerController || !PlayerController->PlayerCameraManager)
-	{
-		return;
-	}
-
-	const FVector ToCamera = PlayerController->PlayerCameraManager->GetCameraLocation()
-		- HealthWidgetComponent->GetComponentLocation();
-	if (ToCamera.IsNearlyZero())
-	{
-		return;
-	}
-
-	const FRotator DesiredRotation = ToCamera.Rotation();
-	if (!HealthWidgetComponent->GetComponentRotation().Equals(DesiredRotation, 0.1f))
-	{
-		HealthWidgetComponent->SetWorldRotation(DesiredRotation);
-	}
-}
 void AEnemyBase::RefreshCombatTarget()
 {
 	if (IsValid(CachedPlayer.Get()) && !CachedPlayer->IsDead())
