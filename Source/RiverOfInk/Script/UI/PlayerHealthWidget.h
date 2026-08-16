@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -8,54 +8,194 @@
 
 class APlayerCharacter;
 class UCanvasPanel;
+class UHealthComponent;
+class UImage;
+class UOverlay;
 class UProgressBar;
+class USafeZone;
+class USizeBox;
 class UTextBlock;
-struct FPlayerHealthChangedEvent;
+class UTexture2D;
+
+enum class EHealthDamageTrailState : uint8
+{
+    Idle,
+    Hold,
+    Collapse
+};
 
 /**
- * First-pass player health HUD.
+ * Player-only health HUD.
  *
- * The widget builds a small progress bar in C++ so it works without a
- * dedicated Blueprint asset. A Blueprint subclass can still override the
- * class and replace the visual tree later.
+ * Gameplay health remains owned by UHealthComponent. This widget owns only
+ * display state: the current ratio, a temporary damage ghost, and optional
+ * development text. The native tree is also named so a WBP subclass can bind
+ * the same layers without changing the data flow.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API UPlayerHealthWidget : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	/** Bind the widget to the current player and immediately refresh its value. */
-	UFUNCTION(BlueprintCallable, Category = "HUD|Health")
-	void InitializeForPlayer(APlayerCharacter* InPlayer);
+    UPlayerHealthWidget(const FObjectInitializer& ObjectInitializer);
 
-	/** Refresh the visual state from a health event. */
-	UFUNCTION(BlueprintCallable, Category = "HUD|Health")
-	void RefreshHealth(float InMaxHealth, float InCurrentHealth);
+    /** Bind the widget to the current player and immediately establish a clean baseline. */
+    UFUNCTION(BlueprintCallable, Category = "HUD|Health")
+    void InitializeForPlayer(APlayerCharacter* InPlayer);
+
+    /** Force a non-animated health snapshot. Parameter order is kept for existing callers. */
+    UFUNCTION(BlueprintCallable, Category = "HUD|Health")
+    void RefreshHealth(float InMaxHealth, float InCurrentHealth);
+
+    /** Toggle development-only Current / Max text without changing bar layout. */
+    UFUNCTION(BlueprintCallable, Category = "HUD|Health|Debug")
+    void SetShowHealthDebugText(bool bInShow);
+
+    UFUNCTION(BlueprintPure, Category = "HUD|Health")
+    float GetCurrentHealthRatio() const { return CurrentHealthRatio; }
+
+    UFUNCTION(BlueprintPure, Category = "HUD|Health")
+    float GetDamageGhostRatio() const { return DamageGhostRatio; }
 
 protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
+    virtual TSharedRef<SWidget> RebuildWidget() override;
+    virtual void NativeConstruct() override;
+    virtual void NativeDestruct() override;
 
 private:
-	void BuildDefaultWidgetTree();
-	void SubscribeToHealthEvents();
-	void UnsubscribeFromHealthEvents();
-	void HandleHealthChanged(const FPlayerHealthChangedEvent& Event);
+    void BuildDefaultWidgetTree();
+    void ConfigureWidgetTree();
+    void ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent, UTexture2D* InFillTexture = nullptr);
 
-	UPROPERTY(Transient)
-	TObjectPtr<APlayerCharacter> ObservedPlayer;
+    void BindToHealthComponent(UHealthComponent* InHealthComponent);
+    void UnbindFromHealthComponent();
 
-	UPROPERTY(Transient)
-	TObjectPtr<UCanvasPanel> RootCanvas;
+    UFUNCTION()
+    void HandleHealthChanged(float InCurrentHealth, float InMaxHealth);
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UProgressBar> HealthBar;
+    void ResetHealthState(float InCurrentHealth, float InMaxHealth);
+    void ApplyHealthVisuals();
+    void RefreshDebugText();
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> HealthText;
+    void StartDamageTrail(float OldCurrentHealth);
+    void AdvanceDamageTrail();
+    void StopDamageTrail();
+    void StartDamageTrailTimer();
+    void StopDamageTrailTimer();
 
-	FDelegateHandle HealthChangedHandle;
-	bool bHealthEventSubscribed = false;
+    bool IsHealthDebugTextEnabled() const;
+    static float GetSafeHealthRatio(float InCurrentHealth, float InMaxHealth);
+
+    UPROPERTY(Transient)
+    TObjectPtr<APlayerCharacter> ObservedPlayer;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UHealthComponent> ObservedHealthComponent;
+
+    UPROPERTY(Transient)
+    TObjectPtr<USafeZone> RootSafeZone;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UCanvasPanel> RootCanvas;
+
+    UPROPERTY(Transient)
+    TObjectPtr<USizeBox> HealthSizeBox;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UOverlay> HealthOverlay;
+
+    /** Full-size root for the health bar and frame layers. */
+    UPROPERTY(Transient)
+    TObjectPtr<UOverlay> HealthBarLayer;
+
+    /** Independent full-size layer for the ink frame. */
+    UPROPERTY(Transient)
+    TObjectPtr<UOverlay> HealthFrameLayer;
+
+    UPROPERTY(Transient, meta = (BindWidgetOptional))
+    TObjectPtr<UProgressBar> ProgressBar_EmptyHealth;
+
+    UPROPERTY(Transient, meta = (BindWidgetOptional))
+    TObjectPtr<UProgressBar> ProgressBar_RecentDamage;
+
+    UPROPERTY(Transient, meta = (BindWidgetOptional))
+    TObjectPtr<UProgressBar> ProgressBar_CurrentHealth;
+
+    UPROPERTY(Transient, meta = (BindWidgetOptional))
+    TObjectPtr<UImage> Image_HealthFrame;
+
+    UPROPERTY(Transient, meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> Text_HealthDebug;
+
+    /** RectFull-compatible design size; X can be freely adjusted because the frame uses a Box/nine-slice brush. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
+    FVector2D HealthWidgetSize;
+
+    /** Top-left design margin inside the platform safe zone. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+    FVector2D HealthWidgetMargin;
+
+    /** Inner pixel inset applied to the entire health bar layer; the frame keeps the full widget size. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+    FMargin HealthBarInset;
+
+    /** Positive expansion applied symmetrically to the Frame layer so it visually surrounds the bar. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+    FVector2D HealthFrameExpansion;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor CurrentHealthColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor RecentDamageColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor EmptyHealthColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor HealthFrameColor;
+
+    /** Transparent ink frame. Horizontal and vertical edges are preserved by the Box brush. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UTexture2D> HealthFrameTexture;
+
+    /** Low-contrast xuan paper used only by the current-health fill. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UTexture2D> HealthPaperTexture;
+
+    /** Normalized horizontal Box-brush margin. Vertical slicing is intentionally disabled; Y is ignored at runtime. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "0.5"))
+    FVector2D HealthFrameSliceFraction;
+
+    /** Normalized horizontal crop applied to the frame texture UVs to remove transparent side gutters. Y remains uncropped. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Skin", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "0.49"))
+    FVector2D HealthFrameHorizontalUVCrop;
+
+    /** Overall color for the runtime health text, including numbers and separators. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Style", meta = (AllowPrivateAccess = "true"))
+    FLinearColor HealthTextColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|DamageTrail", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
+    float RecentDamageHoldTime;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|DamageTrail", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
+    float RecentDamageCollapseDuration;
+
+    /** Development default is true; shipping is always forced off at runtime. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|Health|Debug", meta = (AllowPrivateAccess = "true"))
+    bool bShowHealthDebugText;
+
+    float LastKnownCurrentHealth = 0.0f;
+    float LastKnownMaxHealth = 1.0f;
+    float DamageGhostHealth = 0.0f;
+    float DamageCollapseStartHealth = 0.0f;
+    float DamageTrailElapsed = 0.0f;
+    float CurrentHealthRatio = 1.0f;
+    float DamageGhostRatio = 1.0f;
+    bool bHasHealthBaseline = false;
+
+    EHealthDamageTrailState DamageTrailState = EHealthDamageTrailState::Idle;
+    FTimerHandle DamageTrailTimerHandle;
+    static constexpr float DamageTrailUpdateInterval = 1.0f / 60.0f;
 };
