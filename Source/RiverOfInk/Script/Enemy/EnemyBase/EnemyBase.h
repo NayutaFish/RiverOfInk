@@ -144,13 +144,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.0"))
 	float HealthWidgetHeightOffset = 25.0f;
 
+	/**
+	 * 血条锚点的左右偏移，使用敌人组件本地 Y 轴。
+	 * 正值向本地右侧偏移，负值向本地左侧偏移，单位为厘米。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (UIMin = "-100.0", UIMax = "100.0"))
+	float HealthWidgetHorizontalOffset = 0.0f;
+
 	/** Screen-space normal enemy widget size in pixels. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
-	FVector2D HealthWidgetDrawSize = FVector2D(180.0f, 24.0f);
+	FVector2D HealthWidgetDrawSize = FVector2D(100.0f, 10.0f);
 
 	/** Screen-space elite enemy widget size in pixels. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI")
-	FVector2D EliteHealthWidgetDrawSize = FVector2D(216.0f, 28.0f);
+	FVector2D EliteHealthWidgetDrawSize = FVector2D(130.0f, 16.0f);
 
 	/** Optional screen-space scale for both normal and elite widgets. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|UI", meta = (ClampMin = "0.05", ClampMax = "1.0"))

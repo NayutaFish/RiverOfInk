@@ -78,7 +78,7 @@ void AEnemyBase::BeginPlay()
 	{
 		HealthWidgetComponent->SetRelativeLocation(FVector(
 			0.0f,
-			0.0f,
+			HealthWidgetHorizontalOffset,
 			CapsuleCollision->GetScaledCapsuleHalfHeight() + HealthWidgetHeightOffset));
 		HealthWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
 		TSubclassOf<UEnemyHealthWidget> WidgetClass = HealthWidgetClass;

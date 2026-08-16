@@ -8,9 +8,12 @@
 #include "EnemyHealthWidget.generated.h"
 
 class AEnemyBase;
+class UCanvasPanel;
+class UImage;
 class UOverlay;
 class UProgressBar;
 class USizeBox;
+class UTexture2D;
 
 enum class EEnemyHealthTrailState : uint8
 {
@@ -56,7 +59,11 @@ protected:
 private:
 	void BuildDefaultWidgetTree();
 	void ConfigureWidgetTree();
-	void ConfigureProgressBar(UProgressBar* InProgressBar, const FLinearColor& InFillColor, float InPercent);
+	void ConfigureProgressBar(
+		UProgressBar* InProgressBar,
+		const FLinearColor& InFillColor,
+		float InPercent,
+		UTexture2D* InFillTexture = nullptr);
 	void BindToEnemy();
 	void UnbindFromEnemy();
 
@@ -80,11 +87,23 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AEnemyBase> ObservedEnemy;
 
+	/** RectFull canvas root matching the player health widget layout. */
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCanvasPanel> RootCanvas;
+
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> HealthSizeBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> HealthOverlay;
+
+	/** Full-size rectangle containing only the health and damage bars. */
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UOverlay> HealthBarLayer;
+
+	/** Independent full-size rectangle containing only the frame image. */
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UOverlay> HealthFrameLayer;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> ProgressBar_EmptyHealth;
@@ -95,11 +114,27 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> ProgressBar_CurrentHealth;
 
+	/** Transparent ink frame rendered above the three health layers. */
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_HealthFrame;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
 	FVector2D NormalWidgetSize;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
 	FVector2D EliteWidgetSize;
+
+	/** RectFull inset for the Normal bar; the frame keeps the full widget rect. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Layout", meta = (AllowPrivateAccess = "true"))
+	FMargin NormalBarInset;
+
+	/** RectFull inset for the Elite bar; the frame keeps the full widget rect. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Layout", meta = (AllowPrivateAccess = "true"))
+	FMargin EliteBarInset;
+
+	/** Positive expansion applied symmetrically to the independent frame rect. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Layout", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	FVector2D HealthFrameExpansion;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Style", meta = (AllowPrivateAccess = "true"))
 	FLinearColor CurrentHealthColor;
@@ -109,6 +144,18 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Style", meta = (AllowPrivateAccess = "true"))
 	FLinearColor EmptyHealthColor;
+
+	/** Minimal transparent frame used by Normal enemies. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Skin", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTexture2D> NormalFrameTexture;
+
+	/** Strengthened transparent frame used by Elite enemies. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Skin", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTexture2D> EliteFrameTexture;
+
+	/** Low-contrast xuan paper used only by the current-health fill. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|Skin", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTexture2D> HealthPaperTexture;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD|EnemyHealth|DamageTrail", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
 	float RecentDamageHoldTime;
