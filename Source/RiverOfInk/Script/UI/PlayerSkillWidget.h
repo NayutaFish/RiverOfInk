@@ -8,22 +8,17 @@
 #include "PlayerSkillWidget.generated.h"
 
 class APlayerCharacter;
-class USkillComponent;
-class UBorder;
 class UCanvasPanel;
 class UHorizontalBox;
-class UImage;
-class UProgressBar;
-class USizeBox;
-class UTextBlock;
+class UPlayerSkillSlotWidget;
 class UTexture2D;
+class USkillComponent;
 
 /**
- * First-pass fixed Q/E skill HUD.
+ * Compact bottom-left Q/E skill HUD.
  *
- * The native widget tree keeps the slice usable without a Blueprint asset.
- * A Blueprint subclass can replace the tree later while the skill component
- * remains the single source of truth for levels and cooldowns.
+ * This widget is a presentation layer over USkillComponent. It does not
+ * create cooldowns or alter skill input/cast behavior.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API UPlayerSkillWidget : public UUserWidget
@@ -35,7 +30,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill")
 	void InitializeForPlayer(APlayerCharacter* InPlayer);
 
-	/** Refresh parsed build summaries, icons, levels, and cooldown state. */
+	/** Refresh icons and slot state from the current skill build. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill")
 	void RefreshSkills();
 
@@ -53,14 +48,9 @@ private:
 	void RefreshSlot(
 		const FPlayerSkillSlot& Slot,
 		EPlayerSkillID FallbackSkillID,
-		EPlayerSkillForm FallbackSkillForm,
-		UImage* Icon,
-		UTextBlock* Title,
-		UTextBlock* Level,
-		UTextBlock* BuildSummary,
-		UProgressBar* CooldownBar,
-		UTextBlock* CooldownText,
+		UPlayerSkillSlotWidget* SkillSlot,
 		const TCHAR* KeyLabel);
+	UTexture2D* LoadSkillIcon(EPlayerSkillID SkillID);
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerCharacter> ObservedPlayer;
@@ -74,48 +64,11 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> SkillBar;
 
-	/** Explicit card backgrounds keep the HUD readable over the white-box floor. */
-	UPROPERTY(Transient)
-	TObjectPtr<UBorder> QCardBorder;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UBorder> ECardBorder;
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UPlayerSkillSlotWidget> QSkillSlot;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UImage> QIcon;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> QTitle;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> QLevel;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> QBuildSummary;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UProgressBar> QCooldownBar;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> QCooldownText;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UImage> EIcon;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ETitle;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ELevel;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> EBuildSummary;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UProgressBar> ECooldownBar;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ECooldownText;
+	TObjectPtr<UPlayerSkillSlotWidget> ESkillSlot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> TripleProjectileIcon;

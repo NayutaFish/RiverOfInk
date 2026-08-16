@@ -55,6 +55,12 @@ APlayerCharacter::APlayerCharacter()
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
+	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(
+		TEXT("/Game/Blueprint/GameSystem/UI/Skill/WBP_SkillHUD"));
+	if (SkillWidgetBlueprint.Succeeded())
+	{
+		SkillWidgetClass = SkillWidgetBlueprint.Class;
+	}
 	ShopInteractionKey = EKeys::J;
 
 	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
