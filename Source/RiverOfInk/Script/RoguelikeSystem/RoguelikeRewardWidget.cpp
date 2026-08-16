@@ -22,6 +22,19 @@ namespace
 {
 	const TCHAR* DefaultTexturePath = TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture");
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
+
+	FVector2D GetTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
+	{
+		const float SafeWidth = FMath::Max(1.0f, DesiredWidth);
+		if (Texture && Texture->GetSizeX() > 0 && Texture->GetSizeY() > 0)
+		{
+			return FVector2D(
+				SafeWidth,
+				SafeWidth * static_cast<float>(Texture->GetSizeY()) / static_cast<float>(Texture->GetSizeX()));
+		}
+
+		return FallbackSize;
+	}
 }
 
 TSharedRef<SWidget> URoguelikeRewardWidget::RebuildWidget()
@@ -255,7 +268,8 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 		TitleDecoration->SetBrushFromTexture(TitleDividerTexture, true);
 	}
 	TitleDecoration->SetColorAndOpacity(FLinearColor::White);
-	TitleDecoration->SetDesiredSizeOverride(FVector2D(420.0f, 26.0f));
+	TitleDecoration->SetDesiredSizeOverride(
+		GetTextureAspectSize(TitleDividerTexture, 420.0f, FVector2D(420.0f, 26.0f)));
 	TitleDecoration->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* DecorationSlot = RootOverlay->AddChildToOverlay(TitleDecoration))
 	{

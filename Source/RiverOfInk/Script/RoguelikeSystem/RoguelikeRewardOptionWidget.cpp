@@ -36,6 +36,19 @@ namespace
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
 
+	FVector2D GetTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
+	{
+		const float SafeWidth = FMath::Max(1.0f, DesiredWidth);
+		if (Texture && Texture->GetSizeX() > 0 && Texture->GetSizeY() > 0)
+		{
+			return FVector2D(
+				SafeWidth,
+				SafeWidth * static_cast<float>(Texture->GetSizeY()) / static_cast<float>(Texture->GetSizeX()));
+		}
+
+		return FallbackSize;
+	}
+
 	FText GetSkillName(EPlayerSkillID SkillID)
 	{
 		switch (SkillID)
@@ -693,7 +706,8 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	SmallDividerImage->SetColorAndOpacity(FLinearColor::White);
 	SmallDividerImage->SetRenderOpacity(0.55f);
 	SmallDividerImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	SmallDividerImage->SetDesiredSizeOverride(FVector2D(130.0f, 14.0f));
+	SmallDividerImage->SetDesiredSizeOverride(
+		GetTextureAspectSize(SmallDividerTexture, SmallDividerWidth, FVector2D(SmallDividerWidth, 18.0f)));
 	if (UOverlaySlot* DividerSlot = OptionOverlay->AddChildToOverlay(SmallDividerImage))
 	{
 		DividerSlot->SetHorizontalAlignment(HAlign_Center);

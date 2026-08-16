@@ -62,6 +62,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> SmallDividerTexture;
 
+	/** Horizontal display width for the divider; height follows the texture aspect ratio. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Layout", meta = (ClampMin = "32.0", ClampMax = "512.0"))
+	float SmallDividerWidth = 192.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.1", ClampMax = "1.0"))
 	float SelectionSweepDuration = 0.38f;
 
