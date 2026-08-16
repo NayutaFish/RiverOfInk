@@ -12,7 +12,8 @@ enum class EPureInkChangeReason : uint8
 	EnemyDrop UMETA(DisplayName = "Enemy Drop"),
 	RoomResult UMETA(DisplayName = "Room Result"),
 	ShopPurchase UMETA(DisplayName = "Shop Purchase"),
-	NewRunReset UMETA(DisplayName = "New Run Reset")
+	NewRunReset UMETA(DisplayName = "New Run Reset"),
+	RewardChoice UMETA(DisplayName = "Reward Choice")
 };
 
 /** Effect categories reserved for the first Shop Room implementation. */

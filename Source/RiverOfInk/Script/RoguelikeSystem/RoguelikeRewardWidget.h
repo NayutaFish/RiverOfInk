@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -8,11 +8,15 @@
 #include "RoguelikeRewardWidget.generated.h"
 
 class ARoguelikeRewardManager;
-class UTextBlock;
+class UCanvasPanel;
+class UHorizontalBox;
 class UImage;
-class UButton;
+class UOverlay;
+class UTextBlock;
+class UTexture2D;
+class URoguelikeRewardOptionWidget;
 
-/** Base class for WBP_RoguelikeReward. Bind each button to SelectOption. */
+/** Native reward-selection screen used by WBP_RoguelikeReward. */
 UCLASS(Abstract, Blueprintable)
 class RIVEROFINK_API URoguelikeRewardWidget : public UUserWidget
 {
@@ -24,6 +28,17 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	void SelectOption(int32 OptionIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Reward")
+	bool PlaySelectionFeedback(int32 OptionIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Reward")
+	void SetSelectionLocked(bool bLocked);
+
+	void SetSelectionFinishedCallback(FSimpleDelegate InCallback)
+	{
+		SelectionFinishedCallback = MoveTemp(InCallback);
+	}
 
 	/** Give keyboard/gamepad navigation a deterministic initial target. */
 	UFUNCTION(BlueprintCallable, Category = "Reward|Focus")
@@ -38,55 +53,44 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	TArray<FRoguelikeRewardOption> RewardOptions;
 
-	/** 可选绑定，控件树存在时由 C++ 负责写入运行时奖励标题和描述。 */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Title_0;
+	/** Replaceable title divider art; the runtime fallback loads the placeholder texture by path. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
+	TObjectPtr<UTexture2D> TitleDividerTexture;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Description_0;
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Title_1;
+private:
+	void BuildDefaultWidgetTree();
+	void ConfigureWidgetTree();
+	void HandleSelectionFinished();
+	void HandleOptionHovered(int32 OptionIndex);
+	void HandleOptionUnhovered(int32 OptionIndex);
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Description_1;
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> RootCanvas;
 
-	/** Optional detailed fields. The existing Title/Description layout receives
-	 * a multiline fallback until these are added to WBP_RoguelikeReward. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> SkillName_0;
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlay> RootOverlay;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> CurrentForm_0;
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> BackgroundOverlay;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> RewardCategory_0;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> TitleText;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Effect_0;
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> TitleDecoration;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> SkillName_1;
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> RewardOptionsRow;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> CurrentForm_1;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URoguelikeRewardOptionWidget>> OptionWidgets;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> RewardCategory_1;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> Effect_1;
-
-	/** Optional icon bindings used by the whitebox reward cards. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UImage> Icon_0;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UImage> Icon_1;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> Button_0;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> Button_1;
+	FSimpleDelegate SelectionFinishedCallback;
+	bool bSelectionLocked = false;
+	bool bNativeTreeBuilt = false;
 };

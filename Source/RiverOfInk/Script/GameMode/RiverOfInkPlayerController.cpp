@@ -62,3 +62,23 @@ void ARiverOfInkPlayerController::DebugKillAllEnemies()
 		}
 	}
 }
+
+void ARiverOfInkPlayerController::DebugShowRewardSelection()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeRewardManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeRewardManager* RewardManager = *It)
+		{
+			RewardManager->ShowRewardAfterRoomClear();
+			UE_LOG(LogRoguelike, Log, TEXT("DebugShowRewardSelection requested the reward HUD."));
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning, TEXT("DebugShowRewardSelection found no RoguelikeRewardManager."));
+}
