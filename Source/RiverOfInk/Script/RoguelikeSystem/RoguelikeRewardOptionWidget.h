@@ -154,6 +154,7 @@ private:
 	int32 OptionIndex = INDEX_NONE;
 	bool bSelectionPlaying = false;
 	bool bInteractionEnabled = true;
+	bool bHovered = false;
 
 	FRoguelikeRewardOptionFinishedDelegate SelectionFinishedCallback;
 	FTimerHandle SelectionHoldTimer;

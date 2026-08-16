@@ -326,6 +326,8 @@ void URoguelikeRewardOptionWidget::NativeConstruct()
 	SetIsFocusable(true);
 	BuildDefaultWidgetTree();
 	SetInteractionEnabled(true);
+	bHovered = false;
+	SetVisualScale(1.0f);
 	SetHoverState(false);
 	if (ImageSelectionBrush)
 	{
@@ -360,6 +362,8 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	RewardOption = InOption;
 	OptionIndex = InOptionIndex;
 	bSelectionPlaying = false;
+	bHovered = false;
+	SetVisualScale(1.0f);
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SelectionHoldTimer);
@@ -428,7 +432,14 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 		ImageSelectionBrush->SetRenderOpacity(1.0f);
 		ImageSelectionBrush->SetRenderTransform(FWidgetTransform());
 	}
-	SetHoverState(false);
+	if (HoverInkImage)
+	{
+		HoverInkImage->SetRenderOpacity(0.0f);
+	}
+	if (SmallDividerImage)
+	{
+		SmallDividerImage->SetRenderOpacity(0.55f);
+	}
 	ForceLayoutPrepass();
 }
 
@@ -441,7 +452,16 @@ bool URoguelikeRewardOptionWidget::PlaySelectionFeedback()
 
 	bSelectionPlaying = true;
 	SetInteractionEnabled(false);
-	SetHoverState(false);
+	bHovered = false;
+	SetVisualScale(1.0f);
+	if (HoverInkImage)
+	{
+		HoverInkImage->SetRenderOpacity(0.0f);
+	}
+	if (SmallDividerImage)
+	{
+		SmallDividerImage->SetRenderOpacity(0.55f);
+	}
 	SetRenderOpacity(1.0f);
 	ImageSelectionBrush->SetVisibility(ESlateVisibility::HitTestInvisible);
 	ImageSelectionBrush->SetRenderOpacity(1.0f);
@@ -494,31 +514,32 @@ void URoguelikeRewardOptionWidget::PlayFadeOut()
 	}
 }
 
-void URoguelikeRewardOptionWidget::SetHoverState(bool bHovered)
+void URoguelikeRewardOptionWidget::SetHoverState(bool bInHovered)
 {
-	if (bSelectionPlaying)
+	if (bSelectionPlaying || bHovered == bInHovered)
 	{
 		return;
 	}
+	bHovered = bInHovered;
 
 	if (HoverInkImage)
 	{
-		HoverInkImage->SetRenderOpacity(bHovered ? 0.18f : 0.0f);
+		HoverInkImage->SetRenderOpacity(bInHovered ? 0.18f : 0.0f);
 	}
 	if (SmallDividerImage)
 	{
-		SmallDividerImage->SetRenderOpacity(bHovered ? 0.88f : 0.55f);
+		SmallDividerImage->SetRenderOpacity(bInHovered ? 0.88f : 0.55f);
 	}
 
-	if (bHovered && HoverInAnimation)
+	if (bInHovered && HoverInAnimation)
 	{
 		PlayAnimation(HoverInAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward, 1.0f, false);
 	}
-	else if (!bHovered && HoverOutAnimation)
+	else if (!bInHovered && HoverOutAnimation)
 	{
 		PlayAnimation(HoverOutAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward, 1.0f, false);
 	}
-	else if (!bHovered)
+	else if (!bInHovered)
 	{
 		SetVisualScale(1.0f);
 	}
