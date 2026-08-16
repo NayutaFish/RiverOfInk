@@ -3,10 +3,14 @@
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Common/HealthComponent.h"
+#include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
+#include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardWidget.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -98,6 +102,9 @@ void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 		return;
 	}
 
+	bRewardSelectionInProgress = false;
+	PendingSelectedReward = FRoguelikeRewardOption();
+
 	if (!ResolvePlayer())
 	{
 		UE_LOG(LogRoguelike, Error, TEXT("Reward UI request failed: player or skill component is unavailable."));
@@ -163,6 +170,29 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		return Candidates;
 	}
 
+	// Immediate rewards are part of the same pool as skill-build rewards. They
+	// reuse the existing economy/health owners and do not introduce a second
+	// reward system.
+	Candidates.Add(MakeCurrencyOption(
+		120,
+		FText::FromString(TEXT("纯墨")),
+		FText::FromString(TEXT("获得 120 纯墨，用于后续构筑。"))));
+
+	if (CachedPlayer && CachedPlayer->GetHealthComponent())
+	{
+		const UHealthComponent* HealthComponent = CachedPlayer->GetHealthComponent();
+		const float CurrentHealth = HealthComponent->GetCurrentHealth();
+		const float MaxHealth = HealthComponent->GetMaxHealth();
+		if (MaxHealth > CurrentHealth + KINDA_SMALL_NUMBER)
+		{
+			const float RecoveryAmount = FMath::Min(MaxHealth - CurrentHealth, MaxHealth * 0.35f);
+			Candidates.Add(MakeHealthOption(
+				RecoveryAmount,
+				FText::FromString(TEXT("生命恢复")),
+				FText::FromString(FString::Printf(TEXT("恢复 %.0f 点生命值。"), RecoveryAmount))));
+		}
+	}
+
 	// The player always owns Q/E. The reward pool now only emits legal
 	// modifiers; old UpgradeSkill/ChangeSkillForm values remain supported by
 	// ApplyReward for backwards-compatible Blueprint or snapshot data.
@@ -188,23 +218,23 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 	AddModifierCandidate(
 		EPlayerSkillID::TripleProjectile,
 		ESkillModifierID::AddProjectile,
-		TEXT("Add Projectile"),
-		TEXT("Q fires one additional projectile or Ink Grenade."));
+		TEXT("投射物增幅"),
+		TEXT("Q 增加一枚投射物，墨雷形态同样生效。"));
 	AddModifierCandidate(
 		EPlayerSkillID::TripleProjectile,
 		ESkillModifierID::InkGrenade,
-		TEXT("Ink Grenade"),
-		TEXT("Q projectiles become thrown ink grenades that explode on fuse."));
+		TEXT("墨雷形态"),
+		TEXT("Q 投射物变为延迟爆炸的墨雷。"));
 	AddModifierCandidate(
 		EPlayerSkillID::TripleProjectile,
 		ESkillModifierID::ExtraExplosion,
-		TEXT("Extra Explosion"),
-		TEXT("Each Q ink grenade explodes one additional time at the same location."));
+		TEXT("余烬连爆"),
+		TEXT("每枚 Q 墨雷在原地追加一次爆炸。"));
 	AddModifierCandidate(
 		EPlayerSkillID::TripleProjectile,
 		ESkillModifierID::CooldownDown,
-		TEXT("Quick Reload"),
-		TEXT("Q cooldown is reduced by 0.5 seconds."));
+		TEXT("疾速回转"),
+		TEXT("Q 冷却时间缩短 0.5 秒。"));
 
 	// E build candidates intentionally do not form an exclusive group. Twin
 	// Slash and Null Ring can coexist, so the resolver can produce two hits
@@ -212,26 +242,27 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::TwinSlash,
-		TEXT("Twin Slash"),
-		TEXT("E repeats after a short delay with an angled second hit for 80% damage."));
+		TEXT("双重环斩"),
+		TEXT("E 在短暂延迟后追加一次斜向斩击，造成 80% 伤害。"));
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::NullRing,
-		TEXT("Null Ring"),
-		TEXT("E erases marked enemy projectiles inside each slash area."));
+		TEXT("净墨环"),
+		TEXT("E 斩击区域会抹除其中的敌方投射物。"));
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::RadiusUp,
-		TEXT("Expanded Slash"),
-		TEXT("E radius is increased by 60."));
+		TEXT("扩展环斩"),
+		TEXT("E 斩击半径增加 60。"));
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::CooldownDown,
-		TEXT("Swift Recovery"),
-		TEXT("E cooldown is reduced by 0.4 seconds."));
+		TEXT("回锋"),
+		TEXT("E 冷却时间缩短 0.4 秒。"));
 
 	TArray<FRoguelikeRewardOption> Options;
-	while (!Candidates.IsEmpty() && Options.Num() < 2)
+	const int32 DesiredOptionCount = FMath::Clamp(RewardOptionCount, 2, 3);
+	while (!Candidates.IsEmpty() && Options.Num() < DesiredOptionCount)
 	{
 		const int32 CandidateIndex = FMath::RandRange(0, Candidates.Num() - 1);
 		Options.Add(Candidates[CandidateIndex]);
@@ -240,15 +271,13 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 	for (const FRoguelikeRewardOption& Option : Options)
 	{
 		UE_LOG(LogRoguelike, Log,
-			TEXT("Reward generated: Title=%s Skill=%d Type=%d Modifier=%d Stack=%d Upgrade=%d CurrentForm=%d TargetForm=%d Before=%.2f After=%.2f."),
+			TEXT("Reward generated: Title=%s Skill=%d Type=%d Modifier=%d Stack=%d Upgrade=%d Before=%.2f After=%.2f."),
 			*Option.Title.ToString(),
 			static_cast<int32>(Option.SkillID),
 			static_cast<int32>(Option.RewardType),
 			static_cast<int32>(Option.ModifierID),
 			Option.StackDelta,
 			static_cast<int32>(Option.UpgradeType),
-			static_cast<int32>(Option.CurrentSkillForm),
-			static_cast<int32>(Option.TargetSkillForm),
 			Option.BeforeValue,
 			Option.AfterValue);
 	}
@@ -257,25 +286,63 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 
 void ARoguelikeRewardManager::SelectReward(int32 OptionIndex)
 {
-	if (bRewardSelectionInProgress || !CurrentRewardOptions.IsValidIndex(OptionIndex) || !ResolvePlayer())
+	if (bRewardSelectionInProgress || !CurrentRewardOptions.IsValidIndex(OptionIndex))
 	{
+		return;
+	}
+	if (!ResolvePlayer())
+	{
+		if (ActiveRewardWidget)
+		{
+			ActiveRewardWidget->SetSelectionLocked(false);
+		}
 		return;
 	}
 
 	bRewardSelectionInProgress = true;
-	const FRoguelikeRewardOption Reward = CurrentRewardOptions[OptionIndex];
-	if (!ApplyReward(Reward))
+	PendingSelectedReward = CurrentRewardOptions[OptionIndex];
+	if (!ApplyReward(PendingSelectedReward))
 	{
 		UE_LOG(LogRoguelike, Warning, TEXT("Reward application failed: Index=%d Title=%s."),
-			OptionIndex, *Reward.Title.ToString());
+			OptionIndex, *PendingSelectedReward.Title.ToString());
+		if (ActiveRewardWidget)
+		{
+			ActiveRewardWidget->SetSelectionLocked(false);
+		}
+		PendingSelectedReward = FRoguelikeRewardOption();
 		bRewardSelectionInProgress = false;
 		return;
 	}
 
-	UE_LOG(LogRoguelike, Log, TEXT("Player selected reward: Index=%d Title=%s."), OptionIndex, *Reward.Title.ToString());
+	UE_LOG(LogRoguelike, Log, TEXT("Player selected reward: Index=%d Title=%s. Waiting for selection feedback."),
+		OptionIndex, *PendingSelectedReward.Title.ToString());
+	if (ActiveRewardWidget)
+	{
+		ActiveRewardWidget->SetSelectionFinishedCallback(
+			FSimpleDelegate::CreateUObject(this, &ARoguelikeRewardManager::FinishRewardSelection));
+		if (!ActiveRewardWidget->PlaySelectionFeedback(OptionIndex))
+		{
+			FinishRewardSelection();
+		}
+	}
+	else
+	{
+		FinishRewardSelection();
+	}
+}
+
+void ARoguelikeRewardManager::FinishRewardSelection()
+{
+	if (!bRewardSelectionInProgress)
+	{
+		return;
+	}
+
+	const FRoguelikeRewardOption CompletedReward = PendingSelectedReward;
 	CloseRewardUI();
-	UE_LOG(LogRoguelike, Log, TEXT("Reward UI closed; gameplay input restored."));
-	OnRewardApplied.Broadcast(Reward);
+	UE_LOG(LogRoguelike, Log, TEXT("Reward UI closed after selection feedback; gameplay input restored."));
+	OnRewardApplied.Broadcast(CompletedReward);
+	PendingSelectedReward = FRoguelikeRewardOption();
 	bRewardSelectionInProgress = false;
 }
 
@@ -298,7 +365,9 @@ bool ARoguelikeRewardManager::ResolvePlayer()
 
 bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 {
-	if (!IsValid(CachedSkillComponent))
+	if (!IsValid(CachedSkillComponent)
+		&& Reward.RewardType != ERoguelikeRewardType::Currency
+		&& Reward.RewardType != ERoguelikeRewardType::Health)
 	{
 		return false;
 	}
@@ -378,6 +447,43 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 			static_cast<int32>(Reward.TargetSkillForm));
 		return true;
 	}
+	case ERoguelikeRewardType::Currency:
+	{
+		UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+		URoguelikeEconomySubsystem* Economy = GameInstance
+			? GameInstance->GetSubsystem<URoguelikeEconomySubsystem>()
+			: nullptr;
+		const int32 Amount = Reward.CurrencyAmount > 0 ? Reward.CurrencyAmount : Reward.StackDelta;
+		if (!Economy || Amount <= 0 || !Economy->AddPureInk(Amount, EPureInkChangeReason::RewardChoice))
+		{
+			return false;
+		}
+
+		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: Currency Amount=%d."), Amount);
+		return true;
+	}
+	case ERoguelikeRewardType::Health:
+	{
+		UHealthComponent* HealthComponent = CachedPlayer ? CachedPlayer->GetHealthComponent() : nullptr;
+		if (!HealthComponent)
+		{
+			return false;
+		}
+
+		const float BeforeHealth = HealthComponent->GetCurrentHealth();
+		const float RestoreAmount = Reward.HealthRestoreAmount > 0.0f
+			? Reward.HealthRestoreAmount
+			: FMath::Max(0.0f, Reward.AfterValue - BeforeHealth);
+		const float NewHealth = FMath::Min(HealthComponent->GetMaxHealth(), BeforeHealth + RestoreAmount);
+		if (NewHealth <= BeforeHealth + KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		HealthComponent->SetCurrentHealth(NewHealth);
+		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: Health %.1f -> %.1f."), BeforeHealth, NewHealth);
+		return true;
+	}
 	default:
 		return false;
 	}
@@ -387,6 +493,7 @@ void ARoguelikeRewardManager::CloseRewardUI()
 {
 	if (ActiveRewardWidget)
 	{
+		ActiveRewardWidget->SetSelectionFinishedCallback(FSimpleDelegate());
 		ActiveRewardWidget->RemoveFromParent();
 		ActiveRewardWidget = nullptr;
 	}
@@ -428,6 +535,42 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeOption(
 		: Option.CurrentSkillForm;
 	Option.Title = Title;
 	Option.Description = Description;
+	PopulateRewardPresentation(Option);
+	return Option;
+}
+
+FRoguelikeRewardOption ARoguelikeRewardManager::MakeCurrencyOption(
+	int32 Amount,
+	const FText& Title,
+	const FText& Description) const
+{
+	FRoguelikeRewardOption Option;
+	Option.RewardType = ERoguelikeRewardType::Currency;
+	Option.StackDelta = FMath::Max(0, Amount);
+	Option.CurrencyAmount = FMath::Max(0, Amount);
+	Option.Title = Title;
+	Option.Description = Description;
+	PopulateRewardPresentation(Option);
+	return Option;
+}
+
+FRoguelikeRewardOption ARoguelikeRewardManager::MakeHealthOption(
+	float RecoveryAmount,
+	const FText& Title,
+	const FText& Description) const
+{
+	FRoguelikeRewardOption Option;
+	Option.RewardType = ERoguelikeRewardType::Health;
+	Option.HealthRestoreAmount = FMath::Max(0.0f, RecoveryAmount);
+	Option.Title = Title;
+	Option.Description = Description;
+	if (CachedPlayer && CachedPlayer->GetHealthComponent())
+	{
+		const UHealthComponent* HealthComponent = CachedPlayer->GetHealthComponent();
+		Option.BeforeValue = HealthComponent->GetCurrentHealth();
+		Option.AfterValue = FMath::Min(HealthComponent->GetMaxHealth(), Option.BeforeValue + Option.HealthRestoreAmount);
+	}
+	PopulateRewardPresentation(Option);
 	return Option;
 }
 
@@ -451,6 +594,7 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeModifierOption(
 	Option.Title = Title;
 	Option.Description = Description;
 	FillModifierPreview(Option);
+	PopulateRewardPresentation(Option);
 	return Option;
 }
 
@@ -497,4 +641,97 @@ void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option
 	default:
 		break;
 	}
+}
+
+void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption& Option) const
+{
+	if (Option.ShortDescription.IsEmpty())
+	{
+		Option.ShortDescription = Option.Description;
+	}
+
+	if (Option.RewardType == ERoguelikeRewardType::Currency)
+	{
+		Option.PrimaryValue = FText::FromString(FString::Printf(TEXT("+%d"), Option.CurrencyAmount));
+		Option.BuildType = FText::GetEmpty();
+		Option.TargetSkill = FText::GetEmpty();
+		Option.RewardIcon = LoadObject<UTexture2D>(
+			nullptr,
+			TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_PureInk.T_UI_Reward_PureInk"));
+		return;
+	}
+
+	if (Option.RewardType == ERoguelikeRewardType::Health)
+	{
+		const float MaxHealth = CachedPlayer && CachedPlayer->GetHealthComponent()
+			? CachedPlayer->GetHealthComponent()->GetMaxHealth()
+			: 0.0f;
+		const float RecoveryPercent = MaxHealth > KINDA_SMALL_NUMBER
+			? (Option.HealthRestoreAmount / MaxHealth) * 100.0f
+			: 0.0f;
+		Option.PrimaryValue = FText::FromString(FString::Printf(TEXT("+%.0f%%"), RecoveryPercent));
+		Option.BuildType = FText::GetEmpty();
+		Option.TargetSkill = FText::GetEmpty();
+		Option.RewardIcon = LoadObject<UTexture2D>(
+			nullptr,
+			TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_Health.T_UI_Reward_Health"));
+		return;
+	}
+
+	const TCHAR* InputSlot = Option.SkillID == EPlayerSkillID::CircularSlash ? TEXT("E") : TEXT("Q");
+	const TCHAR* SkillName = Option.SkillID == EPlayerSkillID::CircularSlash ? TEXT("环斩") : TEXT("三连墨矢");
+	Option.TargetSkill = FText::FromString(FString::Printf(TEXT("%s  %s"), InputSlot, SkillName));
+	Option.BuildType = FText::FromString(TEXT("强化构筑"));
+
+	const TCHAR* IconPath = Option.SkillID == EPlayerSkillID::CircularSlash
+		? TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash")
+		: TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+
+	switch (Option.ModifierID)
+	{
+	case ESkillModifierID::AddProjectile:
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 枚"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 枚"), Option.AfterValue));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+		break;
+	case ESkillModifierID::InkGrenade:
+		Option.OldValue = FText::FromString(TEXT("普通墨矢"));
+		Option.NewValue = FText::FromString(TEXT("墨雷"));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_InkGrenade.T_UI_Build_InkGrenade");
+		break;
+	case ESkillModifierID::ExtraExplosion:
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 次"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 次"), Option.AfterValue));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion.T_UI_Build_ExtraExplosion");
+		break;
+	case ESkillModifierID::TwinSlash:
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.AfterValue));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash");
+		break;
+	case ESkillModifierID::NullRing:
+		Option.OldValue = FText::FromString(Option.BeforeValue > 0.5f ? TEXT("开启") : TEXT("关闭"));
+		Option.NewValue = FText::FromString(TEXT("开启"));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileErase.T_UI_Build_ProjectileErase");
+		break;
+	case ESkillModifierID::RadiusUp:
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f"), Option.AfterValue));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Radius.T_UI_Build_Radius");
+		break;
+	case ESkillModifierID::CooldownDown:
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.AfterValue));
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown.T_UI_Build_Cooldown");
+		break;
+	default:
+		break;
+	}
+
+	if (!Option.OldValue.IsEmpty() || !Option.NewValue.IsEmpty())
+	{
+		Option.PrimaryValue = FText::FromString(FString::Printf(TEXT("%s → %s"),
+			*Option.OldValue.ToString(), *Option.NewValue.ToString()));
+	}
+	Option.RewardIcon = LoadObject<UTexture2D>(nullptr, IconPath);
 }

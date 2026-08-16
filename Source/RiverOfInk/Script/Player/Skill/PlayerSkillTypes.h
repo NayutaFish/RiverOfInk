@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "PlayerSkillTypes.generated.h"
 
+class UTexture2D;
+
 UENUM(BlueprintType)
 enum class EPlayerSkillID : uint8
 {
@@ -42,7 +44,11 @@ enum class ERoguelikeRewardType : uint8
 	UpgradeSkill UMETA(DisplayName = "Upgrade Skill"),
 	ChangeSkillForm UMETA(DisplayName = "Change Skill Form"),
 	/** New build rewards mutate a skill slot through ESkillModifierID. */
-	Modifier UMETA(DisplayName = "Skill Modifier")
+	Modifier UMETA(DisplayName = "Skill Modifier"),
+	/** Immediate Pure Ink reward; appended to preserve existing serialized enum values. */
+	Currency UMETA(DisplayName = "Currency"),
+	/** Immediate player health recovery reward; appended to preserve existing serialized enum values. */
+	Health UMETA(DisplayName = "Health")
 };
 
 /**
@@ -231,4 +237,34 @@ struct FRoguelikeRewardOption
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward")
 	FText Description;
+
+	/** Optional presentation contract consumed by the generic Reward Option widget. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	TObjectPtr<UTexture2D> RewardIcon;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText PrimaryValue;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText OldValue;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText NewValue;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText ShortDescription;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText TargetSkill;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Presentation")
+	FText BuildType;
+
+	/** Currency amount used by Currency rewards. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Currency", meta = (ClampMin = "0"))
+	int32 CurrencyAmount = 0;
+
+	/** Health amount used by Health rewards. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Health", meta = (ClampMin = "0.0"))
+	float HealthRestoreAmount = 0.0f;
 };

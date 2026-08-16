@@ -40,6 +40,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|UI")
 	TSubclassOf<URoguelikeRewardWidget> RewardWidgetClass;
 
+	/** Number of choices shown by the generic reward row. The pool supports 2-3. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|UI", meta = (ClampMin = "2", ClampMax = "3"))
+	int32 RewardOptionCount = 3;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Reward|Runtime")
 	TArray<FRoguelikeRewardOption> CurrentRewardOptions;
 
@@ -73,6 +77,7 @@ private:
 	void EnsureExitTrigger();
 	bool ApplyReward(const FRoguelikeRewardOption& Reward);
 	void CloseRewardUI();
+	void FinishRewardSelection();
 	FRoguelikeRewardOption MakeOption(
 		ERoguelikeRewardType RewardType,
 		EPlayerSkillID SkillID,
@@ -80,6 +85,8 @@ private:
 		EPlayerSkillForm TargetSkillForm,
 		const FText& Title,
 		const FText& Description) const;
+	FRoguelikeRewardOption MakeCurrencyOption(int32 Amount, const FText& Title, const FText& Description) const;
+	FRoguelikeRewardOption MakeHealthOption(float RecoveryAmount, const FText& Title, const FText& Description) const;
 	FRoguelikeRewardOption MakeModifierOption(
 		EPlayerSkillID SkillID,
 		ESkillModifierID ModifierID,
@@ -87,7 +94,11 @@ private:
 		const FText& Title,
 		const FText& Description) const;
 	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
+	void PopulateRewardPresentation(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;
+
+	UPROPERTY(Transient)
+	FRoguelikeRewardOption PendingSelectedReward;
 
 	UPROPERTY(Transient)
 	TObjectPtr<URoguelikeRewardWidget> ActiveRewardWidget;
