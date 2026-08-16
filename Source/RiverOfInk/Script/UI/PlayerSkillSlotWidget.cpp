@@ -16,6 +16,8 @@
 namespace
 {
 	static const FName CooldownProgressParameter(TEXT("CooldownProgress"));
+	static const FName RevealStartAngleParameter(TEXT("RevealStartAngle"));
+	static const FName RevealSweepAngleParameter(TEXT("RevealSweepAngle"));
 	static const FName InkTextureParameter(TEXT("InkTexture"));
 	static const TCHAR* CooldownMaterialPath = TEXT("/Game/Blueprint/GameSystem/UI/Skill/M_UI_SkillCooldown.M_UI_SkillCooldown");
 	static const TCHAR* CooldownTexturePath = TEXT("/Game/RawContent/UI/Texture/T_UI_SkillCooldown_Ink.T_UI_SkillCooldown_Ink");
@@ -167,6 +169,14 @@ void UPlayerSkillSlotWidget::SetCooldownProgress(float InProgress)
 	}
 }
 
+void UPlayerSkillSlotWidget::SetCooldownRevealAngleRange(float InStartAngle, float InSweepAngle)
+{
+	CooldownRevealStartAngle = FMath::Clamp(InStartAngle, -360.0f, 360.0f);
+	CooldownRevealSweepAngle = FMath::Clamp(InSweepAngle, 0.0f, 360.0f);
+	EnsureCooldownMaterial();
+	ApplyCooldownRevealParameters();
+}
+
 void UPlayerSkillSlotWidget::BuildDefaultWidgetTree()
 {
 	if (!WidgetTree || WidgetTree->RootWidget)
@@ -256,12 +266,28 @@ void UPlayerSkillSlotWidget::EnsureCooldownMaterial()
 		CooldownMaterialInstance->SetTextureParameterValue(InkTextureParameter, LoadedCooldownTexture);
 	}
 	CooldownMaterialInstance->SetScalarParameterValue(CooldownProgressParameter, CooldownProgress);
+	ApplyCooldownRevealParameters();
 	ImageCooldownInk->SetBrushFromMaterial(CooldownMaterialInstance);
 	ImageCooldownInk->SetColorAndOpacity(CooldownInkColor);
 	UE_LOG(LogTemp, Verbose, TEXT("Skill cooldown MID ready: Slot=%s MID=%s Texture=%s."),
 		*GetNameSafe(this),
 		*GetNameSafe(CooldownMaterialInstance),
 		*GetNameSafe(LoadedCooldownTexture));
+}
+
+void UPlayerSkillSlotWidget::ApplyCooldownRevealParameters()
+{
+	if (!CooldownMaterialInstance)
+	{
+		return;
+	}
+
+	CooldownMaterialInstance->SetScalarParameterValue(
+		RevealStartAngleParameter,
+		FMath::Clamp(CooldownRevealStartAngle, -360.0f, 360.0f));
+	CooldownMaterialInstance->SetScalarParameterValue(
+		RevealSweepAngleParameter,
+		FMath::Clamp(CooldownRevealSweepAngle, 0.0f, 360.0f));
 }
 
 void UPlayerSkillSlotWidget::SetVisualScale(float Scale)
