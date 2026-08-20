@@ -1,5 +1,13 @@
 # Bug Log
 
+## 2026-08-20：Reward Widget 选中笔迹按关键帧改为固定材质遮罩（已修复）
+
+- **现象**：旧实现通过 `SizeBox.HeightOverride` 改变裁剪区域，画面上容易产生笔迹位移或拉伸的错觉，无法严格对应“完整笔迹固定在卡面上、可见范围从顶部向底部展开”的关键帧要求。
+- **预期**：0% 时笔迹完全不可见；10% 从顶部起笔，30%/60%/90% 依次向下露出，100% 完整显示并短暂停留。笔迹纹理本身不移动、不缩放、不做整体 Alpha 淡入，并且覆盖奖励 Icon、标题、数值、描述及分割线。
+- **修复**：`URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()` 将 `ImageSelectionBrush` 作为 `OptionOverlay` 最后一个子项，使用固定的 `76x420` 最终尺寸和顶部对齐。新增 `/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal`（UI、Translucent、Unlit），以 `SelectionBrushTexture` 的 Alpha 乘以垂直 Reveal Mask；`RevealProgress` 和 `RevealSoftness` 由 MID 驱动，动画期间只更新这两个材质参数，不修改 Brush 的 RenderTransform、SizeBox 或 Scale。
+- **时序与接口**：`NativeConstruct()` 完成 Slate 树构建后创建 MID，避免运行时材质未绑定；默认时序调整为 `SelectionSweepDuration=0.63s`、`SelectionHoldDuration=0.175s`、`FadeOutDuration=0.455s`，均为上一版默认值的 `0.7` 倍。由于 Option Widget 是原生运行时类，三个时长和 `SelectionRevealSoftness` 现由已有的 `WBP_RoguelikeReward` 在 `Reward|Selection` 分类编辑，再由 `URoguelikeRewardWidget::SetupRewardOptions()` 传递给每个选项；Brush Texture 和 Brush Material 仍在 Option Widget 的 `Reward|Style` 分类保留接口。完成反馈后沿用原有选中奖励回调和其他卡片 Fade Out。
+- **验证状态**：冷编译 `Result: Succeeded`；真实渲染 PIE 日志确认 3 个奖励卡 MID 创建成功，`RevealProgress` 按约 60 Hz 从约 0.1 连续递增到 `1.0`，随后正常触发选择完成和奖励 UI 关闭。未出现 `Ensure condition failed`、委托绑定错误或动画回调丢失。关键帧截图已保存于 `Saved/Screenshots/WindowsEditor/RewardReveal_*_20260820*.png`，当前 TestMap_1 的奖励 HUD 本身仍受既有 1280 窗口 DPI/布局影响，未在本修复中扩大范围处理。
+
 ## 2026-08-10：UE 5.8 启动时的 GameFeatures 与缺失材质包错误
 
 - **现象**：启动编辑器时出现 `Asset Manager settings do not include an entry for assets of type GameFeatureData`；加载 `SM_TargetBaseMesh` 时又报 `/Game/TopDown/MI_Colorway` 不存在。

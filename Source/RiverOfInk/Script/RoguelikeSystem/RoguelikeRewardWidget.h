@@ -57,6 +57,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> TitleDividerTexture;
 
+	/** Duration for the selected card's fixed brush to reveal from top to bottom. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.1", ClampMax = "2.0"))
+	float SelectionSweepDuration = 0.63f;
+
+	/** Duration for the completed selection brush to remain visible. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SelectionHoldDuration = 0.175f;
+
+	/** Softness of the material edge while the fixed brush is revealed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.001", ClampMax = "0.2"))
+	float SelectionRevealSoftness = 0.018f;
+
+	/** Duration for unselected reward cards to fade out after selection completes. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.05", ClampMax = "2.0"))
+	float FadeOutDuration = 0.455f;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;

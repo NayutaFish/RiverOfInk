@@ -16,6 +16,8 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "MovieScene.h"
 #include "MovieSceneSection.h"
 #include "Sections/MovieSceneFloatSection.h"
@@ -33,8 +35,13 @@ namespace
 	constexpr float HoverScale = 1.03f;
 
 	const TCHAR* SelectionBrushPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SelectBrush.T_UI_Reward_SelectBrush");
+	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
+
+	const FName SelectionBrushTextureParameter(TEXT("SelectionBrushTexture"));
+	const FName SelectionBrushRevealProgressParameter(TEXT("RevealProgress"));
+	const FName SelectionBrushRevealSoftnessParameter(TEXT("RevealSoftness"));
 
 	FVector2D GetOptionTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
 	{
@@ -305,6 +312,7 @@ namespace
 		Track->AddSection(*Section);
 		return Animation;
 	}
+
 }
 
 URoguelikeRewardOptionWidget::URoguelikeRewardOptionWidget(const FObjectInitializer& ObjectInitializer)
@@ -314,6 +322,11 @@ URoguelikeRewardOptionWidget::URoguelikeRewardOptionWidget(const FObjectInitiali
 	if (SelectionBrushFinder.Succeeded())
 	{
 		SelectionBrushTexture = SelectionBrushFinder.Object;
+	}
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SelectionBrushMaterialFinder(SelectionBrushMaterialPath);
+	if (SelectionBrushMaterialFinder.Succeeded())
+	{
+		SelectionBrushMaterial = SelectionBrushMaterialFinder.Object;
 	}
 	static ConstructorHelpers::FObjectFinder<UTexture2D> HoverInkFinder(HoverInkPath);
 	if (HoverInkFinder.Succeeded())
@@ -338,13 +351,20 @@ void URoguelikeRewardOptionWidget::NativeConstruct()
 	Super::NativeConstruct();
 	SetIsFocusable(true);
 	BuildDefaultWidgetTree();
+	InitializeSelectionBrushMaterial();
+	if (ImageSelectionBrush && SelectionBrushMaterialInstance)
+	{
+		ImageSelectionBrush->SetBrushFromMaterial(SelectionBrushMaterialInstance);
+	}
 	SetInteractionEnabled(true);
 	bHovered = false;
 	SetVisualScale(1.0f);
 	SetHoverState(false);
+	SetSelectionBrushRevealProgress(0.0f);
 	if (ImageSelectionBrush)
 	{
 		ImageSelectionBrush->SetVisibility(ESlateVisibility::Collapsed);
+		ImageSelectionBrush->SetRenderTransform(FWidgetTransform());
 	}
 	if (HoverInkImage)
 	{
@@ -361,6 +381,7 @@ void URoguelikeRewardOptionWidget::NativeDestruct()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SelectionHoldTimer);
+		World->GetTimerManager().ClearTimer(SelectionRevealTimer);
 	}
 	SelectionFinishedCallback.Unbind();
 	OnOptionClicked.Unbind();
@@ -380,6 +401,7 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SelectionHoldTimer);
+		World->GetTimerManager().ClearTimer(SelectionRevealTimer);
 	}
 
 	if (TextRewardCategory)
@@ -439,10 +461,10 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	SetInteractionEnabled(true);
 	SetVisualScale(1.0f);
 	SetRenderOpacity(1.0f);
+	SetSelectionBrushRevealProgress(0.0f);
 	if (ImageSelectionBrush)
 	{
 		ImageSelectionBrush->SetVisibility(ESlateVisibility::Collapsed);
-		ImageSelectionBrush->SetRenderOpacity(1.0f);
 		ImageSelectionBrush->SetRenderTransform(FWidgetTransform());
 	}
 	if (HoverInkImage)
@@ -476,26 +498,35 @@ bool URoguelikeRewardOptionWidget::PlaySelectionFeedback()
 		SmallDividerImage->SetRenderOpacity(0.55f);
 	}
 	SetRenderOpacity(1.0f);
+
+	// The brush geometry is already at its final size and position. The
+	// material's RevealProgress is the only animated value, so the texture
+	// cannot translate or stretch while the writing direction advances.
+	SetSelectionBrushRevealProgress(0.0f);
 	ImageSelectionBrush->SetVisibility(ESlateVisibility::HitTestInvisible);
-	ImageSelectionBrush->SetRenderOpacity(1.0f);
 	ImageSelectionBrush->SetRenderTransform(FWidgetTransform());
 
-	const float BrushTravel = OptionHeight + 24.0f;
-	if (SelectionBrushAnimation)
+	if (UWorld* World = GetWorld())
 	{
-		ImageSelectionBrush->SetRenderTransform(FWidgetTransform(
-			FVector2D(0.0f, -BrushTravel),
-			FVector2D(1.0f, 1.0f),
-			FVector2D::ZeroVector,
-			0.0f));
-		// This animation is created at runtime. Completion is intentionally
-		// timer-driven below; binding a dynamic UMG delegate here requires a
-		// reflected UFUNCTION and can assert in editor builds.
-		PlayAnimation(SelectionBrushAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward, 1.0f, false);
+		SelectionRevealStartTime = World->GetTimeSeconds();
+		if (SelectionBrushMaterialInstance && SelectionSweepDuration > KINDA_SMALL_NUMBER)
+		{
+			World->GetTimerManager().SetTimer(
+				SelectionRevealTimer,
+				this,
+				&URoguelikeRewardOptionWidget::UpdateSelectionBrushReveal,
+				1.0f / 60.0f,
+				true);
+		}
+		else
+		{
+			SetSelectionBrushRevealProgress(1.0f);
+			UE_LOG(LogRoguelike, Warning, TEXT("Reward selection reveal material unavailable for option %d; completing brush immediately."), OptionIndex);
+		}
 	}
 	else
 	{
-		UE_LOG(LogRoguelike, Warning, TEXT("Reward selection animation unavailable for option %d; using completion timer."), OptionIndex);
+		SetSelectionBrushRevealProgress(1.0f);
 	}
 
 	if (UWorld* World = GetWorld())
@@ -725,12 +756,16 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 		ImageSelectionBrush->SetBrushFromTexture(SelectionBrushTexture, true);
 	}
 	ImageSelectionBrush->SetColorAndOpacity(FLinearColor::White);
+	// Keep the brush at its final geometry for the entire reveal. The material
+	// remaps the source texture's transparent margins and masks only its alpha.
 	ImageSelectionBrush->SetDesiredSizeOverride(FVector2D(SelectionBrushWidth, OptionHeight));
 	ImageSelectionBrush->SetVisibility(ESlateVisibility::Collapsed);
 	if (UOverlaySlot* BrushSlot = OptionOverlay->AddChildToOverlay(ImageSelectionBrush))
 	{
+		// This is deliberately added after all card content so the fixed brush is
+		// the highest visual layer. RevealProgress controls only its visible alpha.
 		BrushSlot->SetHorizontalAlignment(HAlign_Center);
-		BrushSlot->SetVerticalAlignment(VAlign_Center);
+		BrushSlot->SetVerticalAlignment(VAlign_Top);
 	}
 
 	ButtonHitArea->OnClicked.AddDynamic(this, &URoguelikeRewardOptionWidget::HandleButtonClicked);
@@ -739,22 +774,80 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	BuildAnimations();
 }
 
-void URoguelikeRewardOptionWidget::BuildAnimations()
+void URoguelikeRewardOptionWidget::InitializeSelectionBrushMaterial()
 {
-	if (SelectionBrushAnimation || !RootSizeBox || !ImageSelectionBrush)
+	if (SelectionBrushMaterialInstance)
 	{
 		return;
 	}
 
-	SelectionBrushAnimation = CreateTransformAnimation(
-		this,
-		ImageSelectionBrush,
-		TEXT("RewardSelectionBrushSweep"),
-		SelectionSweepDuration,
-		FVector2D(0.0f, -(OptionHeight + 24.0f)),
-		FVector2D(0.0f, 0.0f),
-		FVector2D(1.0f, 1.0f),
-		FVector2D(1.0f, 1.0f));
+	if (!SelectionBrushMaterial)
+	{
+		SelectionBrushMaterial = LoadObject<UMaterialInterface>(nullptr, SelectionBrushMaterialPath);
+	}
+
+	if (!SelectionBrushMaterial)
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("Reward selection brush material is missing for option %d: %s."), OptionIndex, SelectionBrushMaterialPath);
+		return;
+	}
+
+	SelectionBrushMaterialInstance = UMaterialInstanceDynamic::Create(SelectionBrushMaterial, this);
+	if (!SelectionBrushMaterialInstance)
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("Failed to create reward selection brush MID for option %d."), OptionIndex);
+		return;
+	}
+
+	if (SelectionBrushTexture)
+	{
+		SelectionBrushMaterialInstance->SetTextureParameterValue(SelectionBrushTextureParameter, SelectionBrushTexture);
+	}
+	SelectionBrushMaterialInstance->SetScalarParameterValue(SelectionBrushRevealProgressParameter, 0.0f);
+	SelectionBrushMaterialInstance->SetScalarParameterValue(SelectionBrushRevealSoftnessParameter, SelectionRevealSoftness);
+}
+
+void URoguelikeRewardOptionWidget::SetSelectionBrushRevealProgress(float Progress)
+{
+	if (SelectionBrushMaterialInstance)
+	{
+		SelectionBrushMaterialInstance->SetScalarParameterValue(
+			SelectionBrushRevealProgressParameter,
+			FMath::Clamp(Progress, 0.0f, 1.0f));
+		SelectionBrushMaterialInstance->SetScalarParameterValue(
+			SelectionBrushRevealSoftnessParameter,
+			FMath::Clamp(SelectionRevealSoftness, 0.001f, 0.2f));
+	}
+}
+
+void URoguelikeRewardOptionWidget::UpdateSelectionBrushReveal()
+{
+	UWorld* World = GetWorld();
+	if (!World || !bSelectionPlaying || !SelectionBrushMaterialInstance)
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(SelectionRevealTimer);
+		}
+		return;
+	}
+
+	const float Duration = FMath::Max(KINDA_SMALL_NUMBER, SelectionSweepDuration);
+	const float Progress = FMath::Clamp((World->GetTimeSeconds() - SelectionRevealStartTime) / Duration, 0.0f, 1.0f);
+	SetSelectionBrushRevealProgress(Progress);
+
+	if (Progress >= 1.0f)
+	{
+		World->GetTimerManager().ClearTimer(SelectionRevealTimer);
+	}
+}
+
+void URoguelikeRewardOptionWidget::BuildAnimations()
+{
+	if (HoverInAnimation || HoverOutAnimation || FadeOutAnimation || !RootSizeBox)
+	{
+		return;
+	}
 
 	HoverInAnimation = CreateTransformAnimation(
 		this,
@@ -784,11 +877,10 @@ void URoguelikeRewardOptionWidget::BuildAnimations()
 		1.0f,
 		0.0f);
 
-	if (!SelectionBrushAnimation || !HoverInAnimation || !HoverOutAnimation || !FadeOutAnimation)
+	if (!HoverInAnimation || !HoverOutAnimation || !FadeOutAnimation)
 	{
-		UE_LOG(LogRoguelike, Warning, TEXT("Reward option runtime animation setup incomplete: Option=%d Selection=%s HoverIn=%s HoverOut=%s Fade=%s."),
+		UE_LOG(LogRoguelike, Warning, TEXT("Reward option runtime animation setup incomplete: Option=%d HoverIn=%s HoverOut=%s Fade=%s."),
 			OptionIndex,
-			SelectionBrushAnimation ? TEXT("true") : TEXT("false"),
 			HoverInAnimation ? TEXT("true") : TEXT("false"),
 			HoverOutAnimation ? TEXT("true") : TEXT("false"),
 			FadeOutAnimation ? TEXT("true") : TEXT("false"));
@@ -847,7 +939,9 @@ void URoguelikeRewardOptionWidget::FinishSelectionFeedback()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SelectionHoldTimer);
+		World->GetTimerManager().ClearTimer(SelectionRevealTimer);
 	}
+	SetSelectionBrushRevealProgress(1.0f);
 	SelectionFinishedCallback.ExecuteIfBound();
 }
 
