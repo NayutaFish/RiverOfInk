@@ -105,6 +105,13 @@ void URoguelikeRewardWidget::SetupRewardOptions(
 			continue;
 		}
 
+		// The option widget is a native runtime class, so copy the editor-tuned
+		// values from the owning WBP before it builds its runtime animations and
+		// dynamic brush material.
+		OptionWidget->SelectionSweepDuration = SelectionSweepDuration;
+		OptionWidget->SelectionHoldDuration = SelectionHoldDuration;
+		OptionWidget->SelectionRevealSoftness = SelectionRevealSoftness;
+		OptionWidget->FadeOutDuration = FadeOutDuration;
 		OptionWidget->InitializeRewardOption(RewardOptions[OptionIndex], OptionIndex);
 		OptionWidget->OnOptionClicked.BindUObject(this, &URoguelikeRewardWidget::SelectOption);
 		OptionWidget->OnOptionHovered.BindUObject(this, &URoguelikeRewardWidget::HandleOptionHovered);

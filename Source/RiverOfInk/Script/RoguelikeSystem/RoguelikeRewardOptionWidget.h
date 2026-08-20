@@ -9,6 +9,8 @@
 
 class UButton;
 class UImage;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
@@ -54,6 +56,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> SelectionBrushTexture;
 
+	/** UI material that reveals the fixed brush from top to bottom. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
+	TObjectPtr<UMaterialInterface> SelectionBrushMaterial;
+
 	/** Subtle dry-brush halo shown only while this option is hovered. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> HoverInkTexture;
@@ -67,13 +73,16 @@ public:
 	float SmallDividerWidth = 192.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float SelectionSweepDuration = 0.38f;
+	float SelectionSweepDuration = 0.63f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float SelectionHoldDuration = 0.18f;
+	float SelectionHoldDuration = 0.175f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.001", ClampMax = "0.2"))
+	float SelectionRevealSoftness = 0.018f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.05", ClampMax = "2.0"))
-	float FadeOutDuration = 0.65f;
+	float FadeOutDuration = 0.455f;
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -83,6 +92,9 @@ protected:
 private:
 	void BuildDefaultWidgetTree();
 	void BuildAnimations();
+	void InitializeSelectionBrushMaterial();
+	void SetSelectionBrushRevealProgress(float Progress);
+	void UpdateSelectionBrushReveal();
 	void SetTextStyle(UTextBlock* TextBlock, int32 FontSize, const FLinearColor& Color) const;
 	void SetButtonStyle();
 	void SetVisualScale(float Scale);
@@ -140,8 +152,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> ImageSelectionBrush;
 
+	/** Dynamic UI material instance. The image geometry remains fixed while its RevealProgress changes. */
 	UPROPERTY(Transient)
-	TObjectPtr<UWidgetAnimation> SelectionBrushAnimation;
+	TObjectPtr<UMaterialInstanceDynamic> SelectionBrushMaterialInstance;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetAnimation> HoverInAnimation;
@@ -162,4 +175,6 @@ private:
 
 	FRoguelikeRewardOptionFinishedDelegate SelectionFinishedCallback;
 	FTimerHandle SelectionHoldTimer;
+	FTimerHandle SelectionRevealTimer;
+	float SelectionRevealStartTime = 0.0f;
 };
