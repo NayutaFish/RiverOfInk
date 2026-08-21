@@ -70,6 +70,14 @@ struct FShopItemDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop")
 	float EffectValue = 0.0f;
 
+	/** Runtime stat targeted by TemporaryStatBoost offers. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop")
+	EPlayerRuntimeStat StatType = EPlayerRuntimeStat::MaxHealth;
+
+	/** Optional multiplicative part for speed buffs; 1.0 means no multiplier. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop", meta = (ClampMin = "0.0"))
+	float EffectMultiplier = 1.0f;
+
 	/** Number of subsequent Combat Rooms for a temporary stat effect. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop", meta = (ClampMin = "0"))
 	int32 CombatRoomDuration = 0;

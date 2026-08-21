@@ -91,7 +91,7 @@ private:
 	bool CanApplyItemEffect(const FShopItemDefinition& Item) const;
 	bool IsInteractionAvailable() const;
 	void AddDefaultOffersIfUnset();
-	void ApplyImmediateItemEffect(const FShopItemDefinition& Item);
+	bool ApplyImmediateItemEffect(const FShopItemDefinition& Item);
 	void RegisterPlayerIfAlreadyInsideShopArea();
 	void ShowInteractionPrompt(APlayerCharacter* InPlayer);
 	void HideInteractionPrompt();

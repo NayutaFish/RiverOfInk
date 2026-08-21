@@ -3,6 +3,7 @@
 #include "Common/HealthComponent.h"
 
 #include "Common/CombatEffectComponent.h"
+#include "Common/CombatEffectTags.h"
 #include "Core/CombatDamageCalculator.h"
 #include "RiverOfInk.h"
 
@@ -65,7 +66,7 @@ void UHealthComponent::ApplyDamageContext(const FDamageContext& InContext)
 		Context,
 		SourceEffects,
 		TargetEffects,
-		static_cast<float>(Defense));
+		static_cast<float>(GetDefense()));
 	OnDamageResolved.Broadcast(DamageResult);
 
 	if (DamageResult.bBlockedByInvulnerability)
@@ -96,7 +97,7 @@ void UHealthComponent::ApplyDamageContext(const FDamageContext& InContext)
 		TEXT("Health component damage: Owner=%s Damage=%d Defense=%d CurrentHealth=%.1f."),
 		*GetNameSafe(GetOwner()),
 		FinalDamage,
-		Defense,
+		GetDefense(),
 		CurrentHealth);
 
 	if (CurrentHealth <= 0.0f)
@@ -194,9 +195,37 @@ void UHealthComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 		Defense);
 }
 
+void UHealthComponent::RefreshRuntimeModifiers()
+{
+	CurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, GetMaxHealth());
+	BroadcastHealthChanged();
+}
+
+float UHealthComponent::GetMaxHealth() const
+{
+	const UCombatEffectComponent* Effects = GetOwner()
+		? GetOwner()->FindComponentByClass<UCombatEffectComponent>()
+		: nullptr;
+	const float RuntimeAdditive = Effects
+		? Effects->GetModifierAdditiveValue(RiverOfInkCombatEffectTags::Attribute_Health_MaxAdditive)
+		: 0.0f;
+	return FMath::Max(1.0f, MaxHealth + RuntimeAdditive);
+}
+
+int32 UHealthComponent::GetDefense() const
+{
+	const UCombatEffectComponent* Effects = GetOwner()
+		? GetOwner()->FindComponentByClass<UCombatEffectComponent>()
+		: nullptr;
+	const float RuntimeAdditive = Effects
+		? Effects->GetModifierAdditiveValue(RiverOfInkCombatEffectTags::Attribute_Defense_Additive)
+		: 0.0f;
+	return FMath::Max(0, FMath::RoundToInt(static_cast<float>(Defense) + RuntimeAdditive));
+}
+
 void UHealthComponent::SetCurrentHealth(float InCurrentHealth)
 {
-	CurrentHealth = FMath::Clamp(InCurrentHealth, 0.0f, MaxHealth);
+	CurrentHealth = FMath::Clamp(InCurrentHealth, 0.0f, GetMaxHealth());
 	BroadcastHealthChanged();
 }
 
@@ -209,5 +238,5 @@ void UHealthComponent::NormalizeDefenseFromLegacy()
 
 void UHealthComponent::BroadcastHealthChanged()
 {
-	OnHealthChanged.Broadcast(CurrentHealth, MaxHealth);
+	OnHealthChanged.Broadcast(CurrentHealth, GetMaxHealth());
 }

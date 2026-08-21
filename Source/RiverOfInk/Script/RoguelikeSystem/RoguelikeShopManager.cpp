@@ -15,6 +15,7 @@
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
+#include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "RiverOfInk.h"
 #include "UI/RoguelikeShopPromptWidget.h"
 #include "UI/RoguelikeShopWidget.h"
@@ -180,7 +181,15 @@ bool ARoguelikeShopManager::PurchaseItem(FName ItemId)
 	}
 
 	PurchasedItemIds.Add(ItemId);
-	ApplyImmediateItemEffect(*Item);
+	if (!ApplyImmediateItemEffect(*Item))
+	{
+		PurchasedItemIds.Remove(ItemId);
+		Economy->AddPureInk(Item->Cost, EPureInkChangeReason::ShopPurchase);
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("Shop purchase rolled back because effect application failed: ItemId=%s."),
+			*ItemId.ToString());
+		return false;
+	}
 
 	const int32 NewBalance = Economy->GetPureInkBalance();
 	UE_LOG(LogRoguelike, Log,
@@ -297,6 +306,26 @@ bool ARoguelikeShopManager::IsShopRoomActive() const
 
 bool ARoguelikeShopManager::CanApplyItemEffect(const FShopItemDefinition& Item) const
 {
+	if (Item.EffectType == EShopItemEffectType::TemporaryStatBoost)
+	{
+		const APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+		const UGameInstance* GameInstance = GetGameInstance();
+		const URoguelikeRuntimeDataSubsystem* RuntimeData = GameInstance
+			? GameInstance->GetSubsystem<URoguelikeRuntimeDataSubsystem>()
+			: nullptr;
+		const bool bSpeedStat = Item.StatType == EPlayerRuntimeStat::WalkSpeed
+			|| Item.StatType == EPlayerRuntimeStat::SprintSpeed;
+		return IsValid(Player)
+			&& RuntimeData
+			&& Item.CombatRoomDuration > 0
+			&& FMath::IsFinite(Item.EffectValue)
+			&& FMath::IsFinite(Item.EffectMultiplier)
+			&& Item.EffectMultiplier > 0.0f
+			&& (FMath::Abs(Item.EffectValue) > KINDA_SMALL_NUMBER
+				|| (bSpeedStat && !FMath::IsNearlyEqual(Item.EffectMultiplier, 1.0f)))
+			&& (bSpeedStat || FMath::IsNearlyEqual(Item.EffectMultiplier, 1.0f));
+	}
+
 	if (Item.EffectType != EShopItemEffectType::RestoreHealth)
 	{
 		return false;
@@ -337,15 +366,53 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		RestoreHealth.EffectValue = RestoreAmount;
 		ShopItems.Add(MoveTemp(RestoreHealth));
 	};
+	const auto AddTemporaryOffer = [this](
+		const TCHAR* ItemId,
+		const TCHAR* Title,
+		const TCHAR* Description,
+		int32 Cost,
+		EPlayerRuntimeStat StatType,
+		float AdditiveValue,
+		float MultiplierValue,
+		int32 CombatRoomDuration)
+	{
+		FShopItemDefinition TemporaryBoost;
+		TemporaryBoost.ItemId = ItemId;
+		TemporaryBoost.Title = FText::FromString(Title);
+		TemporaryBoost.Description = FText::FromString(Description);
+		TemporaryBoost.Cost = Cost;
+		TemporaryBoost.EffectType = EShopItemEffectType::TemporaryStatBoost;
+		TemporaryBoost.EffectValue = AdditiveValue;
+		TemporaryBoost.StatType = StatType;
+		TemporaryBoost.EffectMultiplier = MultiplierValue;
+		TemporaryBoost.CombatRoomDuration = CombatRoomDuration;
+		ShopItems.Add(MoveTemp(TemporaryBoost));
+	};
 
-	// Slice 4 exposes exactly three immediately usable offers. Reward and
-	// temporary-buff effects remain reserved until their own transaction slices.
 	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("Quick Rinse"), TEXT("Restore 250 HP."), 5, 250.0f);
 	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("Pure Wash"), TEXT("Restore 500 HP."), 10, 500.0f);
 	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("Deep Cleanse"), TEXT("Restore 1000 HP."), 18, 1000.0f);
+	AddTemporaryOffer(
+		TEXT("shop_temp_walk_speed"),
+		TEXT("Swift Current"),
+		TEXT("Increase Walk Speed by 120 for 2 Combat Rooms."),
+		12,
+		EPlayerRuntimeStat::WalkSpeed,
+		120.0f,
+		1.0f,
+		2);
+	AddTemporaryOffer(
+		TEXT("shop_temp_defense"),
+		TEXT("Ink Shell"),
+		TEXT("Increase Defense by 15 for 2 Combat Rooms."),
+		12,
+		EPlayerRuntimeStat::Defense,
+		15.0f,
+		1.0f,
+		2);
 }
 
-void ARoguelikeShopManager::ApplyImmediateItemEffect(const FShopItemDefinition& Item)
+bool ARoguelikeShopManager::ApplyImmediateItemEffect(const FShopItemDefinition& Item)
 {
 	if (Item.EffectType == EShopItemEffectType::RestoreHealth)
 	{
@@ -361,14 +428,44 @@ void ARoguelikeShopManager::ApplyImmediateItemEffect(const FShopItemDefinition& 
 				*Item.ItemId.ToString(),
 				Health->GetCurrentHealth(),
 				Health->GetMaxHealth());
+			return true;
 		}
-		return;
+		return false;
+	}
+
+	if (Item.EffectType == EShopItemEffectType::TemporaryStatBoost)
+	{
+		UGameInstance* GameInstance = GetGameInstance();
+		URoguelikeRuntimeDataSubsystem* RuntimeData = GameInstance
+			? GameInstance->GetSubsystem<URoguelikeRuntimeDataSubsystem>()
+			: nullptr;
+		APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+		if (!RuntimeData || !IsValid(Player))
+		{
+			return false;
+		}
+
+		FRunBuffData Buff;
+		Buff.BuffId = Item.ItemId;
+		Buff.StatType = Item.StatType;
+		Buff.AdditiveValue = Item.EffectValue;
+		Buff.MultiplierValue = Item.EffectMultiplier;
+		Buff.RemainCombatCount = Item.CombatRoomDuration;
+		const bool bApplied = RuntimeData->AddTemporaryPlayerStatBoost(Player, Buff);
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Shop temporary effect %s: ItemId=%s Stat=%d Rooms=%d."),
+			bApplied ? TEXT("applied") : TEXT("rejected"),
+			*Item.ItemId.ToString(),
+			static_cast<int32>(Item.StatType),
+			Item.CombatRoomDuration);
+		return bApplied;
 	}
 
 	UE_LOG(LogRoguelike, Warning,
-		TEXT("Shop effect was not applied because the item passed purchase validation unexpectedly: ItemId=%s EffectType=%d."),
+		TEXT("Shop effect was not applied: ItemId=%s EffectType=%d."),
 		*Item.ItemId.ToString(),
 		static_cast<int32>(Item.EffectType));
+	return false;
 }
 
 void ARoguelikeShopManager::RegisterPlayerIfAlreadyInsideShopArea()

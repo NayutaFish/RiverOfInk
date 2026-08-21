@@ -640,6 +640,10 @@ bool URoguelikeRunFlowSubsystem::RequestMapTravel(
 		return false;
 	}
 
+	const bool bConsumeCombatRoomDuration = bCapturePlayerData
+		&& CurrentRunState == ERoguelikeRunState::InRoom
+		&& GetCurrentRoomDefinition().RoomType == ERoguelikeRoomType::Combat;
+
 	if (bCapturePlayerData && !CaptureCurrentPlayerRuntimeData())
 	{
 		return false;
@@ -648,6 +652,15 @@ bool URoguelikeRunFlowSubsystem::RequestMapTravel(
 	if (!TransitionRunState(ERoguelikeRunState::LoadingRoom, Reason))
 	{
 		return false;
+	}
+
+	if (bConsumeCombatRoomDuration)
+	{
+		if (URoguelikeRuntimeDataSubsystem* RuntimeData =
+			GameInstance->GetSubsystem<URoguelikeRuntimeDataSubsystem>())
+		{
+			RuntimeData->ConsumeCombatRoomDurations();
+		}
 	}
 
 	UE_LOG(LogRoguelikeRunFlow, Log,

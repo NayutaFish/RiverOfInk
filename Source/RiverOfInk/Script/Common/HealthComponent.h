@@ -70,17 +70,20 @@ public:
 	/** Apply the health-owned fields from the aggregate run snapshot. */
 	void ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
 
+	/** Re-clamp and broadcast after a runtime effect changes health modifiers. */
+	void RefreshRuntimeModifiers();
+
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void SetCurrentHealth(float InCurrentHealth);
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	float GetMaxHealth() const { return MaxHealth; }
+	float GetMaxHealth() const;
 
 	UFUNCTION(BlueprintPure, Category = "Health")
 	float GetCurrentHealth() const { return CurrentHealth; }
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	int32 GetDefense() const { return Defense; }
+	int32 GetDefense() const;
 
 	UFUNCTION(BlueprintPure, Category = "Health")
 	UE_DEPRECATED(5.8, "Use GetDefense; the damage model has one Defense value.")
