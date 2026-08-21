@@ -3,8 +3,11 @@
 #include "Player/Skill/SkillComponent.h"
 
 #include "Common/AttackAreaBase.h"
+#include "Common/CombatEffectTags.h"
 #include "Engine/World.h"
+#include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
 #include "Player/Skill/PlayerSkill_ThrownGrenade.h"
@@ -240,6 +243,11 @@ int32 USkillComponent::GetModifierStack(EPlayerSkillID SkillID, ESkillModifierID
 		: 0;
 }
 
+bool USkillComponent::HasProjectileHoming(EPlayerSkillID SkillID) const
+{
+	return GetModifierStack(SkillID, ESkillModifierID::ProjectileHoming) > 0;
+}
+
 int32 USkillComponent::GetMaxModifierStack(
 	EPlayerSkillID SkillID,
 	ESkillModifierID ModifierID) const
@@ -258,6 +266,8 @@ int32 USkillComponent::GetMaxModifierStack(
 			// Q starts at 4.0s and bottoms out at 2.0s in
 			// GetTripleProjectileCooldown(), so four 0.5s steps are legal.
 			return 4;
+		case ESkillModifierID::ProjectileHoming:
+			return 1;
 		default:
 			return 0;
 		}
@@ -475,7 +485,8 @@ FString USkillComponent::BuildModifierSummary(EPlayerSkillID SkillID) const
 		ESkillModifierID::TwinSlash,
 		ESkillModifierID::NullRing,
 		ESkillModifierID::RadiusUp,
-		ESkillModifierID::CooldownDown
+		ESkillModifierID::CooldownDown,
+		ESkillModifierID::ProjectileHoming
 	};
 
 	FString Summary;
@@ -593,6 +604,8 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 			? 1 + FMath::Min(1, GetModifierStack(SkillID, ESkillModifierID::ExtraExplosion))
 			: 1;
 		Spec.ExplosionDelay = ThrownGrenadeExplosionDelay;
+		Spec.bEnableHoming = HasProjectileHoming(SkillID);
+		Spec.HomingTurnRate = ProjectileHomingTurnRate;
 		Spec.Cooldown = GetTripleProjectileCooldown();
 		break;
 	}
@@ -656,7 +669,8 @@ FText USkillComponent::GetSkillBuildSummary(EPlayerSkillID SkillID) const
 		ESkillModifierID::TwinSlash,
 		ESkillModifierID::NullRing,
 		ESkillModifierID::RadiusUp,
-		ESkillModifierID::CooldownDown
+		ESkillModifierID::CooldownDown,
+		ESkillModifierID::ProjectileHoming
 	};
 	const UEnum* ModifierEnum = StaticEnum<ESkillModifierID>();
 	for (const ESkillModifierID ModifierID : OrderedModifiers)
@@ -977,6 +991,23 @@ bool USkillComponent::CastTripleProjectile()
 		: 0.0f;
 	const float StartAngle = -AngleStep * (ProjectileCount - 1) * 0.5f;
 	const FVector SpawnCenter = OwnerCharacter->GetActorLocation() + Forward * ProjectileSpawnForwardOffset;
+	AActor* HomingTarget = nullptr;
+	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
+	{
+		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+	}
+
+	FProjectileSpec ProjectileSpec;
+	ProjectileSpec.LifeTime = Spec.ProjectileLifeTime;
+	ProjectileSpec.ProjectileSpeed = Spec.ProjectileSpeed;
+	ProjectileSpec.HomingTurnRate = Spec.HomingTurnRate;
+	ProjectileSpec.HomingTarget = HomingTarget;
+	ProjectileSpec.bEnableHoming = Spec.bEnableHoming && IsValid(HomingTarget);
+	if (ProjectileSpec.bEnableHoming)
+	{
+		ProjectileSpec.ProjectileTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
+	}
+
 	bool bSpawnedAny = false;
 	for (int32 Index = 0; Index < ProjectileCount; ++Index)
 	{
@@ -985,8 +1016,7 @@ bool USkillComponent::CastTripleProjectile()
 		bSpawnedAny |= SpawnProjectile(
 			SpawnCenter + Right * SideOffset,
 			Direction,
-			Spec.ProjectileLifeTime,
-			Spec.ProjectileSpeed,
+			ProjectileSpec,
 			*FString::FromInt(Index + 1));
 	}
 
@@ -1030,6 +1060,11 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 		: 0.0f;
 	const float StartAngle = -AngleStep * (GrenadeCount - 1) * 0.5f;
 	const FVector SpawnOrigin = OwnerCharacter->GetActorLocation();
+	AActor* HomingTarget = nullptr;
+	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
+	{
+		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+	}
 	int32 SpawnedCount = 0;
 
 	for (int32 Index = 0; Index < GrenadeCount; ++Index)
@@ -1068,7 +1103,9 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			GrenadeDirection * Spec.ProjectileSpeed,
 			OwnerCharacter,
 			Spec.ExplosionCount,
-			Spec.ExplosionDelay);
+			Spec.ExplosionDelay,
+			HomingTarget,
+			Spec.HomingTurnRate);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}
@@ -1087,8 +1124,7 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 bool USkillComponent::SpawnProjectile(
 	const FVector& SpawnLocation,
 	const FVector& Direction,
-	float ProjectileLifeTime,
-	float ProjectileSpeed,
+	const FProjectileSpec& ProjectileSpec,
 	const TCHAR* ProjectileLabel)
 {
 	UWorld* World = GetWorld();
@@ -1105,7 +1141,7 @@ bool USkillComponent::SpawnProjectile(
 		return false;
 	}
 
-	Projectile->Initialize(ProjectileLifeTime, ProjectileSpeed);
+	Projectile->InitializeProjectile(ProjectileSpec);
 	Projectile->bDetectObstacle = true;
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 	return true;

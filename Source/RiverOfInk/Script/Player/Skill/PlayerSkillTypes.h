@@ -67,7 +67,9 @@ enum class ESkillModifierID : uint8
 	TwinSlash UMETA(DisplayName = "Twin Slash"),
 	NullRing UMETA(DisplayName = "Null Ring"),
 	RadiusUp UMETA(DisplayName = "Radius Up"),
-	CooldownDown UMETA(DisplayName = "Cooldown Down")
+	CooldownDown UMETA(DisplayName = "Cooldown Down"),
+	/** Enables marked-target selection for player-owned moving projectiles. */
+	ProjectileHoming UMETA(DisplayName = "Projectile Homing")
 };
 
 UENUM(BlueprintType)
@@ -128,6 +130,14 @@ struct FResolvedSkillSpec
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q")
 	float ExplosionDelay = 0.12f;
+
+	/** Whether this cast may select a player-owned homing mark. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q")
+	bool bEnableHoming = false;
+
+	/** Constant turn rate used by moving projectiles in degrees per second. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float HomingTurnRate = 720.0f;
 
 	// E / Circular Slash fields.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))

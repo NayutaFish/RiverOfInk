@@ -5,8 +5,11 @@
 #include "Player/PlayerState/PlayerState_Idle.h"
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Input/PlayerInputComponent.h"
+#include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Common/CombatEffectTags.h"
 #include "Common/AttackAreaBase.h"
 #include "Player/Attack/AttackArea_PlayerAttack2.h"
 #include "Engine/World.h"
@@ -62,7 +65,23 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 				Player,
 				ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
-			AttackArea->Initialize(ProjectileLifeTime, ProjectileSpeed, false, nullptr);
+			FProjectileSpec ProjectileSpec;
+			ProjectileSpec.LifeTime = ProjectileLifeTime;
+			ProjectileSpec.ProjectileSpeed = ProjectileSpeed;
+			ProjectileSpec.HomingTurnRate = ProjectileHomingTurnRate;
+			if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
+			{
+				if (Targeting->HasHomingBuild())
+				{
+					ProjectileSpec.HomingTarget = Targeting->FindBestHomingTarget();
+					ProjectileSpec.bEnableHoming = IsValid(ProjectileSpec.HomingTarget.Get());
+					if (ProjectileSpec.bEnableHoming)
+					{
+						ProjectileSpec.ProjectileTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
+					}
+				}
+			}
+			AttackArea->InitializeProjectile(ProjectileSpec);
 			AttackArea->Radius = ProjectileHitboxRadius;
 			AttackArea->CollisionSphere->SetSphereRadius(ProjectileHitboxRadius);
 			// 运行时强制使用球形投射物，避免蓝图旧默认值恢复扇形/玩家跟随行为。

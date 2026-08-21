@@ -18,6 +18,7 @@ class UPlayerState_Attack1;
 class USkillComponent;
 class UHealthComponent;
 class UCombatEffectComponent;
+class UProjectileTargetingComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 class UPlayerSkillWidget;
@@ -94,6 +95,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Player|Effects")
 	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
+
+	/** Selects and consumes player-owned homing marks for moving projectiles. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Projectile")
+	TObjectPtr<UProjectileTargetingComponent> ProjectileTargetingComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Player|Projectile")
+	UProjectileTargetingComponent* GetProjectileTargetingComponent() const { return ProjectileTargetingComponent; }
 
 	/** Capture all component-owned runtime state into one value snapshot. */
 	bool CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;

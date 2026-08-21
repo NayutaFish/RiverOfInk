@@ -92,7 +92,19 @@ FCombatEffectHandle UCombatEffectComponent::ApplyEffect(const FCombatEffectSpec&
 		if (UsesCharges(Spec.DurationPolicy) && ExistingEffect.HasCharges())
 		{
 			ExistingEffect.RemainingCharges += FMath::Max(0, Spec.Charges);
+			const int32 MaxCharges = Spec.MaxCharges > 0
+				? Spec.MaxCharges
+				: ExistingEffect.Spec.MaxCharges;
+			if (MaxCharges > 0)
+			{
+				ExistingEffect.RemainingCharges = FMath::Min(
+					ExistingEffect.RemainingCharges,
+					MaxCharges);
+			}
 		}
+		ExistingEffect.Spec.MaxCharges = Spec.MaxCharges > 0
+			? Spec.MaxCharges
+			: ExistingEffect.Spec.MaxCharges;
 		if (Spec.StackPolicy == ECombatEffectStackPolicy::AddStackAndRefresh && UsesDuration(Spec.DurationPolicy))
 		{
 			ExistingEffect.RemainingTime = FMath::Max(0.0f, Spec.Duration);
@@ -216,6 +228,31 @@ bool UCombatEffectComponent::TryGetEffect(FGameplayTag EffectTag, FActiveCombatE
 		}
 	}
 	return false;
+}
+
+bool UCombatEffectComponent::TryGetEffectFromSource(
+	FGameplayTag EffectTag,
+	AActor* SourceActor,
+	FActiveCombatEffect& OutEffect) const
+{
+	const int32 EffectIndex = FindEffectIndex(EffectTag, SourceActor);
+	if (EffectIndex == INDEX_NONE)
+	{
+		return false;
+	}
+
+	OutEffect = ActiveEffects[EffectIndex];
+	return true;
+}
+
+bool UCombatEffectComponent::ConsumeEffectChargeFromSource(
+	FGameplayTag EffectTag,
+	AActor* SourceActor,
+	int32 ChargeCount)
+{
+	const int32 EffectIndex = FindEffectIndex(EffectTag, SourceActor);
+	return EffectIndex != INDEX_NONE
+		&& ConsumeEffectCharge(ActiveEffects[EffectIndex].Handle, ChargeCount);
 }
 
 bool UCombatEffectComponent::IsInvulnerable() const
@@ -349,6 +386,21 @@ int32 UCombatEffectComponent::FindEffectIndex(FCombatEffectHandle Handle) const
 	});
 }
 
+int32 UCombatEffectComponent::FindEffectIndex(FGameplayTag EffectTag, AActor* SourceActor) const
+{
+	if (!EffectTag.IsValid())
+	{
+		return INDEX_NONE;
+	}
+
+	return ActiveEffects.IndexOfByPredicate(
+		[EffectTag, SourceActor](const FActiveCombatEffect& ActiveEffect)
+		{
+			return EffectCarriesTag(ActiveEffect, EffectTag)
+				&& ActiveEffect.Spec.SourceActor == SourceActor;
+		});
+}
+
 int32 UCombatEffectComponent::FindMatchingEffectIndex(const FCombatEffectSpec& Spec) const
 {
 	return ActiveEffects.IndexOfByPredicate([&Spec](const FActiveCombatEffect& ActiveEffect)
@@ -383,6 +435,13 @@ bool UCombatEffectComponent::IsValidSpec(const FCombatEffectSpec& Spec)
 	}
 
 	if (UsesCharges(Spec.DurationPolicy) && Spec.Charges <= 0)
+	{
+		return false;
+	}
+
+	if (UsesCharges(Spec.DurationPolicy)
+		&& Spec.MaxCharges > 0
+		&& Spec.MaxCharges < Spec.Charges)
 	{
 		return false;
 	}

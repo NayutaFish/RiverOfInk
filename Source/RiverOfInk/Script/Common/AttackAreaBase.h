@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/SphereComponent.h"
 #include "Core/GlobalStructs.h"
+#include "Common/ProjectileTypes.h"
 #include "AttackAreaBase.generated.h"
 
 class UNiagaraSystem;
@@ -74,6 +75,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Projectile")
 	bool bIsEnemyProjectile = false;
 
+	/** Shared movement/targeting contract for player-owned moving projectiles. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack|Projectile")
+	FProjectileSpec ProjectileSpec;
+
 	/** 跟随目标时是否同步目标朝向；扇形判定通常需要开启。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Follow")
 	bool bFollowTargetRotation = false;
@@ -110,6 +115,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void Initialize(float InLifeTime, float InSpeed, bool InIsMeleeAttack = false, AActor* InFollowTarget = nullptr);
 
+	/** Initialize a moving projectile from the shared homing-capable spec. */
+	UFUNCTION(BlueprintCallable, Category = "Attack|Projectile")
+	void InitializeProjectile(const FProjectileSpec& InProjectileSpec);
+
 	/** Disable collision and destroy this attack area if it is an enemy projectile. */
 	UFUNCTION(BlueprintCallable, Category = "Attack|Projectile")
 	bool NullifyEnemyProjectile();
@@ -141,6 +150,9 @@ private:
 
 	/** 障碍物检测（射线，只查 WorldStatic，不依赖碰撞通道） */
 	void PerformObstacleScan(float DeltaTime);
+
+	/** Rotate toward the spawn-time marked target without changing its position/scale. */
+	void UpdateHoming(float DeltaTime);
 
 	/** 跟随的目标（非空则每帧同步位置；可选同步朝向） */
 	UPROPERTY()
