@@ -3,6 +3,7 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Attack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Charge.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Charging.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_HitBack.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
@@ -187,7 +188,7 @@ void UEnemyState_Chase::CheckChaseDistance()
 			if (!World->GetTimerManager().IsTimerActive(Enemy->AttackTimerHandle)
 				&& IsWithinAttackRange(Enemy, Distance))
 			{
-				Enemy->SwitchState(UEnemyState_Attack::StaticClass());
+				Enemy->SwitchState(UEnemyState_Charging::StaticClass());
 			}
 		}
 		return;
@@ -226,7 +227,7 @@ void UEnemyState_Chase::CheckChaseDistance()
 		}
 		else if (IsWithinAttackRange(Enemy, Distance))
 		{
-			Enemy->SwitchState(UEnemyState_Attack::StaticClass());
+			Enemy->SwitchState(UEnemyState_Charging::StaticClass());
 		}
 	}
 }
@@ -253,7 +254,7 @@ void UEnemyState_Chase::CheckAttackTimer()
 	}
 	else if (IsWithinAttackRange(Enemy, Distance))
 	{
-		Enemy->SwitchState(UEnemyState_Attack::StaticClass());
+		Enemy->SwitchState(UEnemyState_Charging::StaticClass());
 	}
 	else
 	{
