@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Core/GlobalEnums.h"
+#include "GameplayTagContainer.h"
 #include "GlobalStructs.generated.h"
 
 class AActor;
@@ -61,6 +62,99 @@ struct FTakeDamageInfo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTakeDirectDamageSignature, const FTakeDamageInfo&, DamageInfo);
 
 /**
+ * Unified damage request passed through the combat damage pipeline.
+ *
+ * FTakeDamageInfo remains the Blueprint and legacy compatibility shape. New
+ * gameplay code should fill this context so source/target effects can modify
+ * one request without adding another special-case damage path.
+ */
+USTRUCT(BlueprintType)
+struct FDamageContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
+	float BaseDamage = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage|Hard Value", meta = (ClampMin = "0.0"))
+	float HardDamage = 0.0f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Damage")
+	TObjectPtr<AActor> SourceActor;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Damage")
+	TObjectPtr<AActor> TargetActor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage|Tags")
+	FGameplayTagContainer DamageTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
+	EDamageType DamageType = EDamageType::Unified;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
+	bool bCanCauseDeath = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
+	bool bIsDirectDamage = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage")
+	bool bIgnoreInvulnerability = false;
+
+	FDamageContext() = default;
+
+	explicit FDamageContext(const FTakeDamageInfo& InInfo)
+		: BaseDamage(InInfo.DamageValue)
+		, HardDamage(InInfo.HardDamageValue)
+		, SourceActor(InInfo.Attacker)
+		, DamageType(InInfo.DamageType)
+		, bCanCauseDeath(InInfo.bCanCauseDeath)
+		, bIsDirectDamage(InInfo.bIsDirectDamage)
+		, bIgnoreInvulnerability(InInfo.bIgnoreInvincible)
+	{
+	}
+
+	FTakeDamageInfo ToLegacyDamageInfo() const
+	{
+		FTakeDamageInfo LegacyInfo;
+		LegacyInfo.Attacker = SourceActor;
+		LegacyInfo.DamageType = DamageType;
+		LegacyInfo.DamageValue = BaseDamage;
+		LegacyInfo.HardDamageValue = HardDamage;
+		LegacyInfo.bCanCauseDeath = bCanCauseDeath;
+		LegacyInfo.bIsDirectDamage = bIsDirectDamage;
+		LegacyInfo.bIgnoreInvincible = bIgnoreInvulnerability;
+		return LegacyInfo;
+	}
+};
+
+/** Result of one unified damage attempt, including blocked/no-damage reasons. */
+USTRUCT(BlueprintType)
+struct FDamageResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FDamageContext Context;
+
+	/** Damage after source and target effect modifiers, before Defense. */
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	float ModifiedDamage = 0.0f;
+
+	/** Final integer health damage after Defense and the global minimum rule. */
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	int32 FinalDamage = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Damage|State")
+	bool bBlockedByInvulnerability = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Damage|State")
+	bool bNoDamage = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Damage|State")
+	bool bDamageApplied = false;
+};
+
+/**
  * Resolved enemy damage result used by hard-value reactions.
  * Health damage and hard-value damage are intentionally reported separately.
  */
@@ -68,6 +162,10 @@ USTRUCT(BlueprintType)
 struct FEnemyDamageResult
 {
 	GENERATED_BODY()
+
+	/** Full unified result, including blocked/no-damage state. */
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FDamageResult ResolvedDamage;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FTakeDamageInfo DamageInfo;

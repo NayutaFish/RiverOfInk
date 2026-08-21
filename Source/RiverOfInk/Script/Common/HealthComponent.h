@@ -10,6 +10,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHealthChangedSignature, float, CurrentHealth, float, MaxHealth);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthDeathSignature, AActor*, DeadActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDamageResolvedSignature, const FDamageResult&, DamageResult);
 
 /**
  * Reusable health and damage component.
@@ -35,6 +36,10 @@ public:
 	/** Apply one damage request through the project-wide single damage model. */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void TakeDamage(const FTakeDamageInfo& InInfo);
+
+	/** New unified damage entry; the legacy TakeDamage function adapts into it. */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void ApplyDamageContext(const FDamageContext& InContext);
 
 	/** Mark this health pool dead and notify the owner. */
 	UFUNCTION(BlueprintCallable, Category = "Health")
@@ -117,6 +122,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Health|Events")
 	FOnTakeDirectDamageSignature OnTakeDirectDamage;
+
+	/** Broadcasts both applied and blocked damage attempts for debug/UI consumers. */
+	UPROPERTY(BlueprintAssignable, Category = "Health|Events")
+	FOnDamageResolvedSignature OnDamageResolved;
 
 private:
 	void NormalizeDefenseFromLegacy();

@@ -2,6 +2,7 @@
 
 #include "Common/HealthComponent.h"
 
+#include "Common/CombatEffectComponent.h"
 #include "Core/CombatDamageCalculator.h"
 #include "RiverOfInk.h"
 
@@ -33,17 +34,62 @@ void UHealthComponent::InitializeHealth()
 
 void UHealthComponent::TakeDamage(const FTakeDamageInfo& InInfo)
 {
-	if (bIsDead || InInfo.DamageValue <= 0.0f)
+	ApplyDamageContext(FDamageContext(InInfo));
+}
+
+void UHealthComponent::ApplyDamageContext(const FDamageContext& InContext)
+{
+	if (bIsDead)
 	{
 		return;
 	}
 
-	if (InInfo.bIsDirectDamage)
+	FDamageContext Context = InContext;
+	Context.TargetActor = GetOwner();
+	if (Context.BaseDamage <= 0.0f)
 	{
-		OnTakeDirectDamage.Broadcast(InInfo);
+		FDamageResult ZeroDamageResult;
+		ZeroDamageResult.Context = Context;
+		ZeroDamageResult.bNoDamage = true;
+		OnDamageResolved.Broadcast(ZeroDamageResult);
+		return;
 	}
 
-	const int32 FinalDamage = RiverOfInkDamage::CalculateFinalDamage(InInfo.DamageValue, Defense);
+	const UCombatEffectComponent* TargetEffects = GetOwner()
+		? GetOwner()->FindComponentByClass<UCombatEffectComponent>()
+		: nullptr;
+	const UCombatEffectComponent* SourceEffects = Context.SourceActor
+		? Context.SourceActor->FindComponentByClass<UCombatEffectComponent>()
+		: nullptr;
+	const FDamageResult DamageResult = RiverOfInkDamage::ResolveDamage(
+		Context,
+		SourceEffects,
+		TargetEffects,
+		static_cast<float>(Defense));
+	OnDamageResolved.Broadcast(DamageResult);
+
+	if (DamageResult.bBlockedByInvulnerability)
+	{
+		UE_LOG(LogRiverOfInk, Verbose,
+			TEXT("Health component damage blocked by invulnerability: Owner=%s Source=%s."),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(Context.SourceActor));
+		return;
+	}
+
+	if (!DamageResult.bDamageApplied)
+	{
+		return;
+	}
+
+	FTakeDamageInfo EffectiveInfo = Context.ToLegacyDamageInfo();
+	EffectiveInfo.DamageValue = DamageResult.ModifiedDamage;
+	if (Context.bIsDirectDamage)
+	{
+		OnTakeDirectDamage.Broadcast(EffectiveInfo);
+	}
+
+	const int32 FinalDamage = DamageResult.FinalDamage;
 
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - static_cast<float>(FinalDamage));
 	UE_LOG(LogRiverOfInk, Log,
@@ -55,7 +101,7 @@ void UHealthComponent::TakeDamage(const FTakeDamageInfo& InInfo)
 
 	if (CurrentHealth <= 0.0f)
 	{
-		if (InInfo.bCanCauseDeath)
+		if (Context.bCanCauseDeath)
 		{
 			Die();
 		}

@@ -6,6 +6,7 @@
 #include "Core/GameEvents.h"
 #include "Common/AttackAreaBase.h"
 #include "Common/CombatEffectComponent.h"
+#include "Common/CombatEffectTags.h"
 #include "Common/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Player/Attack/AttackArea_PlayerAttack1.h"
@@ -169,7 +170,7 @@ bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
-		MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+		MovementComponent->MaxWalkSpeed = GetEffectiveMoveSpeed(bIsSprinting ? SprintSpeed : WalkSpeed);
 	}
 
 	return bAppliedAllComponents;
@@ -190,7 +191,7 @@ void APlayerCharacter::BeginPlay()
 		HealthComponent->OnTakeDirectDamage.AddDynamic(this, &APlayerCharacter::HandleHealthDirectDamage);
 		HealthComponent->InitializeHealth();
 	}
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = GetEffectiveMoveSpeed(WalkSpeed);
 
 	// Defaults are initialized first. A later level-spawned Pawn restores the
 	// snapshot held by the GameInstance subsystem instead of replacing it with
@@ -379,14 +380,19 @@ void APlayerCharacter::HandleHealthDirectDamage(const FTakeDamageInfo& InInfo)
 	// 通告玩家受到直接性攻击（供相机震动等订阅）
 	FEventBus::Publish<FPlayerTookDirectDamageEvent>(FPlayerTookDirectDamageEvent(InInfo));
 
-	// Direct damage grants the player a short invincibility window. This is
-	// player-specific state, so it remains outside the reusable health pool.
-	bIsInDirectDamageInvincible = true;
-	GetWorldTimerManager().ClearTimer(InvincibleTimerHandle);
-	GetWorldTimerManager().SetTimer(InvincibleTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+	// The hit-stun invulnerability window is a normal timed combat effect so
+	// every damage source observes the same gate.
+	if (CombatEffectComponent)
 	{
-		bIsInDirectDamageInvincible = false;
-	}), 0.5f, false);
+		FCombatEffectSpec InvulnerabilitySpec;
+		InvulnerabilitySpec.EffectTag = RiverOfInkCombatEffectTags::Effect_Buff_Invulnerable;
+		InvulnerabilitySpec.Category = ECombatEffectCategory::Buff;
+		InvulnerabilitySpec.DurationPolicy = ECombatEffectDurationPolicy::Timed;
+		InvulnerabilitySpec.StackPolicy = ECombatEffectStackPolicy::RefreshDuration;
+		InvulnerabilitySpec.Duration = 0.5f;
+		InvulnerabilitySpec.SourceActor = this;
+		CombatEffectComponent->ApplyEffect(InvulnerabilitySpec);
+	}
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -621,10 +627,22 @@ void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 		return;
 	}
 
-	// 直接性伤害无敌：无敌期间直接跳过
-	if (InInfo.bIsDirectDamage && IsInvincible()) return;
+	FDamageContext Context(InInfo);
+	Context.TargetActor = this;
+	HealthComponent->ApplyDamageContext(Context);
+}
 
-	HealthComponent->TakeDamage(InInfo);
+bool APlayerCharacter::IsInvincible() const
+{
+	return CombatEffectComponent && CombatEffectComponent->IsInvulnerable();
+}
+
+float APlayerCharacter::GetEffectiveMoveSpeed(float BaseSpeed) const
+{
+	const float SafeBaseSpeed = FMath::Max(0.0f, BaseSpeed);
+	return SafeBaseSpeed * (CombatEffectComponent
+		? CombatEffectComponent->GetMoveSpeedMultiplier()
+		: 1.0f);
 }
 
 void APlayerCharacter::TestDie()

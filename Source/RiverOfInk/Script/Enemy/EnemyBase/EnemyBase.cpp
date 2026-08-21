@@ -209,21 +209,110 @@ void AEnemyBase::SwitchState(TSubclassOf<UStateBase> StateClass)
 
 void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea)
 {
-	if (bIsDead || InInfo.DamageValue <= 0.0f)
+	TakeDamageContext(FDamageContext(InInfo), InAttackArea);
+}
+
+void AEnemyBase::TakeDamageContext(const FDamageContext& InContext, AAttackAreaBase* InAttackArea)
+{
+	if (bIsDead)
 	{
 		return;
 	}
 
-	// 缓存最近一次伤害信息与来源（供死亡事件携带）
-	LastDamageInfo = InInfo;
+	FDamageContext Context = InContext;
+	Context.TargetActor = this;
+	if (Context.BaseDamage <= 0.0f)
+	{
+		FDamageResult ZeroDamageResult;
+		ZeroDamageResult.Context = Context;
+		ZeroDamageResult.bNoDamage = true;
+		FEnemyDamageResult DamageResult;
+		DamageResult.ResolvedDamage = ZeroDamageResult;
+		LastDamageResult = DamageResult;
+		OnDamageResolved.Broadcast(ZeroDamageResult);
+		return;
+	}
+
+	const UCombatEffectComponent* TargetEffects = CombatEffectComponent;
+	const UCombatEffectComponent* SourceEffects = Context.SourceActor
+		? Context.SourceActor->FindComponentByClass<UCombatEffectComponent>()
+		: nullptr;
+
+	// Invulnerability is checked before consuming a proc: a blocked hit is not
+	// a valid "next hit" for a proc effect.
+	if (TargetEffects
+		&& !Context.bIgnoreInvulnerability
+		&& TargetEffects->IsInvulnerable())
+	{
+		const FDamageResult BlockedResult = RiverOfInkDamage::ResolveDamage(
+			Context,
+			SourceEffects,
+			TargetEffects,
+			static_cast<float>(Defense));
+		FEnemyDamageResult DamageResult;
+		DamageResult.ResolvedDamage = BlockedResult;
+		DamageResult.DamageInfo = Context.ToLegacyDamageInfo();
+		LastDamageResult = DamageResult;
+		OnDamageResolved.Broadcast(BlockedResult);
+		UE_LOG(LogRiverOfInk, Verbose,
+			TEXT("Enemy %s damage blocked by invulnerability: Source=%s."),
+			*GetName(),
+			*GetNameSafe(Context.SourceActor));
+		return;
+	}
+
+	// Attack2's proc is attached to the enemy and consumed only after the
+	// current hit has passed the invulnerability gate, so the application hit
+	// itself never triggers its own bonus.
+	if (CombatEffectComponent)
+	{
+		FTakeDamageInfo BonusInfo;
+		if (CombatEffectComponent->ConsumeNextHitBonusDamage(BonusInfo))
+		{
+			Context.BaseDamage += BonusInfo.DamageValue;
+			Context.HardDamage += BonusInfo.HardDamageValue;
+			Context.bCanCauseDeath = Context.bCanCauseDeath || BonusInfo.bCanCauseDeath;
+			Context.bIsDirectDamage = Context.bIsDirectDamage || BonusInfo.bIsDirectDamage;
+			Context.bIgnoreInvulnerability = Context.bIgnoreInvulnerability || BonusInfo.bIgnoreInvincible;
+		}
+	}
+
+	const FDamageResult ResolvedDamage = RiverOfInkDamage::ResolveDamage(
+		Context,
+		SourceEffects,
+		TargetEffects,
+		static_cast<float>(Defense));
+	OnDamageResolved.Broadcast(ResolvedDamage);
+
+	FEnemyDamageResult DamageResult;
+	DamageResult.ResolvedDamage = ResolvedDamage;
+	DamageResult.DamageInfo = Context.ToLegacyDamageInfo();
+	if (!ResolvedDamage.bDamageApplied)
+	{
+		LastDamageResult = DamageResult;
+		return;
+	}
+
+	// Cache the resolved request for death events and hard-value reactions.
+	FTakeDamageInfo EffectiveInfo = Context.ToLegacyDamageInfo();
+	EffectiveInfo.DamageValue = ResolvedDamage.ModifiedDamage;
+	LastDamageInfo = EffectiveInfo;
 	LastAttackArea = InAttackArea;
 
 	const float PreviousHealth = CurrentHealth;
 	const float HardValueBefore = CurrentHardValue;
 	const bool bHardBreakSuppressed = HardBreakCooldownRemaining > KINDA_SMALL_NUMBER;
-	const float HardDamage = !bHardBreakSuppressed
-		? ResolveHardDamage(InInfo)
+	FTakeDamageInfo HardDamageInfo = Context.ToLegacyDamageInfo();
+	// Damage multipliers intentionally do not alter hard value unless the
+	// effect supplied an explicit HardDamage payload.
+	HardDamageInfo.DamageValue = Context.BaseDamage;
+	float HardDamage = !bHardBreakSuppressed
+		? ResolveHardDamage(HardDamageInfo)
 		: 0.0f;
+	if (CombatEffectComponent)
+	{
+		HardDamage *= CombatEffectComponent->GetControlResistMultiplier();
+	}
 
 	if (HardDamage > KINDA_SMALL_NUMBER)
 	{
@@ -247,21 +336,19 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	}
 
 	// DamageType remains legacy metadata; all damage uses one defense formula.
-	const int32 FinalDamage = RiverOfInkDamage::CalculateFinalDamage(InInfo.DamageValue, Defense);
-
+	const int32 FinalDamage = ResolvedDamage.FinalDamage;
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - static_cast<float>(FinalDamage));
 
-	FEnemyDamageResult DamageResult;
-	DamageResult.DamageInfo = InInfo;
+	DamageResult.DamageInfo = EffectiveInfo;
 	DamageResult.FinalDamage = FinalDamage;
 	DamageResult.HardValueBefore = HardValueBefore;
 	DamageResult.HardValueAfter = bHardBreak ? 0.0f : CurrentHardValue;
 	DamageResult.HardDamageApplied = HardDamage;
 	DamageResult.bHardBreak = bHardBreak;
-	DamageResult.bKilled = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
+	DamageResult.bKilled = CurrentHealth <= 0.0f && Context.bCanCauseDeath;
 	LastDamageResult = DamageResult;
 
-	const bool bWillEnterDeadState = CurrentHealth <= 0.0f && InInfo.bCanCauseDeath;
+	const bool bWillEnterDeadState = CurrentHealth <= 0.0f && Context.bCanCauseDeath;
 	if (CurrentHealth <= 0.0f && !bWillEnterDeadState)
 	{
 		CurrentHealth = 1.0f;
@@ -286,10 +373,10 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 
 	// Keep this raw damage event for existing systems such as the temporary
 	// bonus-damage buff. State interruption is handled by OnHardBreak below.
-	if (InInfo.bIsDirectDamage)
+	if (Context.bIsDirectDamage)
 	{
-		LastAttacker = InInfo.Attacker;
-		OnTakeDirectDamage.Broadcast(InInfo);
+		LastAttacker = Context.SourceActor;
+		OnTakeDirectDamage.Broadcast(EffectiveInfo);
 	}
 
 	UE_LOG(
@@ -308,7 +395,7 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 
 	if (CurrentHealth <= 0.0f)
 	{
-		if (InInfo.bCanCauseDeath)
+		if (Context.bCanCauseDeath)
 		{
 			Die();
 		}
@@ -320,6 +407,21 @@ void AEnemyBase::TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAt
 	{
 		OnHardBreak.Broadcast(DamageResult);
 	}
+}
+
+float AEnemyBase::GetEffectiveMoveSpeed(float BaseSpeed) const
+{
+	const float SafeBaseSpeed = FMath::Max(0.0f, BaseSpeed);
+	return SafeBaseSpeed * (CombatEffectComponent
+		? CombatEffectComponent->GetMoveSpeedMultiplier()
+		: 1.0f);
+}
+
+float AEnemyBase::GetControlResistMultiplier() const
+{
+	return CombatEffectComponent
+		? CombatEffectComponent->GetControlResistMultiplier()
+		: 1.0f;
 }
 
 void AEnemyBase::TestDie()

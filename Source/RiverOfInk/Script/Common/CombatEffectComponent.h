@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Core/GlobalStructs.h"
 #include "Common/CombatEffectTypes.h"
 #include "CombatEffectComponent.generated.h"
 
@@ -12,9 +13,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatEffectEventSignature, const
 /**
  * Generic runtime container for temporary Buffs, Debuffs, and Proc effects.
  *
- * Slice 0-1 owns identity, lifetime, stacking, events, and query APIs only.
- * Damage, movement, projectile, and AI behavior processors are intentionally
- * kept outside this component until their dedicated migration slices.
+ * The component owns effect identity, lifetime, stacking, events, and the
+ * small scalar queries consumed by the unified damage and movement paths.
+ * Presentation and complex projectile/AI behavior remain outside it.
  */
 UCLASS(ClassGroup = (Gameplay), meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API UCombatEffectComponent : public UActorComponent
@@ -54,6 +55,45 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat Effects")
 	bool TryGetEffect(FGameplayTag EffectTag, FActiveCombatEffect& OutEffect) const;
 
+	/** True when an active effect or granted tag blocks incoming damage. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
+	bool IsInvulnerable() const;
+
+	/** Effective outgoing damage multiplier; 1.0 means no change. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
+	float GetOutgoingDamageMultiplier() const;
+
+	/** Effective incoming damage multiplier; 1.0 means no change. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
+	float GetIncomingDamageMultiplier() const;
+
+	/** Apply this component's outgoing damage effects to a request. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
+	float ModifyOutgoingDamage(float BaseDamage, const FGameplayTagContainer& DamageTags) const;
+
+	/** Apply this component's incoming damage effects to a request. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
+	float ModifyIncomingDamage(float BaseDamage, const FGameplayTagContainer& DamageTags) const;
+
+	/** Effective movement multiplier; Slow effects reduce this below 1.0. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Movement")
+	float GetMoveSpeedMultiplier() const;
+
+	/** Effective control-impact multiplier; resistance reduces this below 1.0. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Control")
+	float GetControlResistMultiplier() const;
+
+	/**
+	 * Resolve declarative modifiers for one multiplier attribute. Returns 1.0
+	 * when the attribute is not present, so callers can multiply safely.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Modifier")
+	float GetModifierValue(FGameplayTag AttributeTag) const;
+
+	/** Consume one NextHitBonusDamage proc and return its damage payload. */
+	UFUNCTION(BlueprintCallable, Category = "Combat Effects|Proc")
+	bool ConsumeNextHitBonusDamage(FTakeDamageInfo& OutBonusDamage);
+
 	/** Runtime state is visible for UI/debugging; mutation goes through the APIs above. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat Effects")
 	TArray<FActiveCombatEffect> ActiveEffects;
@@ -77,6 +117,10 @@ private:
 	static bool UsesCharges(ECombatEffectDurationPolicy Policy);
 	static bool IsValidSpec(const FCombatEffectSpec& Spec);
 	static FActiveCombatEffect MakeActiveEffect(const FCombatEffectSpec& Spec, FCombatEffectHandle Handle);
+	static bool EffectCarriesTag(const FActiveCombatEffect& ActiveEffect, FGameplayTag EffectTag);
+	float GetTagMagnitude(FGameplayTag EffectTag) const;
+	float GetTagMagnitudeForDamage(FGameplayTag EffectTag, const FGameplayTagContainer& DamageTags) const;
+	float GetAttributeMultiplier(FGameplayTag AttributeTag) const;
 
 	FCombatEffectHandle MakeHandle();
 	void UpdateComponentTickState();

@@ -168,7 +168,11 @@ void UEnemyState_Attack::Update_Implementation(float DeltaTime)
 		Direction.Z = 0.0f;
 		if (!Direction.IsNearlyZero())
 		{
-			Enemy->AddActorWorldOffset(Direction.GetSafeNormal() * Enemy->AttackMoveSpeed * DeltaTime, true);
+			Enemy->AddActorWorldOffset(
+				Direction.GetSafeNormal()
+				* Enemy->GetEffectiveMoveSpeed(Enemy->AttackMoveSpeed)
+				* DeltaTime,
+				true);
 		}
 	}
 }

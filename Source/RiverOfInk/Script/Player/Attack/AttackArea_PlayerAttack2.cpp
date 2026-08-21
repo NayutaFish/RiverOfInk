@@ -1,10 +1,13 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/Attack/AttackArea_PlayerAttack2.h"
+#include "Common/CombatEffectComponent.h"
+#include "Common/CombatEffectTags.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/Attack/SpecialBuff_PlayerAttack2.h"
+#include "RiverOfInk.h"
 
 AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
 {
@@ -37,13 +40,48 @@ void AAttackArea_PlayerAttack2::ApplyDamage_Implementation(AActor* Target)
 			return;
 		}
 
-		// 生成特殊 Buff 并应用到命中的敌人（未配置 SpecialBuffClass 时跳过）
-		if (SpecialBuffClass)
+		if (UCombatEffectComponent* EnemyEffects = Enemy->GetCombatEffectComponent())
 		{
-			if (ASpecialBuff_PlayerAttack2* Buff = GetWorld()->SpawnActor<ASpecialBuff_PlayerAttack2>(
-					SpecialBuffClass, GetActorLocation(), GetActorRotation()))
+			FTakeDamageInfo BonusInfo = NextHitBonusDamageInfo;
+			// Preserve existing Blueprint tuning while assets migrate to the
+			// direct payload exposed on this attack area.
+			if (BonusInfo.DamageValue <= KINDA_SMALL_NUMBER && SpecialBuffClass)
 			{
-				Buff->ApplyToEnemy(Enemy);
+				if (const ASpecialBuff_PlayerAttack2* LegacyBuff =
+					SpecialBuffClass->GetDefaultObject<ASpecialBuff_PlayerAttack2>())
+				{
+					BonusInfo = LegacyBuff->BonusDamageInfo;
+				}
+			}
+
+			if (BonusInfo.DamageValue > KINDA_SMALL_NUMBER)
+			{
+				FCombatEffectSpec NextHitSpec;
+				NextHitSpec.EffectTag = RiverOfInkCombatEffectTags::Effect_Proc_NextHitBonusDamage;
+				NextHitSpec.Category = ECombatEffectCategory::Proc;
+				NextHitSpec.DurationPolicy = ECombatEffectDurationPolicy::TimedAndCharges;
+				NextHitSpec.StackPolicy = ECombatEffectStackPolicy::AddStackAndRefresh;
+				NextHitSpec.Duration = FMath::Max(0.01f, NextHitBonusDuration);
+				NextHitSpec.Charges = FMath::Max(1, NextHitBonusCharges);
+				NextHitSpec.StackCount = 1;
+				NextHitSpec.MaxStacks = FMath::Max(1, NextHitBonusMaxStacks);
+				NextHitSpec.SourceActor = GetOwner();
+				NextHitSpec.Magnitude = BonusInfo.DamageValue;
+				NextHitSpec.DamagePayload.DamageValue = BonusInfo.DamageValue;
+				NextHitSpec.DamagePayload.HardDamageValue = BonusInfo.HardDamageValue;
+				NextHitSpec.DamagePayload.DamageType = BonusInfo.DamageType;
+				NextHitSpec.DamagePayload.bCanCauseDeath = BonusInfo.bCanCauseDeath;
+				NextHitSpec.DamagePayload.bIsDirectDamage = BonusInfo.bIsDirectDamage;
+				NextHitSpec.DamagePayload.bIgnoreInvulnerability = BonusInfo.bIgnoreInvincible;
+
+				const FCombatEffectHandle Handle = EnemyEffects->ApplyEffect(NextHitSpec);
+				UE_LOG(LogRiverOfInk, Log,
+					TEXT("Attack2 applied NextHitBonusDamage: Enemy=%s Damage=%.1f Duration=%.2f Charges=%d Handle=%d."),
+					*Enemy->GetName(),
+					BonusInfo.DamageValue,
+					NextHitSpec.Duration,
+					NextHitSpec.Charges,
+					Handle.Id);
 			}
 		}
 	}

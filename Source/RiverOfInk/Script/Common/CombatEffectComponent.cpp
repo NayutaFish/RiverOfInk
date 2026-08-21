@@ -2,6 +2,7 @@
 
 #include "Common/CombatEffectComponent.h"
 
+#include "Common/CombatEffectTags.h"
 #include "Engine/World.h"
 
 UCombatEffectComponent::UCombatEffectComponent()
@@ -177,7 +178,7 @@ bool UCombatEffectComponent::HasEffect(FGameplayTag EffectTag) const
 
 	return ActiveEffects.ContainsByPredicate([EffectTag](const FActiveCombatEffect& ActiveEffect)
 	{
-		return ActiveEffect.Spec.EffectTag == EffectTag;
+		return EffectCarriesTag(ActiveEffect, EffectTag);
 	});
 }
 
@@ -191,7 +192,7 @@ int32 UCombatEffectComponent::GetEffectStackCount(FGameplayTag EffectTag) const
 	int32 TotalStacks = 0;
 	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
 	{
-		if (ActiveEffect.Spec.EffectTag == EffectTag)
+		if (EffectCarriesTag(ActiveEffect, EffectTag))
 		{
 			TotalStacks += ActiveEffect.CurrentStackCount;
 		}
@@ -208,12 +209,130 @@ bool UCombatEffectComponent::TryGetEffect(FGameplayTag EffectTag, FActiveCombatE
 
 	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
 	{
-		if (ActiveEffect.Spec.EffectTag == EffectTag)
+		if (EffectCarriesTag(ActiveEffect, EffectTag))
 		{
 			OutEffect = ActiveEffect;
 			return true;
 		}
 	}
+	return false;
+}
+
+bool UCombatEffectComponent::IsInvulnerable() const
+{
+	return HasEffect(RiverOfInkCombatEffectTags::Effect_Buff_Invulnerable);
+}
+
+float UCombatEffectComponent::GetOutgoingDamageMultiplier() const
+{
+	const float TaggedMultiplier = 1.0f
+		+ GetTagMagnitude(RiverOfInkCombatEffectTags::Effect_Buff_DamageUp);
+	return FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Damage_OutgoingMultiplier),
+		0.0f,
+		100.0f);
+}
+
+float UCombatEffectComponent::GetIncomingDamageMultiplier() const
+{
+	const float TaggedMultiplier = 1.0f
+		+ GetTagMagnitude(RiverOfInkCombatEffectTags::Effect_Debuff_Vulnerable);
+	return FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Damage_IncomingMultiplier),
+		0.0f,
+		100.0f);
+}
+
+float UCombatEffectComponent::ModifyOutgoingDamage(
+	float BaseDamage,
+	const FGameplayTagContainer& DamageTags) const
+{
+	const float SafeDamage = FMath::IsFinite(BaseDamage) ? FMath::Max(0.0f, BaseDamage) : 0.0f;
+	const float TaggedMultiplier = 1.0f
+		+ GetTagMagnitudeForDamage(RiverOfInkCombatEffectTags::Effect_Buff_DamageUp, DamageTags);
+	return SafeDamage * FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Damage_OutgoingMultiplier),
+		0.0f,
+		100.0f);
+}
+
+float UCombatEffectComponent::ModifyIncomingDamage(
+	float BaseDamage,
+	const FGameplayTagContainer& DamageTags) const
+{
+	const float SafeDamage = FMath::IsFinite(BaseDamage) ? FMath::Max(0.0f, BaseDamage) : 0.0f;
+	const float TaggedMultiplier = 1.0f
+		+ GetTagMagnitudeForDamage(RiverOfInkCombatEffectTags::Effect_Debuff_Vulnerable, DamageTags);
+	return SafeDamage * FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Damage_IncomingMultiplier),
+		0.0f,
+		100.0f);
+}
+
+float UCombatEffectComponent::GetMoveSpeedMultiplier() const
+{
+	const float SlowStrength = GetTagMagnitude(RiverOfInkCombatEffectTags::Effect_Debuff_Slow);
+	const float TaggedMultiplier = 1.0f - SlowStrength;
+	return FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Movement_SpeedMultiplier),
+		0.0f,
+		1.0f);
+}
+
+float UCombatEffectComponent::GetControlResistMultiplier() const
+{
+	const float ResistStrength = GetTagMagnitude(RiverOfInkCombatEffectTags::Effect_Buff_ControlResist);
+	const float TaggedMultiplier = 1.0f - ResistStrength;
+	return FMath::Clamp(
+		TaggedMultiplier * GetAttributeMultiplier(RiverOfInkCombatEffectTags::Attribute_Control_ResistMultiplier),
+		0.0f,
+		1.0f);
+}
+
+float UCombatEffectComponent::GetModifierValue(FGameplayTag AttributeTag) const
+{
+	return AttributeTag.IsValid() ? GetAttributeMultiplier(AttributeTag) : 1.0f;
+}
+
+bool UCombatEffectComponent::ConsumeNextHitBonusDamage(FTakeDamageInfo& OutBonusDamage)
+{
+	OutBonusDamage = FTakeDamageInfo();
+
+	const FGameplayTag NextHitTag = RiverOfInkCombatEffectTags::Effect_Proc_NextHitBonusDamage;
+	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
+	{
+		if (!EffectCarriesTag(ActiveEffect, NextHitTag))
+		{
+			continue;
+		}
+
+		const FCombatEffectDamagePayload& Payload = ActiveEffect.Spec.DamagePayload;
+		OutBonusDamage.Attacker = ActiveEffect.Spec.SourceActor;
+		OutBonusDamage.DamageType = Payload.DamageType;
+		OutBonusDamage.DamageValue = Payload.DamageValue > KINDA_SMALL_NUMBER
+			? Payload.DamageValue
+			: ActiveEffect.Spec.Magnitude;
+		OutBonusDamage.HardDamageValue = Payload.HardDamageValue;
+		OutBonusDamage.bCanCauseDeath = Payload.bCanCauseDeath;
+		OutBonusDamage.bIsDirectDamage = Payload.bIsDirectDamage;
+		OutBonusDamage.bIgnoreInvincible = Payload.bIgnoreInvulnerability;
+
+		// A stacked proc represents one payload per remaining charge. Keep the
+		// handle stable and consume exactly one charge for this hit.
+		OutBonusDamage.DamageValue *= FMath::Max(1, ActiveEffect.CurrentStackCount);
+		OutBonusDamage.HardDamageValue *= FMath::Max(1, ActiveEffect.CurrentStackCount);
+		if (ActiveEffect.HasCharges())
+		{
+			ConsumeEffectCharge(ActiveEffect.Handle);
+		}
+		else
+		{
+			// A manually authored Timed proc is still one-hit by definition.
+			RemoveEffect(ActiveEffect.Handle);
+		}
+		return OutBonusDamage.DamageValue > KINDA_SMALL_NUMBER;
+	}
+
 	return false;
 }
 
@@ -269,6 +388,105 @@ bool UCombatEffectComponent::IsValidSpec(const FCombatEffectSpec& Spec)
 	}
 
 	return true;
+}
+
+bool UCombatEffectComponent::EffectCarriesTag(
+	const FActiveCombatEffect& ActiveEffect,
+	FGameplayTag EffectTag)
+{
+	return ActiveEffect.Spec.EffectTag.MatchesTag(EffectTag)
+		|| ActiveEffect.Spec.GrantedTags.HasTag(EffectTag);
+}
+
+float UCombatEffectComponent::GetTagMagnitude(FGameplayTag EffectTag) const
+{
+	if (!EffectTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	float TotalMagnitude = 0.0f;
+	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
+	{
+		if (EffectCarriesTag(ActiveEffect, EffectTag))
+		{
+			TotalMagnitude += ActiveEffect.Spec.Magnitude
+				* static_cast<float>(FMath::Max(1, ActiveEffect.CurrentStackCount));
+		}
+	}
+	return TotalMagnitude;
+}
+
+float UCombatEffectComponent::GetTagMagnitudeForDamage(
+	FGameplayTag EffectTag,
+	const FGameplayTagContainer& DamageTags) const
+{
+	if (!EffectTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	float TotalMagnitude = 0.0f;
+	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
+	{
+		if (!ActiveEffect.Spec.EffectTag.MatchesTag(EffectTag))
+		{
+			continue;
+		}
+
+		// An empty AffectsTags list is global. If the request carries no tags,
+		// retain the legacy/global behavior instead of silently disabling the
+		// effect while callers migrate to FDamageContext.
+		if (!ActiveEffect.Spec.AffectsTags.IsEmpty()
+			&& !DamageTags.IsEmpty()
+			&& !ActiveEffect.Spec.AffectsTags.HasAny(DamageTags))
+		{
+			continue;
+		}
+
+		TotalMagnitude += ActiveEffect.Spec.Magnitude
+			* static_cast<float>(FMath::Max(1, ActiveEffect.CurrentStackCount));
+	}
+	return TotalMagnitude;
+}
+
+float UCombatEffectComponent::GetAttributeMultiplier(FGameplayTag AttributeTag) const
+{
+	if (!AttributeTag.IsValid())
+	{
+		return 1.0f;
+	}
+
+	float Value = 1.0f;
+	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
+	{
+		const int32 StackCount = FMath::Max(1, ActiveEffect.CurrentStackCount);
+		for (const FCombatEffectModifier& Modifier : ActiveEffect.Spec.Modifiers)
+		{
+			if (!Modifier.AttributeTag.IsValid()
+				|| !Modifier.AttributeTag.MatchesTag(AttributeTag))
+			{
+				continue;
+			}
+
+			switch (Modifier.Operation)
+			{
+			case ECombatEffectModifierOperation::Add:
+				Value += Modifier.Magnitude * static_cast<float>(StackCount);
+				break;
+			case ECombatEffectModifierOperation::Multiply:
+				Value *= FMath::Pow(FMath::Max(0.0f, Modifier.Magnitude), StackCount);
+				break;
+			case ECombatEffectModifierOperation::Override:
+				Value = Modifier.Magnitude;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	return FMath::Max(0.0f, Value);
 }
 
 FActiveCombatEffect UCombatEffectComponent::MakeActiveEffect(

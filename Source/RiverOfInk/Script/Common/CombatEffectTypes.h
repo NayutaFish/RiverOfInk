@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/GlobalEnums.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
 #include "CombatEffectTypes.generated.h"
@@ -82,6 +83,31 @@ struct FCombatEffectModifier
 	float Magnitude = 0.0f;
 };
 
+/** Damage payload carried by proc effects such as NextHitBonusDamage. */
+USTRUCT(BlueprintType)
+struct FCombatEffectDamagePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	float DamageValue = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage", meta = (ClampMin = "0.0"))
+	float HardDamageValue = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	EDamageType DamageType = EDamageType::Unified;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	bool bCanCauseDeath = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	bool bIsDirectDamage = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	bool bIgnoreInvulnerability = false;
+};
+
 /** Immutable application request consumed by UCombatEffectComponent. */
 USTRUCT(BlueprintType)
 struct FCombatEffectSpec
@@ -119,6 +145,10 @@ struct FCombatEffectSpec
 	/** Generic scalar for processors such as damage-up, slow strength, or homing strength. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Magnitude")
 	float Magnitude = 0.0f;
+
+	/** Optional one-hit payload used by proc effects. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Damage")
+	FCombatEffectDamagePayload DamagePayload;
 
 	/** Tags that later systems may query when building damage/projectile/AI specs. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Tags")

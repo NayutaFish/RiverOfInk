@@ -10,12 +10,11 @@
 class AEnemyBase;
 
 /**
- * 特攻（Attack2）命中的特殊 Buff
+ * Legacy compatibility shell for old Attack2 Blueprint defaults.
  *
- * 由 AttackArea_PlayerAttack2 在命中敌人时生成，并调用 ApplyToEnemy
- * 将命中的敌人传入。每帧跟随敌人位置，订阅敌人受伤/死亡事件：
- *   - 敌人受伤 → 额外对其施加一次 BonusDamageInfo 伤害
- *   - 敌人死亡 → 销毁自身
+ * Current Attack2 runtime no longer spawns or binds this Actor. Its default
+ * BonusDamageInfo is read once as a migration fallback and converted into an
+ * Effect.Proc.NextHitBonusDamage on the target's CombatEffectComponent.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API ASpecialBuff_PlayerAttack2 : public AActor

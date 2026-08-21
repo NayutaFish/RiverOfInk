@@ -39,7 +39,9 @@ void UEnemyState_HitBack::OnEnter_Implementation()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimer(HitBackTimerHandle, this,
-			&UEnemyState_HitBack::OnHitBackEnd, Enemy->HitBackDuration, false);
+			&UEnemyState_HitBack::OnHitBackEnd,
+			Enemy->HitBackDuration * Enemy->GetControlResistMultiplier(),
+			false);
 	}
 }
 
@@ -64,7 +66,9 @@ void UEnemyState_HitBack::Update_Implementation(float DeltaTime)
 	if (!Enemy) return;
 
 	// 持续按击退方向位移（Sweep 检测碰撞，撞墙停下）
-	Enemy->AddActorWorldOffset(HitBackDirection * Enemy->HitBackSpeed * DeltaTime, true);
+	Enemy->AddActorWorldOffset(
+		HitBackDirection * Enemy->GetEffectiveMoveSpeed(Enemy->HitBackSpeed) * DeltaTime,
+		true);
 }
 
 void UEnemyState_HitBack::OnHitBackEnd()
