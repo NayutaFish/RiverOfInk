@@ -106,7 +106,7 @@ void UEnemyState_Charge::Update_Implementation(float DeltaTime)
 
 	FHitResult Hit;
 	Enemy->AddActorWorldOffset(
-		ChargeDirection * Enemy->ChargeSpeed * DeltaTime,
+		ChargeDirection * Enemy->GetEffectiveMoveSpeed(Enemy->ChargeSpeed) * DeltaTime,
 		true,
 		&Hit);
 
@@ -152,7 +152,7 @@ void UEnemyState_Charge::BeginCharge()
 	UE_LOG(LogRiverOfInk, Log,
 		TEXT("Enemy %s charge started: Speed=%.1f Duration=%.2f."),
 		*Enemy->GetName(),
-		Enemy->ChargeSpeed,
+		Enemy->GetEffectiveMoveSpeed(Enemy->ChargeSpeed),
 		Enemy->ChargeDuration);
 
 	if (Enemy->AttackAreaClass)

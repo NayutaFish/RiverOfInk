@@ -17,6 +17,7 @@ class UStateBase;
 class UPlayerState_Attack1;
 class USkillComponent;
 class UHealthComponent;
+class UCombatEffectComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 class UPlayerSkillWidget;
@@ -86,6 +87,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Player|Health")
 	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	/** Runtime Buff/Debuff/Proc container. Gameplay behavior is added by later effect slices. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Effects")
+	TObjectPtr<UCombatEffectComponent> CombatEffectComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Player|Effects")
+	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
 
 	/** Capture all component-owned runtime state into one value snapshot. */
 	bool CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
@@ -240,7 +248,11 @@ public:
 
 	/** 是否处于直接性伤害无敌状态 */
 	UFUNCTION(BlueprintPure, Category = "State")
-	bool IsInvincible() const { return bIsInDirectDamageInvincible; }
+	bool IsInvincible() const;
+
+	/** Read a movement speed after runtime Slow effects. */
+	UFUNCTION(BlueprintPure, Category = "Player|Effects")
+	float GetEffectiveMoveSpeed(float BaseSpeed) const;
 
 	/** 是否可以冲刺 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
@@ -276,9 +288,4 @@ public:
 	UFUNCTION()
 	void HandleHealthDirectDamage(const FTakeDamageInfo& InInfo);
 
-	/** 受直接性伤害后的短暂无敌（0.5 秒），期间免疫直接性伤害 */
-	bool bIsInDirectDamageInvincible = false;
-
-	/** 直接性伤害无敌计时器 */
-	FTimerHandle InvincibleTimerHandle;
 };

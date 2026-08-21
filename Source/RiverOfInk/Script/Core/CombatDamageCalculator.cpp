@@ -2,6 +2,7 @@
 
 #include "Core/CombatDamageCalculator.h"
 
+#include "Common/CombatEffectComponent.h"
 #include "Core/CombatDamageSettings.h"
 
 namespace RiverOfInkDamage
@@ -39,5 +40,54 @@ namespace RiverOfInkDamage
 		// two resistance fields populated. Use the stronger value once and avoid
 		// accidentally stacking both legacy systems during migration.
 		return FMath::Max(0, FMath::Max(PhysicalResistance, MagicResistance));
+	}
+
+	FDamageResult ResolveDamage(
+		const FDamageContext& Context,
+		const UCombatEffectComponent* SourceEffects,
+		const UCombatEffectComponent* TargetEffects,
+		float Defense)
+	{
+		FDamageResult Result;
+		Result.Context = Context;
+
+		if (!FMath::IsFinite(Context.BaseDamage) || Context.BaseDamage <= KINDA_SMALL_NUMBER)
+		{
+			Result.bNoDamage = true;
+			return Result;
+		}
+
+		if (TargetEffects
+			&& !Context.bIgnoreInvulnerability
+			&& TargetEffects->IsInvulnerable())
+		{
+			Result.bBlockedByInvulnerability = true;
+			Result.bNoDamage = true;
+			return Result;
+		}
+
+		float ModifiedDamage = Context.BaseDamage;
+		if (SourceEffects)
+		{
+			ModifiedDamage = SourceEffects->ModifyOutgoingDamage(ModifiedDamage, Context.DamageTags);
+		}
+		if (TargetEffects)
+		{
+			ModifiedDamage = TargetEffects->ModifyIncomingDamage(ModifiedDamage, Context.DamageTags);
+		}
+
+		Result.ModifiedDamage = FMath::IsFinite(ModifiedDamage)
+			? FMath::Max(0.0f, ModifiedDamage)
+			: 0.0f;
+		if (Result.ModifiedDamage <= KINDA_SMALL_NUMBER)
+		{
+			Result.bNoDamage = true;
+			return Result;
+		}
+
+		Result.FinalDamage = CalculateFinalDamage(Result.ModifiedDamage, Defense);
+		Result.bDamageApplied = Result.FinalDamage > 0;
+		Result.bNoDamage = !Result.bDamageApplied;
+		return Result;
 	}
 }

@@ -150,13 +150,17 @@ void UEnemyState_Chase::Update_Implementation(float DeltaTime)
 			const FVector MoveDirection = Distance < MinimumRange
 				? -ToPlayer.GetSafeNormal()
 				: ToPlayer.GetSafeNormal();
-			Enemy->AddActorWorldOffset(MoveDirection * Enemy->ChaseSpeed * DeltaTime, true);
+				Enemy->AddActorWorldOffset(
+					MoveDirection * Enemy->GetEffectiveMoveSpeed(Enemy->ChaseSpeed) * DeltaTime,
+					true);
 		}
 	}
 	else if (bShouldMove)
 	{
 		// 平滑移动（开启 Sweep 检测碰撞，撞到障碍物停下）
-		FVector MoveDelta = ToPlayer.GetSafeNormal() * Enemy->ChaseSpeed * DeltaTime;
+		FVector MoveDelta = ToPlayer.GetSafeNormal()
+			* Enemy->GetEffectiveMoveSpeed(Enemy->ChaseSpeed)
+			* DeltaTime;
 		Enemy->AddActorWorldOffset(MoveDelta, true);
 	}
 }

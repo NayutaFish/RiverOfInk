@@ -15,8 +15,10 @@ class UStateBase;
 class APlayerCharacter;
 class UEnemyHealthWidget;
 class UWidgetComponent;
+class UCombatEffectComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDamageResolvedSignature, const FDamageResult&, DamageResult);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 	FOnEnemyHealthChangedSignature,
 	float, PreviousHealth,
@@ -44,6 +46,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void SwitchState(TSubclassOf<UStateBase> StateClass);
+
+	/** Runtime Buff/Debuff/Proc container shared by all enemy classes. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Effects")
+	TObjectPtr<UCombatEffectComponent> CombatEffectComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|Effects")
+	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -180,6 +189,10 @@ public:
 	/** 每次有效直接性受击事件（保留给 Buff、音效等通用监听者）。 */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
 	FOnTakeDirectDamageSignature OnTakeDirectDamage;
+
+	/** Unified damage attempt event, including invulnerability blocks. */
+	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
+	FOnEnemyDamageResolvedSignature OnDamageResolved;
 
 	/** 仅在硬值被击破时广播，状态机用此事件决定是否打断当前行为。 */
 	UPROPERTY(BlueprintAssignable, Category = "Enemy|Events")
@@ -326,6 +339,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
 	void TakeDamage(const FTakeDamageInfo& InInfo, AAttackAreaBase* InAttackArea = nullptr);
+
+	/** New unified damage entry; the legacy TakeDamage function adapts into it. */
+	UFUNCTION(BlueprintCallable, Category = "Enemy")
+	void TakeDamageContext(const FDamageContext& InContext, AAttackAreaBase* InAttackArea = nullptr);
+
+	/** Read the current movement speed after runtime Slow effects. */
+	UFUNCTION(BlueprintPure, Category = "Enemy|Effects")
+	float GetEffectiveMoveSpeed(float BaseSpeed) const;
+
+	/** Read the current control-impact multiplier after resistance effects. */
+	UFUNCTION(BlueprintPure, Category = "Enemy|Effects")
+	float GetControlResistMultiplier() const;
 
 	/** Minimal gameplay healing entry point used by the Phase 1 health contract. */
 	UFUNCTION(BlueprintCallable, Category = "Enemy|Health")

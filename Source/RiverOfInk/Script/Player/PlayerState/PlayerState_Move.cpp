@@ -69,7 +69,7 @@ void UPlayerState_Move::OnExit_Implementation()
 		Input->OnEDelegate.RemoveAll(this);
 	}
 
-	Player->GetCharacterMovement()->MaxWalkSpeed = Player->WalkSpeed;
+	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(Player->WalkSpeed);
 }
 
 void UPlayerState_Move::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -90,7 +90,8 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 	// 疾跑：按 Shift 时加速
 	float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	bool bSprinting = (Now - LastShiftTime) < 0.15f;
-	Player->GetCharacterMovement()->MaxWalkSpeed = bSprinting ? Player->SprintSpeed : Player->WalkSpeed;
+	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
+		bSprinting ? Player->SprintSpeed : Player->WalkSpeed);
 
 	// 无输入一段时间后切回 Idle
 	if ((Now - LastInputTime) > 0.15f)

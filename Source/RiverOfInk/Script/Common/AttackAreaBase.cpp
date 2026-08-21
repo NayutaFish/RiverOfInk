@@ -360,9 +360,6 @@ bool AAttackAreaBase::IsValidTarget_Implementation(AActor* Target)
 	if (APlayerCharacter* PlayerTarget = Cast<APlayerCharacter>(Target))
 	{
 		if (PlayerTarget->IsDashing()) return false;
-
-		// 玩家处于直接性伤害无敌状态，跳过
-		if (PlayerTarget->IsInvincible()) return false;
 	}
 
 	bool bValidFaction = true;
