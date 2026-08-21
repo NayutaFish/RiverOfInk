@@ -43,6 +43,10 @@ private:
 	UPROPERTY(EditAnywhere, Category = "AttackState|Projectile", meta = (ClampMin = "5.0"))
 	float ProjectileHitboxRadius = 50.0f;
 
+	/** Constant turn rate used when this projectile has a marked target. */
+	UPROPERTY(EditAnywhere, Category = "AttackState|Projectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float ProjectileHomingTurnRate = 720.0f;
+
 	bool bHadMoveInput = false;
 	float MoveInputX = 0.0f;
 	float MoveInputY = 0.0f;

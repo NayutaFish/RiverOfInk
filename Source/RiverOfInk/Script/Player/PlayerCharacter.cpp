@@ -15,6 +15,7 @@
 #include "Animation/AnimMontage.h"
 #include "Engine/World.h"
 #include "Player/Skill/SkillComponent.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "RoguelikeSystem/RoguelikeShopManager.h"
 #include "Input/PlayerInputComponent.h"
@@ -56,6 +57,7 @@ APlayerCharacter::APlayerCharacter()
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	CombatEffectComponent = CreateDefaultSubobject<UCombatEffectComponent>(TEXT("CombatEffectComponent"));
+	ProjectileTargetingComponent = CreateDefaultSubobject<UProjectileTargetingComponent>(TEXT("ProjectileTargetingComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(

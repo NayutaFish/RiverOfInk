@@ -10,6 +10,7 @@
 #include "NiagaraSystem.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "Engine/StaticMesh.h"
 #include "DrawDebugHelpers.h"
 #include "Materials/MaterialInterface.h"
@@ -66,6 +67,7 @@ void AAttackAreaBase::BeginPlay()
 void AAttackAreaBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateHoming(DeltaTime);
 
 	// 障碍物检测（射线扫描前方，不依赖碰撞系统）
 	if (bDetectObstacle && Speed > 0.0f)
@@ -250,6 +252,9 @@ void AAttackAreaBase::Disappear(EAttackAreaDisappearReason Reason)
 
 void AAttackAreaBase::Initialize(float InLifeTime, float InSpeed, bool InIsMeleeAttack, AActor* InFollowTarget)
 {
+	ProjectileSpec = FProjectileSpec();
+	ProjectileSpec.LifeTime = InLifeTime;
+	ProjectileSpec.ProjectileSpeed = InSpeed;
 	LifeTime = InLifeTime;
 	Speed = InSpeed;
 	bIsMeleeAttack = InIsMeleeAttack;
@@ -260,6 +265,63 @@ void AAttackAreaBase::Initialize(float InLifeTime, float InSpeed, bool InIsMelee
 	{
 		FollowOffset = GetActorLocation() - FollowTarget->GetActorLocation();
 	}
+}
+
+void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSpec)
+{
+	ProjectileSpec = InProjectileSpec;
+	ProjectileSpec.LifeTime = FMath::Max(0.01f, InProjectileSpec.LifeTime);
+	ProjectileSpec.ProjectileSpeed = FMath::Max(0.0f, InProjectileSpec.ProjectileSpeed);
+	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InProjectileSpec.HomingTurnRate);
+	if (!ProjectileSpec.bEnableHoming)
+	{
+		ProjectileSpec.HomingTarget = nullptr;
+	}
+
+	LifeTime = ProjectileSpec.LifeTime;
+	Speed = ProjectileSpec.ProjectileSpeed;
+	bIsMeleeAttack = false;
+	FollowTarget = nullptr;
+	FollowOffset = FVector::ZeroVector;
+}
+
+void AAttackAreaBase::UpdateHoming(float DeltaTime)
+{
+	if (!ProjectileSpec.bEnableHoming || !ProjectileSpec.HomingTarget)
+	{
+		return;
+	}
+
+	AEnemyBase* Target = Cast<AEnemyBase>(ProjectileSpec.HomingTarget.Get());
+	if (!IsValid(Target))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		return;
+	}
+
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+	{
+		UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent();
+		if (!Targeting || !Targeting->IsHomingMarkActive(Target))
+		{
+			ProjectileSpec.bEnableHoming = false;
+			ProjectileSpec.HomingTarget = nullptr;
+			return;
+		}
+	}
+
+	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	if (ToTarget.IsNearlyZero() || ProjectileSpec.HomingTurnRate <= 0.0f)
+	{
+		return;
+	}
+
+	SetActorRotation(FMath::RInterpConstantTo(
+		GetActorRotation(),
+		ToTarget.Rotation(),
+		DeltaTime,
+		ProjectileSpec.HomingTurnRate));
 }
 
 bool AAttackAreaBase::NullifyEnemyProjectile()
@@ -308,6 +370,19 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{
 		Enemy->TakeDamage(DamageInfo, this);
+		if (ProjectileSpec.bEnableHoming
+			&& IsValid(Enemy)
+			&& !Enemy->bIsDead
+			&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
+		{
+			if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+			{
+				if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
+				{
+					Targeting->NotifyProjectileHit(Enemy);
+				}
+			}
+		}
 	}
 	else if (APlayerCharacter* Player = Cast<APlayerCharacter>(Target))
 	{

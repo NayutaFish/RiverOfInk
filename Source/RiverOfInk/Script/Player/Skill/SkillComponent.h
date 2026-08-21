@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Common/ProjectileTypes.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeSystem/PlayerRuntimeData.h"
 #include "TimerManager.h"
@@ -202,6 +203,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile", meta = (ClampMin = "0.0"))
 	float ProjectileSpawnSideOffset = 35.0f;
 
+	/** Constant turn rate for marked-target homing projectiles. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float ProjectileHomingTurnRate = 720.0f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -223,9 +228,9 @@ private:
 	bool SpawnProjectile(
 		const FVector& SpawnLocation,
 		const FVector& Direction,
-		float ProjectileLifeTime,
-		float ProjectileSpeed,
+		const FProjectileSpec& ProjectileSpec,
 		const TCHAR* ProjectileLabel);
+	bool HasProjectileHoming(EPlayerSkillID SkillID) const;
 	void InitializeSkillSlots();
 	int32 GetMaxUpgradeLevel(EPlayerSkillID SkillID, ESkillUpgradeType UpgradeType) const;
 	int32 GetModifierStackForSlot(const FPlayerSkillSlot& Slot, ESkillModifierID ModifierID) const;

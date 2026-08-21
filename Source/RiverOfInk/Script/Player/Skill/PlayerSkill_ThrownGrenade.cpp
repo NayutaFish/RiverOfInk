@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/GlobalEnums.h"
+#include "Common/CombatEffectTypes.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -12,6 +13,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/OverlapResult.h"
+#include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -112,6 +115,7 @@ void APlayerSkill_ThrownGrenade::Tick(float DeltaTime)
 	}
 
 	ElapsedTime += DeltaTime;
+	UpdateHoming(DeltaTime);
 	Velocity.Z += GravityZ * DeltaTime;
 
 	const FVector Start = GetActorLocation();
@@ -140,7 +144,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	const FVector& InInitialVelocity,
 	AActor* InInstigator,
 	int32 InExplosionCount,
-	float InExplosionDelay
+	float InExplosionDelay,
+	AActor* InHomingTarget,
+	float InHomingTurnRate
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -153,6 +159,12 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ExplosionsRemaining = ExplosionCount;
 	Velocity = InInitialVelocity;
 	DamageInstigator = InInstigator;
+	ProjectileSpec = FProjectileSpec();
+	ProjectileSpec.LifeTime = FuseTime;
+	ProjectileSpec.ProjectileSpeed = InInitialVelocity.Size();
+	ProjectileSpec.HomingTarget = InHomingTarget;
+	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InHomingTurnRate);
+	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget);
 	DamageInfo.Attacker = InInstigator;
 	DamageInfo.DamageValue = Damage;
 	DamageInfo.DamageType = EDamageType::Unified;
@@ -161,6 +173,44 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	{
 		CollisionSphere->SetSphereRadius(CollisionRadius, HasActorBegunPlay());
 	}
+}
+
+void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
+{
+	if (!ProjectileSpec.bEnableHoming || !ProjectileSpec.HomingTarget)
+	{
+		return;
+	}
+
+	AEnemyBase* Target = Cast<AEnemyBase>(ProjectileSpec.HomingTarget.Get());
+	APlayerCharacter* Player = Cast<APlayerCharacter>(DamageInstigator);
+	UProjectileTargetingComponent* Targeting = Player
+		? Player->GetProjectileTargetingComponent()
+		: nullptr;
+	if (!IsValid(Target)
+		|| !Targeting
+		|| !Targeting->IsHomingMarkActive(Target))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		return;
+	}
+
+	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	const float CurrentSpeed = Velocity.Size();
+	if (ToTarget.IsNearlyZero()
+		|| CurrentSpeed <= KINDA_SMALL_NUMBER
+		|| ProjectileSpec.HomingTurnRate <= 0.0f)
+	{
+		return;
+	}
+
+	const FRotator NewRotation = FMath::RInterpConstantTo(
+		Velocity.Rotation(),
+		ToTarget.Rotation(),
+		DeltaTime,
+		ProjectileSpec.HomingTurnRate);
+	Velocity = NewRotation.Vector() * CurrentSpeed;
 }
 
 bool APlayerSkill_ThrownGrenade::SweepForImpact(
@@ -309,6 +359,19 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 			}
 
 			Enemy->TakeDamage(DamageInfo);
+			if (ProjectileSpec.bEnableHoming
+				&& IsValid(Enemy)
+				&& !Enemy->bIsDead
+				&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
+			{
+				if (APlayerCharacter* Player = Cast<APlayerCharacter>(DamageInstigator))
+				{
+					if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
+					{
+						Targeting->NotifyProjectileHit(Enemy);
+					}
+				}
+			}
 			++HitCount;
 		}
 	}

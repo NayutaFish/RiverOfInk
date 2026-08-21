@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/GlobalStructs.h"
+#include "Common/ProjectileTypes.h"
 #include "PlayerSkill_ThrownGrenade.generated.h"
 
 class USphereComponent;
@@ -37,7 +38,9 @@ public:
 		const FVector& InInitialVelocity,
 		AActor* InInstigator,
 		int32 InExplosionCount = 1,
-		float InExplosionDelay = 0.12f
+		float InExplosionDelay = 0.12f,
+		AActor* InHomingTarget = nullptr,
+		float InHomingTurnRate = 720.0f
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -82,12 +85,14 @@ protected:
 private:
 	void Detonate();
 	void PerformExplosion();
+	void UpdateHoming(float DeltaTime);
 	bool SweepForImpact(const FVector& Start, const FVector& End, FHitResult& OutHit) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DamageInstigator;
 
 	FTakeDamageInfo DamageInfo;
+	FProjectileSpec ProjectileSpec;
 	FVector Velocity = FVector::ZeroVector;
 	float ElapsedTime = 0.0f;
 	bool bDetonated = false;

@@ -132,6 +132,10 @@ struct FCombatEffectSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Lifetime", meta = (ClampMin = "0"))
 	int32 Charges = 0;
 
+	/** Optional cap used when repeated applications replenish charges. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Lifetime", meta = (ClampMin = "0"))
+	int32 MaxCharges = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Effect|Lifetime", meta = (ClampMin = "1"))
 	int32 StackCount = 1;
 

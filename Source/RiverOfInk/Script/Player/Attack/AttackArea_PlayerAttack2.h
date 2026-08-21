@@ -43,6 +43,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Buff", meta = (ClampMin = "1"))
 	int32 NextHitBonusMaxStacks = 3;
 
+	/** Mark lifetime applied to an enemy hit by this projectile. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Homing", meta = (ClampMin = "0.01", Units = "s"))
+	float HomingMarkDuration = 4.0f;
+
+	/** Number of later effective homing hits allowed by one mark. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Homing", meta = (ClampMin = "1"))
+	int32 HomingMarkCharges = 3;
+
 protected:
 	virtual void ApplyDamage_Implementation(AActor* Target) override;
 };

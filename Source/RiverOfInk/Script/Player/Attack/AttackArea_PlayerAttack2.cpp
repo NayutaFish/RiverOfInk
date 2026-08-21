@@ -42,6 +42,26 @@ void AAttackArea_PlayerAttack2::ApplyDamage_Implementation(AActor* Target)
 
 		if (UCombatEffectComponent* EnemyEffects = Enemy->GetCombatEffectComponent())
 		{
+			FCombatEffectSpec HomingMarkSpec;
+			HomingMarkSpec.EffectTag = RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark;
+			HomingMarkSpec.Category = ECombatEffectCategory::Debuff;
+			HomingMarkSpec.DurationPolicy = ECombatEffectDurationPolicy::TimedAndCharges;
+			HomingMarkSpec.StackPolicy = ECombatEffectStackPolicy::AddStackAndRefresh;
+			HomingMarkSpec.Duration = FMath::Max(0.01f, HomingMarkDuration);
+			HomingMarkSpec.Charges = FMath::Max(1, HomingMarkCharges);
+			HomingMarkSpec.MaxCharges = HomingMarkSpec.Charges;
+			HomingMarkSpec.StackCount = 1;
+			HomingMarkSpec.MaxStacks = 1;
+			HomingMarkSpec.SourceActor = GetOwner();
+			HomingMarkSpec.AffectsTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
+			const FCombatEffectHandle MarkHandle = EnemyEffects->ApplyEffect(HomingMarkSpec);
+			UE_LOG(LogRiverOfInk, Log,
+				TEXT("Attack2 applied HomingMark: Enemy=%s Duration=%.2f Charges=%d Handle=%d."),
+				*Enemy->GetName(),
+				HomingMarkSpec.Duration,
+				HomingMarkSpec.Charges,
+				MarkHandle.Id);
+
 			FTakeDamageInfo BonusInfo = NextHitBonusDamageInfo;
 			// Preserve existing Blueprint tuning while assets migrate to the
 			// direct payload exposed on this attack area.

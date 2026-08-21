@@ -4,6 +4,7 @@
 
 #include "Common/AttackAreaBase.h"
 #include "Common/CombatEffectComponent.h"
+#include "Common/CombatEffectTags.h"
 #include "Common/StateBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -454,6 +455,21 @@ void AEnemyBase::Die()
 	const float PreviousHealth = CurrentHealth;
 	bIsDead = true;
 	CurrentHealth = 0.0f;
+	if (CombatEffectComponent)
+	{
+		TArray<FCombatEffectHandle> HomingMarkHandles;
+		for (const FActiveCombatEffect& ActiveEffect : CombatEffectComponent->ActiveEffects)
+		{
+			if (ActiveEffect.Spec.EffectTag == RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark)
+			{
+				HomingMarkHandles.Add(ActiveEffect.Handle);
+			}
+		}
+		for (const FCombatEffectHandle Handle : HomingMarkHandles)
+		{
+			CombatEffectComponent->RemoveEffect(Handle);
+		}
+	}
 	if (PreviousHealth > KINDA_SMALL_NUMBER)
 	{
 		BroadcastHealthChanged(PreviousHealth, EEnemyHealthChangeReason::Death);

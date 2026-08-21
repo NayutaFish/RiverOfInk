@@ -55,6 +55,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat Effects")
 	bool TryGetEffect(FGameplayTag EffectTag, FActiveCombatEffect& OutEffect) const;
 
+	/** Returns the active effect only when its source matches exactly. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Source")
+	bool TryGetEffectFromSource(
+		FGameplayTag EffectTag,
+		AActor* SourceActor,
+		FActiveCombatEffect& OutEffect) const;
+
+	/** Consume charges from an effect belonging to the specified source. */
+	UFUNCTION(BlueprintCallable, Category = "Combat Effects|Source")
+	bool ConsumeEffectChargeFromSource(
+		FGameplayTag EffectTag,
+		AActor* SourceActor,
+		int32 ChargeCount = 1);
+
 	/** True when an active effect or granted tag blocks incoming damage. */
 	UFUNCTION(BlueprintPure, Category = "Combat Effects|Damage")
 	bool IsInvulnerable() const;
@@ -111,6 +125,7 @@ private:
 	int32 NextHandleId = 1;
 
 	int32 FindEffectIndex(FCombatEffectHandle Handle) const;
+	int32 FindEffectIndex(FGameplayTag EffectTag, AActor* SourceActor) const;
 	int32 FindMatchingEffectIndex(const FCombatEffectSpec& Spec) const;
 
 	static bool UsesDuration(ECombatEffectDurationPolicy Policy);
