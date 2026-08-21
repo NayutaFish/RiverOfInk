@@ -17,6 +17,7 @@ class UStateBase;
 class UPlayerState_Attack1;
 class USkillComponent;
 class UHealthComponent;
+class UCombatEffectComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 class UPlayerSkillWidget;
@@ -86,6 +87,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Player|Health")
 	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	/** Runtime Buff/Debuff/Proc container. Gameplay behavior is added by later effect slices. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Effects")
+	TObjectPtr<UCombatEffectComponent> CombatEffectComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Player|Effects")
+	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
 
 	/** Capture all component-owned runtime state into one value snapshot. */
 	bool CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;

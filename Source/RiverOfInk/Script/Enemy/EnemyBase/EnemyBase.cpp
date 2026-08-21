@@ -3,6 +3,7 @@
 #include "Enemy/EnemyBase/EnemyBase.h"
 
 #include "Common/AttackAreaBase.h"
+#include "Common/CombatEffectComponent.h"
 #include "Common/StateBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -35,6 +36,8 @@ AEnemyBase::AEnemyBase()
 	CapsuleCollision->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap); // 响应伤害
 	CapsuleCollision->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 	CapsuleCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+	CombatEffectComponent = CreateDefaultSubobject<UCombatEffectComponent>(TEXT("CombatEffectComponent"));
 
 	// 网格（仅显示用，碰撞走胶囊体）
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));

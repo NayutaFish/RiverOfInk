@@ -5,6 +5,7 @@
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Common/AttackAreaBase.h"
+#include "Common/CombatEffectComponent.h"
 #include "Common/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Player/Attack/AttackArea_PlayerAttack1.h"
@@ -53,6 +54,7 @@ APlayerCharacter::APlayerCharacter()
 
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+	CombatEffectComponent = CreateDefaultSubobject<UCombatEffectComponent>(TEXT("CombatEffectComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(

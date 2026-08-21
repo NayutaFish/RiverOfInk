@@ -15,6 +15,7 @@ class UStateBase;
 class APlayerCharacter;
 class UEnemyHealthWidget;
 class UWidgetComponent;
+class UCombatEffectComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
@@ -44,6 +45,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void SwitchState(TSubclassOf<UStateBase> StateClass);
+
+	/** Runtime Buff/Debuff/Proc container shared by all enemy classes. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Effects")
+	TObjectPtr<UCombatEffectComponent> CombatEffectComponent;
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|Effects")
+	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
 
 protected:
 	virtual void BeginPlay() override;
