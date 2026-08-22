@@ -370,19 +370,6 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{
 		Enemy->TakeDamage(DamageInfo, this);
-		if (ProjectileSpec.bEnableHoming
-			&& IsValid(Enemy)
-			&& !Enemy->bIsDead
-			&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
-		{
-			if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
-			{
-				if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
-				{
-					Targeting->NotifyProjectileHit(Enemy);
-				}
-			}
-		}
 	}
 	else if (APlayerCharacter* Player = Cast<APlayerCharacter>(Target))
 	{

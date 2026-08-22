@@ -359,19 +359,6 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 			}
 
 			Enemy->TakeDamage(DamageInfo);
-			if (ProjectileSpec.bEnableHoming
-				&& IsValid(Enemy)
-				&& !Enemy->bIsDead
-				&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
-			{
-				if (APlayerCharacter* Player = Cast<APlayerCharacter>(DamageInstigator))
-				{
-					if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
-					{
-						Targeting->NotifyProjectileHit(Enemy);
-					}
-				}
-			}
 			++HitCount;
 		}
 	}
