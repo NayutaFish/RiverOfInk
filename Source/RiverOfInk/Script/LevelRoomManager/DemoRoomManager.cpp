@@ -11,6 +11,8 @@
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RiverOfInk.h"
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "TimerManager.h"
 
 /** 刷怪特效播放后延迟生成敌人的时长（秒） */
@@ -143,6 +145,7 @@ void ADemoRoomManager::StartRoom()
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("Room started."));
 	OnRoomStarted.Broadcast();
+	FEventBus::Publish<FCombatRoomStartedEvent>(FCombatRoomStartedEvent());
 
 	// 初始化
 	AliveEnemyCount = 0;
@@ -278,6 +281,7 @@ void ADemoRoomManager::CheckRoomClear()
 	OnRoomCleared.Broadcast();
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("Room Clear!"));
+	FEventBus::Publish<FCombatRoomClearedEvent>(FCombatRoomClearedEvent());
 	if (RewardManager)
 	{
 		UE_LOG(LogRoguelike, Log, TEXT("Room clear reached target; requesting reward UI. Eliminated=%d Target=%d."),

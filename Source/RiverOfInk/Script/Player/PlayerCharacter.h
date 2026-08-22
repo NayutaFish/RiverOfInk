@@ -227,6 +227,10 @@ private:
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void TakeDamage(const FTakeDamageInfo& InInfo);
 
+	/** 是否处于战斗外无敌；战斗开始时解除，战斗结束时启用，受击时若为真则忽略伤害 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|State")
+	bool isInBattleInvincible = true;
+
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void TestDie();
 
@@ -297,5 +301,8 @@ private:
 
 	UFUNCTION()
 	void HandleHealthDirectDamage(const FTakeDamageInfo& InInfo);
+
+	FDelegateHandle CombatRoomStartedHandle;
+	FDelegateHandle CombatRoomClearedHandle;
 
 };

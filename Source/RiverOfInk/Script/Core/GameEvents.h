@@ -253,3 +253,21 @@ struct FPlayerExitDashEvent
 {
 	FPlayerExitDashEvent() = default;
 };
+
+// ====================
+// 单局战斗开始事件
+// ====================
+
+struct FCombatRoomStartedEvent
+{
+	FCombatRoomStartedEvent() = default;
+};
+
+// ====================
+// 单局战斗结束事件
+// ====================
+
+struct FCombatRoomClearedEvent
+{
+	FCombatRoomClearedEvent() = default;
+};

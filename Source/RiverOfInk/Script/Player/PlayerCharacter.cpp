@@ -238,10 +238,25 @@ void APlayerCharacter::BeginPlay()
 				FMath::RoundToInt(HealthComponent->GetMaxHealth()),
 				FMath::RoundToInt(HealthComponent->GetCurrentHealth())));
 	}
+
+	// ── 单局战斗无敌订阅 ──
+	CombatRoomStartedHandle = FEventBus::Subscribe<FCombatRoomStartedEvent>(
+		[this](const FCombatRoomStartedEvent& InEvent)
+		{
+			isInBattleInvincible = false;
+		});
+	CombatRoomClearedHandle = FEventBus::Subscribe<FCombatRoomClearedEvent>(
+		[this](const FCombatRoomClearedEvent& InEvent)
+		{
+			isInBattleInvincible = true;
+		});
 }
 
 void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	FEventBus::Unsubscribe<FCombatRoomStartedEvent>(CombatRoomStartedHandle);
+	FEventBus::Unsubscribe<FCombatRoomClearedEvent>(CombatRoomClearedHandle);
+
     if (HealthWidget)
     {
         HealthWidget->RemoveFromParent();
@@ -630,7 +645,7 @@ void APlayerCharacter::OnAttack()
 
 void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 {
-	if (IsDead() || !HealthComponent || InInfo.DamageValue <= 0.0f)
+	if (isInBattleInvincible || IsDead() || !HealthComponent || InInfo.DamageValue <= 0.0f)
 	{
 		return;
 	}
