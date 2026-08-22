@@ -34,7 +34,7 @@ void UPlayerState_Dash::OnEnter_Implementation()
 
 	// 锁定朝向，速度 = 当前朝向 × n
 	Player->GetCharacterMovement()->bOrientRotationToMovement = false;
-	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * 3500.0f;
+	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * 5500.0f;
 
 	// ms 后检测退出
 	bHadMoveInput = false;
@@ -51,7 +51,7 @@ void UPlayerState_Dash::OnEnter_Implementation()
 		{
 			Player->SwitchState(UPlayerState_Idle::StaticClass());
 		}
-	}), 0.12f, false);
+	}), 0.15f, false);
 }
 
 void UPlayerState_Dash::OnExit_Implementation()
