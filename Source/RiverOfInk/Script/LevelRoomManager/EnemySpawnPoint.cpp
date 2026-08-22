@@ -23,5 +23,16 @@ AEnemySpawnPoint::AEnemySpawnPoint()
 
 FTransform AEnemySpawnPoint::GetSpawnTransform() const
 {
-	return GetActorTransform();
+	FTransform Result = GetActorTransform();
+
+	if (SpawnRadius > KINDA_SMALL_NUMBER)
+	{
+		// 在以本点为圆心的水平圆内取随机位置（XY 平面）
+		const float Radius = SpawnRadius * FMath::Sqrt(FMath::FRand());
+		const float Angle = FMath::FRandRange(0.0f, 2.0f * PI);
+		const FVector Offset(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+		Result.SetLocation(Result.GetLocation() + Offset);
+	}
+
+	return Result;
 }

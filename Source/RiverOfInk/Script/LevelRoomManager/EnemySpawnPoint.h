@@ -34,6 +34,10 @@ protected:
 	TObjectPtr<UBillboardComponent> Billboard;
 
 public:
+	/** 出生点为中心的随机生成半径（XY 平面内），0 表示固定单点 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn Point", meta = (ClampMin = "0.0"))
+	float SpawnRadius = 500.0f;
+
 	UFUNCTION(BlueprintCallable, Category = "Spawn Point")
 	FTransform GetSpawnTransform() const;
 };
