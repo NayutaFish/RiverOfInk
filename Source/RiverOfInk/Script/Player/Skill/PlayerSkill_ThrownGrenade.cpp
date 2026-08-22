@@ -147,7 +147,10 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	float InExplosionDelay,
 	AActor* InHomingTarget,
 	float InHomingTurnRate,
-	FCombatEffectHandle InHomingMarkHandle
+	FCombatEffectHandle InHomingMarkHandle,
+	float InHomingStartDelay,
+	float InHomingMaxDistance,
+	float InHomingAcceptanceRadius
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -166,6 +169,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ProjectileSpec.HomingTarget = InHomingTarget;
 	ProjectileSpec.HomingMarkHandle = InHomingMarkHandle;
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InHomingTurnRate);
+	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InHomingStartDelay);
+	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InHomingMaxDistance);
+	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InHomingAcceptanceRadius);
 	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget) && InHomingMarkHandle.IsValid();
 	DamageInfo.Attacker = InInstigator;
 	DamageInfo.DamageValue = Damage;
@@ -199,9 +205,26 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		return;
 	}
 
+	if (ElapsedTime < ProjectileSpec.HomingStartDelay)
+	{
+		return;
+	}
+
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	const float DistanceSquared = ToTarget.SizeSquared();
+	if (ProjectileSpec.HomingMaxDistance > 0.0f
+		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
 	const float CurrentSpeed = Velocity.Size();
 	if (ToTarget.IsNearlyZero()
+		|| (ProjectileSpec.HomingAcceptanceRadius > 0.0f
+			&& DistanceSquared <= FMath::Square(ProjectileSpec.HomingAcceptanceRadius))
 		|| CurrentSpeed <= KINDA_SMALL_NUMBER
 		|| ProjectileSpec.HomingTurnRate <= 0.0f)
 	{

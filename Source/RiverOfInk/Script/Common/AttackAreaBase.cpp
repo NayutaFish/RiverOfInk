@@ -273,6 +273,9 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 	ProjectileSpec.LifeTime = FMath::Max(0.01f, InProjectileSpec.LifeTime);
 	ProjectileSpec.ProjectileSpeed = FMath::Max(0.0f, InProjectileSpec.ProjectileSpeed);
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InProjectileSpec.HomingTurnRate);
+	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InProjectileSpec.HomingStartDelay);
+	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InProjectileSpec.HomingMaxDistance);
+	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InProjectileSpec.HomingAcceptanceRadius);
 	if (!ProjectileSpec.bEnableHoming
 		|| !ProjectileSpec.HomingTarget
 		|| !ProjectileSpec.HomingMarkHandle.IsValid())
@@ -301,6 +304,12 @@ void AAttackAreaBase::UpdateHoming(float DeltaTime)
 	{
 		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
+	if (ElapsedTime < ProjectileSpec.HomingStartDelay)
+	{
 		return;
 	}
 
@@ -318,7 +327,20 @@ void AAttackAreaBase::UpdateHoming(float DeltaTime)
 	}
 
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
-	if (ToTarget.IsNearlyZero() || ProjectileSpec.HomingTurnRate <= 0.0f)
+	const float DistanceSquared = ToTarget.SizeSquared();
+	if (ProjectileSpec.HomingMaxDistance > 0.0f
+		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
+	if (ToTarget.IsNearlyZero()
+		|| (ProjectileSpec.HomingAcceptanceRadius > 0.0f
+			&& DistanceSquared <= FMath::Square(ProjectileSpec.HomingAcceptanceRadius))
+		|| ProjectileSpec.HomingTurnRate <= 0.0f)
 	{
 		return;
 	}

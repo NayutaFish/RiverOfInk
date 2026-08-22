@@ -606,6 +606,9 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.ExplosionDelay = ThrownGrenadeExplosionDelay;
 		Spec.bEnableHoming = HasProjectileHoming(SkillID);
 		Spec.HomingTurnRate = ProjectileHomingTurnRate;
+		Spec.HomingStartDelay = ProjectileHomingStartDelay;
+		Spec.HomingMaxDistance = ProjectileHomingMaxDistance;
+		Spec.HomingAcceptanceRadius = ProjectileHomingAcceptanceRadius;
 		Spec.Cooldown = GetTripleProjectileCooldown();
 		break;
 	}
@@ -1004,9 +1007,14 @@ bool USkillComponent::CastTripleProjectile()
 	ProjectileSpec.LifeTime = Spec.ProjectileLifeTime;
 	ProjectileSpec.ProjectileSpeed = Spec.ProjectileSpeed;
 	ProjectileSpec.HomingTurnRate = Spec.HomingTurnRate;
+	ProjectileSpec.HomingStartDelay = Spec.HomingStartDelay;
+	ProjectileSpec.HomingMaxDistance = Spec.HomingMaxDistance;
+	ProjectileSpec.HomingAcceptanceRadius = Spec.HomingAcceptanceRadius;
 	ProjectileSpec.HomingTarget = HomingTarget;
 	ProjectileSpec.HomingMarkHandle = HomingMarkHandle;
-	ProjectileSpec.bEnableHoming = Spec.bEnableHoming && IsValid(HomingTarget);
+	ProjectileSpec.bEnableHoming = Spec.bEnableHoming
+		&& IsValid(HomingTarget)
+		&& HomingMarkHandle.IsValid();
 	if (ProjectileSpec.bEnableHoming)
 	{
 		ProjectileSpec.ProjectileTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
@@ -1113,7 +1121,10 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.ExplosionDelay,
 			HomingTarget,
 			Spec.HomingTurnRate,
-			HomingMarkHandle);
+			HomingMarkHandle,
+			Spec.HomingStartDelay,
+			Spec.HomingMaxDistance,
+			Spec.HomingAcceptanceRadius);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}

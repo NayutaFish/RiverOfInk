@@ -139,6 +139,15 @@ struct FResolvedSkillSpec
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0", Units = "deg/s"))
 	float HomingTurnRate = 360.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0", Units = "s"))
+	float HomingStartDelay = 0.06f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0"))
+	float HomingMaxDistance = 2500.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0"))
+	float HomingAcceptanceRadius = 80.0f;
+
 	// E / Circular Slash fields.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
 	int32 HitCount = 1;

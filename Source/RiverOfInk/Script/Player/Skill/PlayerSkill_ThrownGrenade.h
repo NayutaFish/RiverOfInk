@@ -41,7 +41,10 @@ public:
 		float InExplosionDelay = 0.12f,
 		AActor* InHomingTarget = nullptr,
 		float InHomingTurnRate = 360.0f,
-		FCombatEffectHandle InHomingMarkHandle = FCombatEffectHandle()
+		FCombatEffectHandle InHomingMarkHandle = FCombatEffectHandle(),
+		float InHomingStartDelay = 0.06f,
+		float InHomingMaxDistance = 2500.0f,
+		float InHomingAcceptanceRadius = 80.0f
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
