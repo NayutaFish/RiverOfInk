@@ -9,6 +9,8 @@
 #include "EnemyBase.generated.h"
 
 class UStaticMeshComponent;
+class UMeshComponent;
+class UMaterialInstanceDynamic;
 class UCapsuleComponent;
 class AAttackAreaBase;
 class UStateBase;
@@ -392,9 +394,18 @@ private:
 	UStateBase* EnsureStateComponent(TSubclassOf<UStateBase> StateClass);
 	void GenerateDropOnDead();
 	void DestroyAfterDeath();
+	void SetupDissolveMaterials();
+	void StartDissolveAnimation();
+	void UpdateDissolve();
 
 	bool bDeadHandled = false;
 	FTimerHandle DeathDestroyTimerHandle;
 	float HardValueRecoveryDelayRemaining = 0.0f;
 	float HardBreakCooldownRemaining = 0.0f;
+
+	/** 死亡溶解的动态材质实例（BeginPlay 时创建） */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> DissolveMaterialInstances;
+	float DissolveStartTime = 0.0f;
+	FTimerHandle DissolveTimerHandle;
 };

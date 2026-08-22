@@ -25,13 +25,6 @@ void UEnemyState_Charging::OnEnter_Implementation()
 		return;
 	}
 
-	UE_LOG(LogRiverOfInk, Log,
-		TEXT("[Charging] Enemy %s entered charging. Niagara=%s Target=%s Duration=%.2f."),
-		*Enemy->GetName(),
-		*GetNameSafe(ChargeNiagaraSystem),
-		*GetNameSafe(TargetStateClass),
-		DurationTime);
-
 	// 生成蓄力特效，并写入 durationTime 用户参数（与状态持续时间保持一致）
 	if (ChargeNiagaraSystem)
 	{
@@ -43,15 +36,6 @@ void UEnemyState_Charging::OnEnter_Implementation()
 		if (ChargeNiagaraComponent)
 		{
 			ChargeNiagaraComponent->SetVariableFloat(TEXT("durationTime"), DurationTime);
-			UE_LOG(LogRiverOfInk, Log,
-				TEXT("[Charging] Enemy %s Niagara spawned: Component=%s."),
-				*Enemy->GetName(), *GetNameSafe(ChargeNiagaraComponent));
-		}
-		else
-		{
-			UE_LOG(LogRiverOfInk, Warning,
-				TEXT("[Charging] Enemy %s SpawnSystemAtLocation failed despite valid asset."),
-				*Enemy->GetName());
 		}
 	}
 
@@ -120,15 +104,12 @@ void UEnemyState_Charging::FinishCharging()
 
 	if (TargetStateClass)
 	{
-		UE_LOG(LogRiverOfInk, Log,
-			TEXT("[Charging] Enemy %s finished charging, switching to %s."),
-			*Enemy->GetName(), *TargetStateClass->GetName());
 		Enemy->SwitchState(TargetStateClass);
 	}
 	else
 	{
 		UE_LOG(LogRiverOfInk, Warning,
-			TEXT("[Charging] Enemy %s charging finished but TargetStateClass is not set."),
+			TEXT("Enemy %s charging finished but TargetStateClass is not set."),
 			*Enemy->GetName());
 	}
 }

@@ -7,6 +7,7 @@
 #include "Common/CombatEffectTags.h"
 #include "Common/StateBase.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/MeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Core/CombatDamageCalculator.h"
@@ -23,6 +24,7 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Dead.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 AEnemyBase::AEnemyBase()
 {
@@ -120,6 +122,7 @@ void AEnemyBase::BeginPlay()
 	EnsureStateComponent(UEnemyState_TargetLost::StaticClass());
 	EnsureStateComponent(UEnemyState_Dead::StaticClass());
 	DisableStateComponentTicks();
+	SetupDissolveMaterials();
 
 	// 显式进入初始 Idle 状态（敌人蓝图需挂载 EnemyState_Idle 组件）
 	SwitchState(UEnemyState_Idle::StaticClass());
@@ -153,6 +156,7 @@ void AEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		World->GetTimerManager().ClearTimer(AttackTimerHandle);
 		World->GetTimerManager().ClearTimer(DeathDestroyTimerHandle);
+		World->GetTimerManager().ClearTimer(DissolveTimerHandle);
 	}
 
 	CurrentState = nullptr;
@@ -509,6 +513,8 @@ void AEnemyBase::HandleDeadState()
 	}
 	bDeadHandled = true;
 
+	StartDissolveAnimation();
+
 	GenerateDropOnDead();
 	OnDead.Broadcast(this);
 	OnEnemyDeath.Broadcast(this);
@@ -558,6 +564,110 @@ void AEnemyBase::NormalizeDefenseFromLegacy()
 	Defense = RiverOfInkDamage::ResolveLegacyDefense(Defense, PhysicalResistance, MagicResistance);
 	PhysicalResistance = Defense;
 	MagicResistance = Defense;
+}
+
+void AEnemyBase::SetupDissolveMaterials()
+{
+	DissolveMaterialInstances.Reset();
+
+	TArray<UMeshComponent*> Meshes;
+	GetComponents<UMeshComponent>(Meshes);
+
+	for (UMeshComponent* DissolveMesh : Meshes)
+	{
+		if (!IsValid(DissolveMesh))
+		{
+			continue;
+		}
+
+		const int32 MaterialCount = DissolveMesh->GetNumMaterials();
+		for (int32 Index = 0; Index < MaterialCount; ++Index)
+		{
+			if (UMaterialInstanceDynamic* DynamicMaterial =
+				DissolveMesh->CreateAndSetMaterialInstanceDynamic(Index))
+			{
+				DynamicMaterial->SetScalarParameterValue(TEXT("DissolveAmount"), 0.0f);
+				DissolveMaterialInstances.Add(DynamicMaterial);
+			}
+		}
+	}
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Enemy %s setup dissolve materials: %d meshes, %d dynamic instances."),
+		*GetName(), Meshes.Num(), DissolveMaterialInstances.Num());
+
+	if (DissolveMaterialInstances.Num() == 0)
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Enemy %s has no dynamic material instances for dissolve; check meshes/materials."),
+			*GetName());
+	}
+}
+
+void AEnemyBase::StartDissolveAnimation()
+{
+	if (DissolveMaterialInstances.Num() == 0)
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Enemy %s cannot start dissolve: no dynamic material instances."),
+			*GetName());
+		return;
+	}
+
+	if (DeathDestroyDelay <= KINDA_SMALL_NUMBER)
+	{
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s death destroy delay <= 0; skip dissolve animation."),
+			*GetName());
+		return;
+	}
+
+	DissolveStartTime = 0.0f;
+
+	if (UWorld* World = GetWorld())
+	{
+		DissolveStartTime = World->GetTimeSeconds();
+		const float Interval = FMath::Max(0.016f, DeathDestroyDelay / 60.0f);
+		World->GetTimerManager().SetTimer(
+			DissolveTimerHandle,
+			this,
+			&AEnemyBase::UpdateDissolve,
+			Interval,
+			true);
+
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s dissolve animation started: %d instances, duration=%.2fs."),
+			*GetName(), DissolveMaterialInstances.Num(), DeathDestroyDelay);
+	}
+}
+
+void AEnemyBase::UpdateDissolve()
+{
+	if (UWorld* World = GetWorld())
+	{
+		const float Elapsed = World->GetTimeSeconds() - DissolveStartTime;
+		const float Progress = FMath::Clamp(
+			DeathDestroyDelay > 0.0f ? Elapsed / DeathDestroyDelay : 1.0f,
+			0.0f,
+			1.0f);
+
+		for (UMaterialInstanceDynamic* DynamicMaterial : DissolveMaterialInstances)
+		{
+			if (IsValid(DynamicMaterial))
+			{
+				DynamicMaterial->SetScalarParameterValue(TEXT("DissolveAmount"), Progress);
+			}
+		}
+
+		if (Progress >= 1.0f)
+		{
+			World->GetTimerManager().ClearTimer(DissolveTimerHandle);
+
+			UE_LOG(LogRiverOfInk, Log,
+				TEXT("Enemy %s dissolve animation finished (DissolveAmount=1.0)."),
+				*GetName());
+		}
+	}
 }
 
 void AEnemyBase::BroadcastHealthChanged(float PreviousHealth, EEnemyHealthChangeReason ChangeReason)
