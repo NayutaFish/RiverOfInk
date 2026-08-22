@@ -4,6 +4,8 @@
 
 #include "Common/HealthComponent.h"
 #include "Core/CombatDamageCalculator.h"
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
 
 DEFINE_LOG_CATEGORY(LogRoguelikeRuntimeData);
@@ -39,6 +41,11 @@ bool URoguelikeRuntimeDataSubsystem::CapturePlayerRuntimeData(const APlayerChara
 			*Player->GetName());
 		return false;
 	}
+
+	// RunBuffs are owned by this GameInstance subsystem rather than the Pawn.
+	// Preserve the already registered list while refreshing transient HP/skill
+	// values from the live player before a purchase or room transition.
+	CapturedData.RunBuffs = PlayerRuntimeData.RunBuffs;
 
 	return RegisterPlayerRuntimeData(CapturedData);
 }
@@ -110,6 +117,87 @@ bool URoguelikeRuntimeDataSubsystem::ApplyRegisteredPlayerRuntimeData(APlayerCha
 		PlayerRuntimeData.SkillUpgradeStates.Num(),
 		PlayerRuntimeData.RunBuffs.Num());
 
+	return true;
+}
+
+bool URoguelikeRuntimeDataSubsystem::AddTemporaryPlayerStatBoost(
+	APlayerCharacter* Player,
+	const FRunBuffData& InBuff)
+{
+	if (!IsValid(Player)
+		|| InBuff.BuffId.IsNone()
+		|| InBuff.RemainCombatCount <= 0
+		|| !FMath::IsFinite(InBuff.AdditiveValue)
+		|| !FMath::IsFinite(InBuff.MultiplierValue)
+		|| InBuff.MultiplierValue <= 0.0f)
+	{
+		UE_LOG(LogRoguelikeRuntimeData, Warning,
+			TEXT("Temporary shop buff rejected: invalid player/data."));
+		return false;
+	}
+
+	if (!CapturePlayerRuntimeData(Player))
+	{
+		return false;
+	}
+
+	PlayerRuntimeData.RunBuffs.Add(InBuff);
+	if (!ApplyRegisteredPlayerRuntimeData(Player))
+	{
+		PlayerRuntimeData.RunBuffs.RemoveAt(PlayerRuntimeData.RunBuffs.Num() - 1);
+		return false;
+	}
+
+	UE_LOG(LogRoguelikeRuntimeData, Log,
+		TEXT("Temporary shop buff registered: BuffId=%s Stat=%d Add=%.2f Mult=%.3f Rooms=%d Active=%d."),
+		*InBuff.BuffId.ToString(),
+		static_cast<int32>(InBuff.StatType),
+		InBuff.AdditiveValue,
+		InBuff.MultiplierValue,
+		InBuff.RemainCombatCount,
+		PlayerRuntimeData.RunBuffs.Num());
+	return true;
+}
+
+bool URoguelikeRuntimeDataSubsystem::ConsumeCombatRoomDurations()
+{
+	bool bChanged = false;
+	for (int32 Index = PlayerRuntimeData.RunBuffs.Num() - 1; Index >= 0; --Index)
+	{
+		FRunBuffData& Buff = PlayerRuntimeData.RunBuffs[Index];
+		if (Buff.RemainCombatCount <= 0)
+		{
+			PlayerRuntimeData.RunBuffs.RemoveAt(Index);
+			bChanged = true;
+			continue;
+		}
+
+		--Buff.RemainCombatCount;
+		bChanged = true;
+		if (Buff.RemainCombatCount <= 0)
+		{
+			PlayerRuntimeData.RunBuffs.RemoveAt(Index);
+		}
+	}
+
+	if (!bChanged)
+	{
+		return false;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	UWorld* World = GameInstance ? GameInstance->GetWorld() : nullptr;
+	APlayerCharacter* Player = World
+		? Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(World, 0))
+		: nullptr;
+	if (IsValid(Player) && bHasPlayerRuntimeData)
+	{
+		ApplyRegisteredPlayerRuntimeData(Player);
+	}
+
+	UE_LOG(LogRoguelikeRuntimeData, Log,
+		TEXT("Temporary shop buff durations consumed: RemainingBuffs=%d."),
+		PlayerRuntimeData.RunBuffs.Num());
 	return true;
 }
 

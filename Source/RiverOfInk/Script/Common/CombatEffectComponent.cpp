@@ -331,6 +331,42 @@ float UCombatEffectComponent::GetModifierValue(FGameplayTag AttributeTag) const
 	return AttributeTag.IsValid() ? GetAttributeMultiplier(AttributeTag) : 1.0f;
 }
 
+float UCombatEffectComponent::GetModifierAdditiveValue(FGameplayTag AttributeTag) const
+{
+	if (!AttributeTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	float Value = 0.0f;
+	for (const FActiveCombatEffect& ActiveEffect : ActiveEffects)
+	{
+		const int32 StackCount = FMath::Max(1, ActiveEffect.CurrentStackCount);
+		for (const FCombatEffectModifier& Modifier : ActiveEffect.Spec.Modifiers)
+		{
+			if (!Modifier.AttributeTag.IsValid()
+				|| !Modifier.AttributeTag.MatchesTag(AttributeTag))
+			{
+				continue;
+			}
+
+			switch (Modifier.Operation)
+			{
+			case ECombatEffectModifierOperation::Add:
+				Value += Modifier.Magnitude * static_cast<float>(StackCount);
+				break;
+			case ECombatEffectModifierOperation::Override:
+				Value = Modifier.Magnitude;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	return Value;
+}
+
 bool UCombatEffectComponent::ConsumeNextHitBonusDamage(FTakeDamageInfo& OutBonusDamage)
 {
 	OutBonusDamage = FTakeDamageInfo();

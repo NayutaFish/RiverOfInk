@@ -169,6 +169,12 @@ bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 
 	WalkSpeed = FMath::Max(0.0f, InRuntimeData.Stats.WalkSpeed);
 	SprintSpeed = FMath::Max(WalkSpeed, InRuntimeData.Stats.SprintSpeed);
+	ApplyRuntimeBuffEffects(InRuntimeData.RunBuffs);
+
+	if (HealthComponent)
+	{
+		HealthComponent->RefreshRuntimeModifiers();
+	}
 
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
@@ -642,9 +648,107 @@ bool APlayerCharacter::IsInvincible() const
 float APlayerCharacter::GetEffectiveMoveSpeed(float BaseSpeed) const
 {
 	const float SafeBaseSpeed = FMath::Max(0.0f, BaseSpeed);
-	return SafeBaseSpeed * (CombatEffectComponent
-		? CombatEffectComponent->GetMoveSpeedMultiplier()
-		: 1.0f);
+	if (!CombatEffectComponent)
+	{
+		return SafeBaseSpeed;
+	}
+
+	float Multiplier = CombatEffectComponent->GetMoveSpeedMultiplier();
+	const FGameplayTag StatSpeedTag = FMath::IsNearlyEqual(BaseSpeed, SprintSpeed)
+		? RiverOfInkCombatEffectTags::Attribute_Movement_SprintSpeedMultiplier
+		: RiverOfInkCombatEffectTags::Attribute_Movement_WalkSpeedMultiplier;
+	Multiplier *= CombatEffectComponent->GetModifierValue(StatSpeedTag);
+	return SafeBaseSpeed * FMath::Max(0.0f, Multiplier);
+}
+
+void APlayerCharacter::ApplyRuntimeBuffEffects(const TArray<FRunBuffData>& InRunBuffs)
+{
+	if (!CombatEffectComponent)
+	{
+		return;
+	}
+
+	for (int32 Index = CombatEffectComponent->ActiveEffects.Num() - 1; Index >= 0; --Index)
+	{
+		const FActiveCombatEffect& ActiveEffect = CombatEffectComponent->ActiveEffects[Index];
+		if (ActiveEffect.Spec.EffectTag == RiverOfInkCombatEffectTags::Effect_Buff_ShopTemporary
+			&& ActiveEffect.Spec.SourceActor == this)
+		{
+			CombatEffectComponent->RemoveEffect(ActiveEffect.Handle);
+		}
+	}
+
+	FCombatEffectSpec ShopEffect;
+	ShopEffect.EffectTag = RiverOfInkCombatEffectTags::Effect_Buff_ShopTemporary;
+	ShopEffect.Category = ECombatEffectCategory::Buff;
+	ShopEffect.DurationPolicy = ECombatEffectDurationPolicy::Infinite;
+	ShopEffect.StackPolicy = ECombatEffectStackPolicy::Replace;
+	ShopEffect.SourceActor = this;
+
+	for (const FRunBuffData& Buff : InRunBuffs)
+	{
+		if (Buff.BuffId.IsNone() || Buff.RemainCombatCount <= 0)
+		{
+			continue;
+		}
+
+		FCombatEffectModifier Modifier;
+		Modifier.Operation = ECombatEffectModifierOperation::Add;
+		switch (Buff.StatType)
+		{
+		case EPlayerRuntimeStat::MaxHealth:
+			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Health_MaxAdditive;
+			Modifier.Magnitude = Buff.AdditiveValue;
+			break;
+
+		case EPlayerRuntimeStat::Defense:
+			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Defense_Additive;
+			Modifier.Magnitude = Buff.AdditiveValue;
+			break;
+
+		case EPlayerRuntimeStat::WalkSpeed:
+		case EPlayerRuntimeStat::SprintSpeed:
+		{
+			const float BaseSpeed = Buff.StatType == EPlayerRuntimeStat::WalkSpeed
+				? FMath::Max(1.0f, WalkSpeed)
+				: FMath::Max(1.0f, SprintSpeed);
+			const float AdditiveMultiplier = 1.0f + Buff.AdditiveValue / BaseSpeed;
+			const float SpeedMultiplier = FMath::Max(0.0f,
+				FMath::IsFinite(Buff.MultiplierValue) ? Buff.MultiplierValue : 1.0f)
+				* FMath::Max(0.0f, AdditiveMultiplier);
+			if (!FMath::IsFinite(SpeedMultiplier)
+				|| FMath::IsNearlyEqual(SpeedMultiplier, 1.0f))
+			{
+				continue;
+			}
+			Modifier.Operation = ECombatEffectModifierOperation::Multiply;
+			Modifier.AttributeTag = Buff.StatType == EPlayerRuntimeStat::WalkSpeed
+				? RiverOfInkCombatEffectTags::Attribute_Movement_WalkSpeedMultiplier
+				: RiverOfInkCombatEffectTags::Attribute_Movement_SprintSpeedMultiplier;
+			Modifier.Magnitude = SpeedMultiplier;
+			break;
+		}
+
+		default:
+			continue;
+		}
+
+		if (Modifier.AttributeTag.IsValid()
+			&& FMath::IsFinite(Modifier.Magnitude)
+			&& !FMath::IsNearlyZero(Modifier.Magnitude))
+		{
+			ShopEffect.Modifiers.Add(Modifier);
+		}
+	}
+
+	if (ShopEffect.Modifiers.Num() > 0)
+	{
+		CombatEffectComponent->ApplyEffect(ShopEffect);
+		UE_LOG(LogRoguelikeRuntimeData, Log,
+			TEXT("Temporary shop buffs applied: Player=%s Count=%d."),
+			*GetNameSafe(this),
+			ShopEffect.Modifiers.Num());
+	}
 }
 
 void APlayerCharacter::TestDie()

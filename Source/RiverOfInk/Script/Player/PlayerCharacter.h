@@ -286,7 +286,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void StartAttack2Cooldown();
 
-	private:
+private:
+	void ApplyRuntimeBuffEffects(const TArray<FRunBuffData>& InRunBuffs);
+
 	UFUNCTION()
 	void HandleHealthChanged(float InCurrentHealth, float InMaxHealth);
 

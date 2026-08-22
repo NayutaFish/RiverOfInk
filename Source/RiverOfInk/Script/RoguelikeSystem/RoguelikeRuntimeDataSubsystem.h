@@ -40,6 +40,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Roguelike|Runtime Data")
 	bool ApplyRegisteredPlayerRuntimeData(APlayerCharacter* Player) const;
 
+	/** Add one Shop temporary stat buff and immediately apply the rebuilt runtime effect. */
+	UFUNCTION(BlueprintCallable, Category = "Roguelike|Runtime Data|Buffs")
+	bool AddTemporaryPlayerStatBoost(APlayerCharacter* Player, const FRunBuffData& InBuff);
+
+	/** Consume one duration unit from every active Shop buff after a Combat Room. */
+	UFUNCTION(BlueprintCallable, Category = "Roguelike|Runtime Data|Buffs")
+	bool ConsumeCombatRoomDurations();
+
+	UFUNCTION(BlueprintPure, Category = "Roguelike|Runtime Data|Buffs")
+	int32 GetActiveTemporaryBuffCount() const { return PlayerRuntimeData.RunBuffs.Num(); }
+
 	/** Clear the snapshot when an external run-restart system starts a new run. */
 	UFUNCTION(BlueprintCallable, Category = "Roguelike|Runtime Data")
 	void ResetPlayerRuntimeData();

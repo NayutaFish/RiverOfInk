@@ -28,7 +28,7 @@ struct FRunBuffData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
 	float AdditiveValue = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs", meta = (ClampMin = "0.0"))
 	float MultiplierValue = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Runtime|Buffs", meta = (ClampMin = "0"))

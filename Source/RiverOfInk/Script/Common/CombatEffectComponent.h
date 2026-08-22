@@ -104,6 +104,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat Effects|Modifier")
 	float GetModifierValue(FGameplayTag AttributeTag) const;
 
+	/** Resolve additive modifiers; returns zero when the attribute is absent. */
+	UFUNCTION(BlueprintPure, Category = "Combat Effects|Modifier")
+	float GetModifierAdditiveValue(FGameplayTag AttributeTag) const;
+
 	/** Consume one NextHitBonusDamage proc and return its damage payload. */
 	UFUNCTION(BlueprintCallable, Category = "Combat Effects|Proc")
 	bool ConsumeNextHitBonusDamage(FTakeDamageInfo& OutBonusDamage);

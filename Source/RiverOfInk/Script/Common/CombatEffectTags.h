@@ -14,10 +14,15 @@ namespace RiverOfInkCombatEffectTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Debuff_HomingMark);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Proc_NextHitBonusDamage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Buff_ControlResist);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Buff_ShopTemporary);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Damage_OutgoingMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Damage_IncomingMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Movement_SpeedMultiplier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Movement_WalkSpeedMultiplier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Movement_SprintSpeedMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Control_ResistMultiplier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Defense_Additive);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Health_MaxAdditive);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Build_Projectile_Homing);
 }
