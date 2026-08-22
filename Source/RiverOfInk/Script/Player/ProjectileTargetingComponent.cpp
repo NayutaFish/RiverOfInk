@@ -133,6 +133,24 @@ AEnemyBase* UProjectileTargetingComponent::GetCurrentMarkedTarget() const
 	return IsHomingMarkActive(Target) ? Target : nullptr;
 }
 
+bool UProjectileTargetingComponent::GetCurrentMarkedTargetSnapshot(
+	AEnemyBase*& OutTarget,
+	FCombatEffectHandle& OutMarkHandle) const
+{
+	OutTarget = GetCurrentMarkedTarget();
+	OutMarkHandle = CurrentMarkedEffectHandle;
+	return IsValid(OutTarget) && OutMarkHandle.IsValid();
+}
+
+bool UProjectileTargetingComponent::IsHomingMarkActive(
+	const AEnemyBase* Target,
+	const FCombatEffectHandle& ExpectedMarkHandle) const
+{
+	return ExpectedMarkHandle.IsValid()
+		&& CurrentMarkedEffectHandle == ExpectedMarkHandle
+		&& IsHomingMarkActive(Target);
+}
+
 bool UProjectileTargetingComponent::IsCurrentMarkedTargetValid() const
 {
 	return GetCurrentMarkedTarget() != nullptr;

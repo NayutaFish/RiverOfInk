@@ -137,7 +137,7 @@ struct FResolvedSkillSpec
 
 	/** Constant turn rate used by moving projectiles in degrees per second. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float HomingTurnRate = 720.0f;
+	float HomingTurnRate = 360.0f;
 
 	// E / Circular Slash fields.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))

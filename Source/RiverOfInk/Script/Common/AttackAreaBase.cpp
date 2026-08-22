@@ -273,9 +273,13 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 	ProjectileSpec.LifeTime = FMath::Max(0.01f, InProjectileSpec.LifeTime);
 	ProjectileSpec.ProjectileSpeed = FMath::Max(0.0f, InProjectileSpec.ProjectileSpeed);
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InProjectileSpec.HomingTurnRate);
-	if (!ProjectileSpec.bEnableHoming)
+	if (!ProjectileSpec.bEnableHoming
+		|| !ProjectileSpec.HomingTarget
+		|| !ProjectileSpec.HomingMarkHandle.IsValid())
 	{
+		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
 	}
 
 	LifeTime = ProjectileSpec.LifeTime;
@@ -303,10 +307,12 @@ void AAttackAreaBase::UpdateHoming(float DeltaTime)
 	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
 	{
 		UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent();
-		if (!Targeting || !Targeting->IsHomingMarkActive(Target))
+		if (!Targeting
+			|| !Targeting->IsHomingMarkActive(Target, ProjectileSpec.HomingMarkHandle))
 		{
 			ProjectileSpec.bEnableHoming = false;
 			ProjectileSpec.HomingTarget = nullptr;
+			ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
 			return;
 		}
 	}

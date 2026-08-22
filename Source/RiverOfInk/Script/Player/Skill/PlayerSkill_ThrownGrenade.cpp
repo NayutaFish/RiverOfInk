@@ -146,7 +146,8 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	int32 InExplosionCount,
 	float InExplosionDelay,
 	AActor* InHomingTarget,
-	float InHomingTurnRate
+	float InHomingTurnRate,
+	FCombatEffectHandle InHomingMarkHandle
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -163,8 +164,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ProjectileSpec.LifeTime = FuseTime;
 	ProjectileSpec.ProjectileSpeed = InInitialVelocity.Size();
 	ProjectileSpec.HomingTarget = InHomingTarget;
+	ProjectileSpec.HomingMarkHandle = InHomingMarkHandle;
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InHomingTurnRate);
-	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget);
+	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget) && InHomingMarkHandle.IsValid();
 	DamageInfo.Attacker = InInstigator;
 	DamageInfo.DamageValue = Damage;
 	DamageInfo.DamageType = EDamageType::Unified;
@@ -189,10 +191,11 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		: nullptr;
 	if (!IsValid(Target)
 		|| !Targeting
-		|| !Targeting->IsHomingMarkActive(Target))
+		|| !Targeting->IsHomingMarkActive(Target, ProjectileSpec.HomingMarkHandle))
 	{
 		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
 		return;
 	}
 

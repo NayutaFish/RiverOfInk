@@ -51,6 +51,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Projectile|Homing")
 	FCombatEffectHandle GetCurrentMarkedEffectHandle() const { return CurrentMarkedEffectHandle; }
 
+	/** Capture the current target and exact mark identity as one spawn-time snapshot. */
+	bool GetCurrentMarkedTargetSnapshot(
+		AEnemyBase*& OutTarget,
+		FCombatEffectHandle& OutMarkHandle) const;
+
 	/** True when the current target and its exact effect handle are still valid. */
 	UFUNCTION(BlueprintPure, Category = "Projectile|Homing")
 	bool IsCurrentMarkedTargetValid() const;
@@ -62,6 +67,11 @@ public:
 	/** True only while this player-owned mark is still active on the enemy. */
 	UFUNCTION(BlueprintPure, Category = "Projectile|Homing")
 	bool IsHomingMarkActive(const AEnemyBase* Target) const;
+
+	/** Validate a projectile against the exact mark identity captured at spawn. */
+	bool IsHomingMarkActive(
+		const AEnemyBase* Target,
+		const FCombatEffectHandle& ExpectedMarkHandle) const;
 
 	/** Current target and handle are the source of truth; no hit-count state exists. */
 	private:

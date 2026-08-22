@@ -205,7 +205,7 @@ public:
 
 	/** Constant turn rate for marked-target homing projectiles. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float ProjectileHomingTurnRate = 720.0f;
+	float ProjectileHomingTurnRate = 360.0f;
 
 protected:
 	virtual void BeginPlay() override;

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Common/CombatEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "ProjectileTypes.generated.h"
 
@@ -34,11 +35,15 @@ struct FProjectileSpec
 	bool bEnableHoming = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float HomingTurnRate = 720.0f;
+	float HomingTurnRate = 360.0f;
 
 	/** Target selected at spawn time. A projectile never retargets mid-flight. */
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Homing")
 	TObjectPtr<AActor> HomingTarget;
+
+	/** Exact player-owned mark identity captured together with HomingTarget. */
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Homing")
+	FCombatEffectHandle HomingMarkHandle;
 
 	/** Tags describing the projectile build that produced this projectile. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Tags")

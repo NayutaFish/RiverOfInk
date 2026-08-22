@@ -991,10 +991,13 @@ bool USkillComponent::CastTripleProjectile()
 		: 0.0f;
 	const float StartAngle = -AngleStep * (ProjectileCount - 1) * 0.5f;
 	const FVector SpawnCenter = OwnerCharacter->GetActorLocation() + Forward * ProjectileSpawnForwardOffset;
-	AActor* HomingTarget = nullptr;
+	AEnemyBase* HomingTarget = nullptr;
+	FCombatEffectHandle HomingMarkHandle;
 	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
 	{
-		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+		OwnerCharacter->GetProjectileTargetingComponent()->GetCurrentMarkedTargetSnapshot(
+			HomingTarget,
+			HomingMarkHandle);
 	}
 
 	FProjectileSpec ProjectileSpec;
@@ -1002,6 +1005,7 @@ bool USkillComponent::CastTripleProjectile()
 	ProjectileSpec.ProjectileSpeed = Spec.ProjectileSpeed;
 	ProjectileSpec.HomingTurnRate = Spec.HomingTurnRate;
 	ProjectileSpec.HomingTarget = HomingTarget;
+	ProjectileSpec.HomingMarkHandle = HomingMarkHandle;
 	ProjectileSpec.bEnableHoming = Spec.bEnableHoming && IsValid(HomingTarget);
 	if (ProjectileSpec.bEnableHoming)
 	{
@@ -1060,10 +1064,13 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 		: 0.0f;
 	const float StartAngle = -AngleStep * (GrenadeCount - 1) * 0.5f;
 	const FVector SpawnOrigin = OwnerCharacter->GetActorLocation();
-	AActor* HomingTarget = nullptr;
+	AEnemyBase* HomingTarget = nullptr;
+	FCombatEffectHandle HomingMarkHandle;
 	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
 	{
-		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+		OwnerCharacter->GetProjectileTargetingComponent()->GetCurrentMarkedTargetSnapshot(
+			HomingTarget,
+			HomingMarkHandle);
 	}
 	int32 SpawnedCount = 0;
 
@@ -1105,7 +1112,8 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.ExplosionCount,
 			Spec.ExplosionDelay,
 			HomingTarget,
-			Spec.HomingTurnRate);
+			Spec.HomingTurnRate,
+			HomingMarkHandle);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}
