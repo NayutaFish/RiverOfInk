@@ -235,6 +235,11 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		ESkillModifierID::CooldownDown,
 		TEXT("疾速回转"),
 		TEXT("Q 冷却时间缩短 0.5 秒。"));
+	AddModifierCandidate(
+		EPlayerSkillID::TripleProjectile,
+		ESkillModifierID::ProjectileHoming,
+		TEXT("引墨"),
+		TEXT("右键命中的目标获得标记，Q 三枚弹幕在飞行中修正方向追踪该目标。"));
 
 	// E build candidates intentionally do not form an exclusive group. Twin
 	// Slash and Null Ring can coexist, so the resolver can produce two hits
@@ -638,6 +643,10 @@ void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option
 			? FMath::Max(2.0f, Option.BeforeValue - 0.5f * static_cast<float>(Option.StackDelta))
 			: FMath::Max(1.6f, Option.BeforeValue - 0.4f * static_cast<float>(Option.StackDelta));
 		break;
+	case ESkillModifierID::ProjectileHoming:
+		Option.BeforeValue = BeforeSpec.bEnableHoming ? 1.0f : 0.0f;
+		Option.AfterValue = 1.0f;
+		break;
 	default:
 		break;
 	}
@@ -723,6 +732,13 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.AfterValue));
 		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown.T_UI_Build_Cooldown");
+		break;
+	case ESkillModifierID::ProjectileHoming:
+		Option.OldValue = FText::FromString(Option.BeforeValue > 0.5f ? TEXT("开启") : TEXT("关闭"));
+		Option.NewValue = FText::FromString(TEXT("开启"));
+		// No dedicated homing artwork exists yet; keep the icon contract stable
+		// with the existing projectile-build placeholder until final art arrives.
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
 		break;
 	default:
 		break;
