@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Common/CombatEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "ProjectileTypes.generated.h"
 
@@ -34,11 +35,27 @@ struct FProjectileSpec
 	bool bEnableHoming = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float HomingTurnRate = 720.0f;
+	float HomingTurnRate = 360.0f;
+
+	/** Delay before a spawned projectile begins steering toward its locked target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0", Units = "s"))
+	float HomingStartDelay = 0.06f;
+
+	/** Maximum distance at which the projectile may keep correcting toward its locked target. Zero disables this limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0"))
+	float HomingMaxDistance = 2500.0f;
+
+	/** Once inside this radius, stop steering and let the projectile continue on its current heading. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0"))
+	float HomingAcceptanceRadius = 80.0f;
 
 	/** Target selected at spawn time. A projectile never retargets mid-flight. */
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Homing")
 	TObjectPtr<AActor> HomingTarget;
+
+	/** Exact player-owned mark identity captured together with HomingTarget. */
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Homing")
+	FCombatEffectHandle HomingMarkHandle;
 
 	/** Tags describing the projectile build that produced this projectile. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Tags")

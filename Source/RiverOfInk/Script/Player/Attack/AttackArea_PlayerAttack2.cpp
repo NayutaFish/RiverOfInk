@@ -7,6 +7,8 @@
 #include "Core/GameEvents.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/Attack/SpecialBuff_PlayerAttack2.h"
+#include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "RiverOfInk.h"
 
 AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
@@ -34,33 +36,24 @@ void AAttackArea_PlayerAttack2::ApplyDamage_Implementation(AActor* Target)
 	{
 		FEventBus::Publish<FPlayerSpecialAttackHitEvent>(FPlayerSpecialAttackHitEvent(Enemy));
 
-		// 若敌人已被本次伤害击杀（已销毁），不生成 Buff，避免幽灵 Buff 留在原地
-		if (!IsValid(Enemy))
+		// 只有有效伤害才会建立/转移追踪标记；被无敌、零伤害或本次击杀挡住时不标记。
+		if (!IsValid(Enemy)
+			|| Enemy->bIsDead
+			|| !Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
 		{
 			return;
 		}
 
+		if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+		{
+			if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
+			{
+				Targeting->ApplyOrTransferHomingMark(Enemy, HomingMarkDuration);
+			}
+		}
+
 		if (UCombatEffectComponent* EnemyEffects = Enemy->GetCombatEffectComponent())
 		{
-			FCombatEffectSpec HomingMarkSpec;
-			HomingMarkSpec.EffectTag = RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark;
-			HomingMarkSpec.Category = ECombatEffectCategory::Debuff;
-			HomingMarkSpec.DurationPolicy = ECombatEffectDurationPolicy::TimedAndCharges;
-			HomingMarkSpec.StackPolicy = ECombatEffectStackPolicy::AddStackAndRefresh;
-			HomingMarkSpec.Duration = FMath::Max(0.01f, HomingMarkDuration);
-			HomingMarkSpec.Charges = FMath::Max(1, HomingMarkCharges);
-			HomingMarkSpec.MaxCharges = HomingMarkSpec.Charges;
-			HomingMarkSpec.StackCount = 1;
-			HomingMarkSpec.MaxStacks = 1;
-			HomingMarkSpec.SourceActor = GetOwner();
-			HomingMarkSpec.AffectsTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
-			const FCombatEffectHandle MarkHandle = EnemyEffects->ApplyEffect(HomingMarkSpec);
-			UE_LOG(LogRiverOfInk, Log,
-				TEXT("Attack2 applied HomingMark: Enemy=%s Duration=%.2f Charges=%d Handle=%d."),
-				*Enemy->GetName(),
-				HomingMarkSpec.Duration,
-				HomingMarkSpec.Charges,
-				MarkHandle.Id);
 
 			FTakeDamageInfo BonusInfo = NextHitBonusDamageInfo;
 			// Preserve existing Blueprint tuning while assets migrate to the

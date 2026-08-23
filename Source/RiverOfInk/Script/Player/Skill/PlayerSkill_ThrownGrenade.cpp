@@ -146,7 +146,11 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	int32 InExplosionCount,
 	float InExplosionDelay,
 	AActor* InHomingTarget,
-	float InHomingTurnRate
+	float InHomingTurnRate,
+	FCombatEffectHandle InHomingMarkHandle,
+	float InHomingStartDelay,
+	float InHomingMaxDistance,
+	float InHomingAcceptanceRadius
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -163,8 +167,12 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ProjectileSpec.LifeTime = FuseTime;
 	ProjectileSpec.ProjectileSpeed = InInitialVelocity.Size();
 	ProjectileSpec.HomingTarget = InHomingTarget;
+	ProjectileSpec.HomingMarkHandle = InHomingMarkHandle;
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InHomingTurnRate);
-	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget);
+	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InHomingStartDelay);
+	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InHomingMaxDistance);
+	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InHomingAcceptanceRadius);
+	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget) && InHomingMarkHandle.IsValid();
 	DamageInfo.Attacker = InInstigator;
 	DamageInfo.DamageValue = Damage;
 	DamageInfo.DamageType = EDamageType::Unified;
@@ -189,16 +197,34 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		: nullptr;
 	if (!IsValid(Target)
 		|| !Targeting
-		|| !Targeting->IsHomingMarkActive(Target))
+		|| !Targeting->IsHomingMarkActive(Target, ProjectileSpec.HomingMarkHandle))
 	{
 		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
+	if (ElapsedTime < ProjectileSpec.HomingStartDelay)
+	{
 		return;
 	}
 
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	const float DistanceSquared = ToTarget.SizeSquared();
+	if (ProjectileSpec.HomingMaxDistance > 0.0f
+		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
 	const float CurrentSpeed = Velocity.Size();
 	if (ToTarget.IsNearlyZero()
+		|| (ProjectileSpec.HomingAcceptanceRadius > 0.0f
+			&& DistanceSquared <= FMath::Square(ProjectileSpec.HomingAcceptanceRadius))
 		|| CurrentSpeed <= KINDA_SMALL_NUMBER
 		|| ProjectileSpec.HomingTurnRate <= 0.0f)
 	{
@@ -359,19 +385,6 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 			}
 
 			Enemy->TakeDamage(DamageInfo);
-			if (ProjectileSpec.bEnableHoming
-				&& IsValid(Enemy)
-				&& !Enemy->bIsDead
-				&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
-			{
-				if (APlayerCharacter* Player = Cast<APlayerCharacter>(DamageInstigator))
-				{
-					if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
-					{
-						Targeting->NotifyProjectileHit(Enemy);
-					}
-				}
-			}
 			++HitCount;
 		}
 	}

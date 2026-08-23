@@ -45,7 +45,7 @@ private:
 
 	/** Constant turn rate used when this projectile has a marked target. */
 	UPROPERTY(EditAnywhere, Category = "AttackState|Projectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float ProjectileHomingTurnRate = 720.0f;
+	float ProjectileHomingTurnRate = 360.0f;
 
 	bool bHadMoveInput = false;
 	float MoveInputX = 0.0f;

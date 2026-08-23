@@ -69,12 +69,17 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 			ProjectileSpec.LifeTime = ProjectileLifeTime;
 			ProjectileSpec.ProjectileSpeed = ProjectileSpeed;
 			ProjectileSpec.HomingTurnRate = ProjectileHomingTurnRate;
+			AEnemyBase* HomingTarget = nullptr;
+			FCombatEffectHandle HomingMarkHandle;
 			if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
 			{
 				if (Targeting->HasHomingBuild())
 				{
-					ProjectileSpec.HomingTarget = Targeting->FindBestHomingTarget();
-					ProjectileSpec.bEnableHoming = IsValid(ProjectileSpec.HomingTarget.Get());
+					Targeting->GetCurrentMarkedTargetSnapshot(HomingTarget, HomingMarkHandle);
+					ProjectileSpec.HomingTarget = HomingTarget;
+					ProjectileSpec.HomingMarkHandle = HomingMarkHandle;
+					ProjectileSpec.bEnableHoming = IsValid(HomingTarget)
+						&& HomingMarkHandle.IsValid();
 					if (ProjectileSpec.bEnableHoming)
 					{
 						ProjectileSpec.ProjectileTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);

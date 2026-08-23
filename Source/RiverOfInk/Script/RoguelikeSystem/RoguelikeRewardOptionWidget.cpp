@@ -189,6 +189,9 @@ namespace
 			case ESkillModifierID::CooldownDown:
 				IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown.T_UI_Build_Cooldown");
 				break;
+			case ESkillModifierID::ProjectileHoming:
+				IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+				break;
 			default:
 				break;
 			}

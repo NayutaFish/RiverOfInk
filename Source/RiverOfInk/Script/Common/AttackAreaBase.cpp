@@ -273,9 +273,16 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 	ProjectileSpec.LifeTime = FMath::Max(0.01f, InProjectileSpec.LifeTime);
 	ProjectileSpec.ProjectileSpeed = FMath::Max(0.0f, InProjectileSpec.ProjectileSpeed);
 	ProjectileSpec.HomingTurnRate = FMath::Max(0.0f, InProjectileSpec.HomingTurnRate);
-	if (!ProjectileSpec.bEnableHoming)
+	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InProjectileSpec.HomingStartDelay);
+	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InProjectileSpec.HomingMaxDistance);
+	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InProjectileSpec.HomingAcceptanceRadius);
+	if (!ProjectileSpec.bEnableHoming
+		|| !ProjectileSpec.HomingTarget
+		|| !ProjectileSpec.HomingMarkHandle.IsValid())
 	{
+		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
 	}
 
 	LifeTime = ProjectileSpec.LifeTime;
@@ -297,22 +304,43 @@ void AAttackAreaBase::UpdateHoming(float DeltaTime)
 	{
 		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
+	if (ElapsedTime < ProjectileSpec.HomingStartDelay)
+	{
 		return;
 	}
 
 	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
 	{
 		UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent();
-		if (!Targeting || !Targeting->IsHomingMarkActive(Target))
+		if (!Targeting
+			|| !Targeting->IsHomingMarkActive(Target, ProjectileSpec.HomingMarkHandle))
 		{
 			ProjectileSpec.bEnableHoming = false;
 			ProjectileSpec.HomingTarget = nullptr;
+			ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
 			return;
 		}
 	}
 
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
-	if (ToTarget.IsNearlyZero() || ProjectileSpec.HomingTurnRate <= 0.0f)
+	const float DistanceSquared = ToTarget.SizeSquared();
+	if (ProjectileSpec.HomingMaxDistance > 0.0f
+		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
+	{
+		ProjectileSpec.bEnableHoming = false;
+		ProjectileSpec.HomingTarget = nullptr;
+		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		return;
+	}
+
+	if (ToTarget.IsNearlyZero()
+		|| (ProjectileSpec.HomingAcceptanceRadius > 0.0f
+			&& DistanceSquared <= FMath::Square(ProjectileSpec.HomingAcceptanceRadius))
+		|| ProjectileSpec.HomingTurnRate <= 0.0f)
 	{
 		return;
 	}
@@ -370,19 +398,6 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{
 		Enemy->TakeDamage(DamageInfo, this);
-		if (ProjectileSpec.bEnableHoming
-			&& IsValid(Enemy)
-			&& !Enemy->bIsDead
-			&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied)
-		{
-			if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
-			{
-				if (UProjectileTargetingComponent* Targeting = Player->GetProjectileTargetingComponent())
-				{
-					Targeting->NotifyProjectileHit(Enemy);
-				}
-			}
-		}
 	}
 	else if (APlayerCharacter* Player = Cast<APlayerCharacter>(Target))
 	{

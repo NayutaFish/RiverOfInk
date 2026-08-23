@@ -606,6 +606,9 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.ExplosionDelay = ThrownGrenadeExplosionDelay;
 		Spec.bEnableHoming = HasProjectileHoming(SkillID);
 		Spec.HomingTurnRate = ProjectileHomingTurnRate;
+		Spec.HomingStartDelay = ProjectileHomingStartDelay;
+		Spec.HomingMaxDistance = ProjectileHomingMaxDistance;
+		Spec.HomingAcceptanceRadius = ProjectileHomingAcceptanceRadius;
 		Spec.Cooldown = GetTripleProjectileCooldown();
 		break;
 	}
@@ -991,18 +994,27 @@ bool USkillComponent::CastTripleProjectile()
 		: 0.0f;
 	const float StartAngle = -AngleStep * (ProjectileCount - 1) * 0.5f;
 	const FVector SpawnCenter = OwnerCharacter->GetActorLocation() + Forward * ProjectileSpawnForwardOffset;
-	AActor* HomingTarget = nullptr;
+	AEnemyBase* HomingTarget = nullptr;
+	FCombatEffectHandle HomingMarkHandle;
 	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
 	{
-		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+		OwnerCharacter->GetProjectileTargetingComponent()->GetCurrentMarkedTargetSnapshot(
+			HomingTarget,
+			HomingMarkHandle);
 	}
 
 	FProjectileSpec ProjectileSpec;
 	ProjectileSpec.LifeTime = Spec.ProjectileLifeTime;
 	ProjectileSpec.ProjectileSpeed = Spec.ProjectileSpeed;
 	ProjectileSpec.HomingTurnRate = Spec.HomingTurnRate;
+	ProjectileSpec.HomingStartDelay = Spec.HomingStartDelay;
+	ProjectileSpec.HomingMaxDistance = Spec.HomingMaxDistance;
+	ProjectileSpec.HomingAcceptanceRadius = Spec.HomingAcceptanceRadius;
 	ProjectileSpec.HomingTarget = HomingTarget;
-	ProjectileSpec.bEnableHoming = Spec.bEnableHoming && IsValid(HomingTarget);
+	ProjectileSpec.HomingMarkHandle = HomingMarkHandle;
+	ProjectileSpec.bEnableHoming = Spec.bEnableHoming
+		&& IsValid(HomingTarget)
+		&& HomingMarkHandle.IsValid();
 	if (ProjectileSpec.bEnableHoming)
 	{
 		ProjectileSpec.ProjectileTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
@@ -1060,10 +1072,13 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 		: 0.0f;
 	const float StartAngle = -AngleStep * (GrenadeCount - 1) * 0.5f;
 	const FVector SpawnOrigin = OwnerCharacter->GetActorLocation();
-	AActor* HomingTarget = nullptr;
+	AEnemyBase* HomingTarget = nullptr;
+	FCombatEffectHandle HomingMarkHandle;
 	if (Spec.bEnableHoming && OwnerCharacter->GetProjectileTargetingComponent())
 	{
-		HomingTarget = OwnerCharacter->GetProjectileTargetingComponent()->FindBestHomingTarget();
+		OwnerCharacter->GetProjectileTargetingComponent()->GetCurrentMarkedTargetSnapshot(
+			HomingTarget,
+			HomingMarkHandle);
 	}
 	int32 SpawnedCount = 0;
 
@@ -1105,7 +1120,11 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.ExplosionCount,
 			Spec.ExplosionDelay,
 			HomingTarget,
-			Spec.HomingTurnRate);
+			Spec.HomingTurnRate,
+			HomingMarkHandle,
+			Spec.HomingStartDelay,
+			Spec.HomingMaxDistance,
+			Spec.HomingAcceptanceRadius);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}

@@ -6,7 +6,6 @@
 #include "Common/CombatEffectTags.h"
 #include "Common/CombatEffectTypes.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
-#include "EngineUtils.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "Player/Skill/SkillComponent.h"
@@ -38,7 +37,10 @@ bool UProjectileTargetingComponent::HasHomingBuild() const
 bool UProjectileTargetingComponent::IsHomingMarkActive(const AEnemyBase* Target) const
 {
 	const APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player || !IsValid(Target) || Target->bIsDead)
+	if (!Player
+		|| !IsValid(Target)
+		|| Target->bIsDead
+		|| CurrentMarkedTarget.Get() != Target)
 	{
 		return false;
 	}
@@ -58,73 +60,128 @@ bool UProjectileTargetingComponent::IsHomingMarkActive(const AEnemyBase* Target)
 		return false;
 	}
 
-	return (!Mark.HasFiniteDuration() || Mark.RemainingTime > KINDA_SMALL_NUMBER)
-		&& (!Mark.HasCharges() || Mark.RemainingCharges > 0);
-}
-
-AEnemyBase* UProjectileTargetingComponent::FindBestHomingTarget() const
-{
-	UWorld* World = GetWorld();
-	const APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!World || !Player)
-	{
-		return nullptr;
-	}
-
-	const FVector Origin = Player->GetActorLocation();
-	const float MaxDistanceSquared = HomingSearchRadius > 0.0f
-		? FMath::Square(HomingSearchRadius)
-		: TNumericLimits<float>::Max();
-
-	AEnemyBase* BestTarget = nullptr;
-	float BestDistanceSquared = MaxDistanceSquared;
-	for (TActorIterator<AEnemyBase> It(World); It; ++It)
-	{
-		AEnemyBase* Candidate = *It;
-		if (!IsHomingMarkActive(Candidate))
-		{
-			continue;
-		}
-
-		const float DistanceSquared = FVector::DistSquared(Origin, Candidate->GetActorLocation());
-		if (DistanceSquared < BestDistanceSquared)
-		{
-			BestDistanceSquared = DistanceSquared;
-			BestTarget = Candidate;
-		}
-	}
-
-	return BestTarget;
-}
-
-bool UProjectileTargetingComponent::ConsumeHomingMark(AEnemyBase* Target)
-{
-	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player || !IsHomingMarkActive(Target))
+	if (CurrentMarkedEffectHandle.IsValid() && Mark.Handle != CurrentMarkedEffectHandle)
 	{
 		return false;
 	}
 
-	UCombatEffectComponent* Effects = Target->GetCombatEffectComponent();
-	const bool bConsumed = Effects
-		&& Effects->ConsumeEffectChargeFromSource(
-			RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark,
-			Player,
-			1);
-	if (bConsumed)
-	{
-		UE_LOG(LogTemp, Verbose,
-			TEXT("Projectile homing mark charge consumed: Player=%s Enemy=%s."),
-			*GetNameSafe(Player),
-			*GetNameSafe(Target));
-	}
-	return bConsumed;
+	return Mark.HasFiniteDuration()
+		&& Mark.RemainingTime > KINDA_SMALL_NUMBER;
 }
 
-void UProjectileTargetingComponent::NotifyProjectileHit(AActor* Target)
+AEnemyBase* UProjectileTargetingComponent::FindBestHomingTarget() const
 {
-	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
+	return GetCurrentMarkedTarget();
+}
+
+FCombatEffectHandle UProjectileTargetingComponent::ApplyOrTransferHomingMark(
+	AEnemyBase* NewTarget,
+	float Duration)
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || !IsValid(NewTarget) || NewTarget->bIsDead || Duration <= 0.0f)
 	{
-		ConsumeHomingMark(Enemy);
+		return FCombatEffectHandle();
 	}
+
+	if (CurrentMarkedTarget.Get() != NewTarget)
+	{
+		ClearCurrentMarkedTarget();
+	}
+
+	UCombatEffectComponent* Effects = NewTarget->GetCombatEffectComponent();
+	if (!Effects)
+	{
+		CurrentMarkedTarget = nullptr;
+		CurrentMarkedEffectHandle = FCombatEffectHandle();
+		return FCombatEffectHandle();
+	}
+
+	FCombatEffectSpec HomingMarkSpec;
+	HomingMarkSpec.EffectTag = RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark;
+	HomingMarkSpec.Category = ECombatEffectCategory::Debuff;
+	HomingMarkSpec.DurationPolicy = ECombatEffectDurationPolicy::Timed;
+	HomingMarkSpec.StackPolicy = ECombatEffectStackPolicy::RefreshDuration;
+	HomingMarkSpec.Duration = FMath::Max(0.01f, Duration);
+	HomingMarkSpec.StackCount = 1;
+	HomingMarkSpec.MaxStacks = 1;
+	HomingMarkSpec.SourceActor = Player;
+	HomingMarkSpec.AffectsTags.AddTag(RiverOfInkCombatEffectTags::Build_Projectile_Homing);
+
+	const FCombatEffectHandle MarkHandle = Effects->ApplyEffect(HomingMarkSpec);
+	if (!MarkHandle.IsValid())
+	{
+		CurrentMarkedTarget = nullptr;
+		CurrentMarkedEffectHandle = FCombatEffectHandle();
+		return MarkHandle;
+	}
+
+	CurrentMarkedTarget = NewTarget;
+	CurrentMarkedEffectHandle = MarkHandle;
+	UE_LOG(LogTemp, Log,
+		TEXT("Projectile homing mark applied: Player=%s Target=%s Duration=%.2f Handle=%d."),
+		*GetNameSafe(Player),
+		*GetNameSafe(NewTarget),
+		HomingMarkSpec.Duration,
+		MarkHandle.Id);
+	return MarkHandle;
+}
+
+AEnemyBase* UProjectileTargetingComponent::GetCurrentMarkedTarget() const
+{
+	AEnemyBase* Target = CurrentMarkedTarget.Get();
+	return IsHomingMarkActive(Target) ? Target : nullptr;
+}
+
+bool UProjectileTargetingComponent::GetCurrentMarkedTargetSnapshot(
+	AEnemyBase*& OutTarget,
+	FCombatEffectHandle& OutMarkHandle) const
+{
+	OutTarget = GetCurrentMarkedTarget();
+	OutMarkHandle = CurrentMarkedEffectHandle;
+	return IsValid(OutTarget) && OutMarkHandle.IsValid();
+}
+
+bool UProjectileTargetingComponent::IsHomingMarkActive(
+	const AEnemyBase* Target,
+	const FCombatEffectHandle& ExpectedMarkHandle) const
+{
+	return ExpectedMarkHandle.IsValid()
+		&& CurrentMarkedEffectHandle == ExpectedMarkHandle
+		&& IsHomingMarkActive(Target);
+}
+
+bool UProjectileTargetingComponent::IsCurrentMarkedTargetValid() const
+{
+	return GetCurrentMarkedTarget() != nullptr;
+}
+
+void UProjectileTargetingComponent::ClearCurrentMarkedTarget()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	AEnemyBase* Target = CurrentMarkedTarget.Get();
+	if (Player && IsValid(Target))
+	{
+		if (UCombatEffectComponent* Effects = Target->GetCombatEffectComponent())
+		{
+			if (CurrentMarkedEffectHandle.IsValid())
+			{
+				Effects->RemoveEffect(CurrentMarkedEffectHandle);
+			}
+			else
+			{
+				FActiveCombatEffect Mark;
+				if (Effects->TryGetEffectFromSource(
+					RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark,
+					Player,
+					Mark))
+				{
+					Effects->RemoveEffect(Mark.Handle);
+				}
+			}
+		}
+	}
+
+	CurrentMarkedTarget = nullptr;
+	CurrentMarkedEffectHandle = FCombatEffectHandle();
 }

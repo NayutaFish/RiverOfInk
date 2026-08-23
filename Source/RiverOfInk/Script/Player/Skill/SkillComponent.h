@@ -205,7 +205,19 @@ public:
 
 	/** Constant turn rate for marked-target homing projectiles. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float ProjectileHomingTurnRate = 720.0f;
+	float ProjectileHomingTurnRate = 360.0f;
+
+	/** Delay before Q projectiles begin steering toward the spawn-time marked target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0", Units = "s"))
+	float ProjectileHomingStartDelay = 0.06f;
+
+	/** Maximum target distance at which Q projectiles may keep steering. Zero disables this limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0"))
+	float ProjectileHomingMaxDistance = 2500.0f;
+
+	/** Stop steering once a Q projectile enters this radius around its locked target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0"))
+	float ProjectileHomingAcceptanceRadius = 80.0f;
 
 protected:
 	virtual void BeginPlay() override;
