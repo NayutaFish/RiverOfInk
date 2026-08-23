@@ -26,6 +26,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Suicide", meta = (ClampMin = "0.0", Units = "s"))
 	float ExplosionLifetime = 0.5f;
 
+	/** 爆炸音效名称（对应 AudioDataAsset 配置表中的键名） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Suicide")
+	FString ExplosionSoundName = TEXT("Explosion");
+
 protected:
 	virtual void OnEnter_Implementation() override;
 	virtual void OnExit_Implementation() override;

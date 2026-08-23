@@ -3,6 +3,7 @@
 #include "Enemy/EnemyBase/LanternGhost/State/LanternGhostState_Suicide.h"
 
 #include "Common/AttackAreaBase.h"
+#include "Core/Audio/AudioManager.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -49,6 +50,11 @@ void ULanternGhostState_Suicide::Detonate()
 
 	if (UWorld* World = GetWorld())
 	{
+		if (!ExplosionSoundName.IsEmpty())
+		{
+			FAudioManager::Play(ExplosionSoundName);
+		}
+
 		if (Enemy->AttackAreaClass)
 		{
 			const FTransform SpawnTransform(FRotator::ZeroRotator, Enemy->GetActorLocation());
