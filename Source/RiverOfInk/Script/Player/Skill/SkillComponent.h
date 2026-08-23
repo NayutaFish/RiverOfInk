@@ -219,6 +219,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Homing", meta = (ClampMin = "0.0"))
 	float ProjectileHomingAcceptanceRadius = 80.0f;
 
+	/** Horizontal turn rate for the Ink Grenade targeted-arc guidance mode. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float ThrownGrenadeGuidanceTurnRate = 150.0f;
+
+	/** Delay before a targeted Ink Grenade begins correcting its landing direction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0", Units = "s"))
+	float ThrownGrenadeGuidanceStartDelay = 0.06f;
+
+	/** Maximum target distance for targeted Ink Grenade guidance. Zero disables this limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeGuidanceMaxDistance = 2500.0f;
+
+	/** Horizontal acceptance radius at which a targeted Ink Grenade stops steering. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeGuidanceAcceptanceRadius = 120.0f;
+
+	/** Half-width of the three targeted Ink Grenade landing points around the mark. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeGuidanceSpread = 80.0f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

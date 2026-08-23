@@ -37,6 +37,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	void SelectReward(int32 OptionIndex);
 
+	/** Development-only helper that displays one legal reward selected by identifier. */
+	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
+	bool DebugShowSpecificReward(const FString& RewardIdentifier);
+
+	/** Development-only helper that displays and immediately selects one legal reward. */
+	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
+	bool DebugSelectSpecificReward(const FString& RewardIdentifier);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|UI")
 	TSubclassOf<URoguelikeRewardWidget> RewardWidgetClass;
 
@@ -93,9 +101,16 @@ private:
 		int32 StackDelta,
 		const FText& Title,
 		const FText& Description) const;
+	bool TryBuildDebugRewardOption(
+		const FString& RewardIdentifier,
+		FRoguelikeRewardOption& OutOption) const;
 	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
 	void PopulateRewardPresentation(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;
+
+	/** One-shot override consumed by ShowRewardAfterRoomClear for PIE reward tests. */
+	UPROPERTY(Transient)
+	TArray<FRoguelikeRewardOption> DebugRewardOverrideOptions;
 
 	UPROPERTY(Transient)
 	FRoguelikeRewardOption PendingSelectedReward;

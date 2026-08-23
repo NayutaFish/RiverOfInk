@@ -102,3 +102,49 @@ void ARiverOfInkPlayerController::DebugSelectFirstReward()
 
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectFirstReward found no RoguelikeRewardManager."));
 }
+
+void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardIdentifier)
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeRewardManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeRewardManager* RewardManager = *It)
+		{
+			RewardManager->DebugShowSpecificReward(RewardIdentifier);
+			UE_LOG(LogRoguelike, Log,
+				TEXT("DebugShowSpecificReward requested identifier '%s'."),
+				*RewardIdentifier);
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning, TEXT("DebugShowSpecificReward found no RoguelikeRewardManager."));
+}
+
+void ARiverOfInkPlayerController::DebugSelectSpecificReward(const FString& RewardIdentifier)
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeRewardManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeRewardManager* RewardManager = *It)
+		{
+			if (RewardManager->DebugSelectSpecificReward(RewardIdentifier))
+			{
+				UE_LOG(LogRoguelike, Log,
+					TEXT("DebugSelectSpecificReward selected identifier '%s'."),
+					*RewardIdentifier);
+			}
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectSpecificReward found no RoguelikeRewardManager."));
+}

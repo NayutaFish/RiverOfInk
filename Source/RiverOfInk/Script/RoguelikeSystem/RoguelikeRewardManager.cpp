@@ -111,7 +111,17 @@ void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 		return;
 	}
 
-	CurrentRewardOptions = GenerateRewardOptions();
+	if (DebugRewardOverrideOptions.IsEmpty())
+	{
+		CurrentRewardOptions = GenerateRewardOptions();
+	}
+	else
+	{
+		CurrentRewardOptions = MoveTemp(DebugRewardOverrideOptions);
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Debug reward override consumed: Count=%d."),
+			CurrentRewardOptions.Num());
+	}
 	if (CurrentRewardOptions.IsEmpty())
 	{
 		UE_LOG(LogRoguelike, Warning, TEXT("Room clear produced no legal rewards."));
@@ -334,6 +344,131 @@ void ARoguelikeRewardManager::SelectReward(int32 OptionIndex)
 	{
 		FinishRewardSelection();
 	}
+}
+
+bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdentifier)
+{
+	if (RewardIdentifier.TrimStartAndEnd().IsEmpty())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
+		return false;
+	}
+
+	if (bRewardShownForRoom || ActiveRewardWidget)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward ignored: reward UI already shown for this room."));
+		return false;
+	}
+
+	if (!ResolvePlayer())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward failed: player or skill component is unavailable."));
+		return false;
+	}
+
+	FRoguelikeRewardOption DebugOption;
+	if (!TryBuildDebugRewardOption(RewardIdentifier, DebugOption))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward rejected unknown identifier '%s'."),
+			*RewardIdentifier);
+		return false;
+	}
+
+	if (DebugOption.RewardType == ERoguelikeRewardType::Modifier
+		&& !CachedSkillComponent->CanApplyModifier(
+			DebugOption.SkillID,
+			DebugOption.ModifierID,
+			DebugOption.StackDelta))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward rejected illegal modifier: Skill=%d Modifier=%d."),
+			static_cast<int32>(DebugOption.SkillID),
+			static_cast<int32>(DebugOption.ModifierID));
+		return false;
+	}
+
+	DebugRewardOverrideOptions.Reset();
+	DebugRewardOverrideOptions.Add(MoveTemp(DebugOption));
+	ShowRewardAfterRoomClear();
+	return bRewardShownForRoom && IsValid(ActiveRewardWidget);
+}
+
+bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIdentifier)
+{
+	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
+	if (Identifier.IsEmpty())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
+		return false;
+	}
+
+	FRoguelikeRewardOption RequestedOption;
+	if (!TryBuildDebugRewardOption(Identifier, RequestedOption))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward rejected unknown identifier '%s'."),
+			*Identifier);
+		return false;
+	}
+
+	if (!ResolvePlayer())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward failed: player or skill component is unavailable."));
+		return false;
+	}
+
+	if (RequestedOption.RewardType == ERoguelikeRewardType::Modifier
+		&& !CachedSkillComponent->CanApplyModifier(
+			RequestedOption.SkillID,
+			RequestedOption.ModifierID,
+			RequestedOption.StackDelta))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward rejected illegal modifier: Skill=%d Modifier=%d."),
+			static_cast<int32>(RequestedOption.SkillID),
+			static_cast<int32>(RequestedOption.ModifierID));
+		return false;
+	}
+
+	// If a debug card is already open, only select it when it is the exact
+	// requested modifier. This keeps the command deterministic and prevents a
+	// typo from silently selecting a different reward card.
+	if (bRewardShownForRoom || ActiveRewardWidget)
+	{
+		const bool bMatchesVisibleOption = CurrentRewardOptions.Num() == 1
+			&& CurrentRewardOptions[0].RewardType == RequestedOption.RewardType
+			&& CurrentRewardOptions[0].SkillID == RequestedOption.SkillID
+			&& CurrentRewardOptions[0].ModifierID == RequestedOption.ModifierID
+			&& CurrentRewardOptions[0].StackDelta == RequestedOption.StackDelta;
+		if (!bMatchesVisibleOption)
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugSelectSpecificReward rejected: another reward UI is already shown."));
+			return false;
+		}
+
+		SelectReward(0);
+		return true;
+	}
+
+	DebugRewardOverrideOptions.Reset();
+	DebugRewardOverrideOptions.Add(MoveTemp(RequestedOption));
+	ShowRewardAfterRoomClear();
+	if (CurrentRewardOptions.Num() != 1 || !IsValid(ActiveRewardWidget))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward failed: reward UI could not be opened."));
+		return false;
+	}
+
+	SelectReward(0);
+	return true;
 }
 
 void ARoguelikeRewardManager::FinishRewardSelection()
@@ -601,6 +736,125 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeModifierOption(
 	FillModifierPreview(Option);
 	PopulateRewardPresentation(Option);
 	return Option;
+}
+
+bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
+	const FString& RewardIdentifier,
+	FRoguelikeRewardOption& OutOption) const
+{
+	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
+	const auto Matches = [&Identifier](std::initializer_list<const TCHAR*> Aliases)
+	{
+		for (const TCHAR* Alias : Aliases)
+		{
+			if (Identifier.Equals(Alias, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	if (Matches({TEXT("ProjectileHoming"), TEXT("Homing"), TEXT("引墨")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::TripleProjectile,
+			ESkillModifierID::ProjectileHoming,
+			1,
+			FText::FromString(TEXT("引墨")),
+			FText::FromString(TEXT("右键命中的目标获得标记，Q 三枚弹幕在飞行中修正方向追踪该目标。")));
+		return true;
+	}
+
+	if (Matches({TEXT("AddProjectile"), TEXT("Q.AddProjectile"), TEXT("投射物增幅")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::TripleProjectile,
+			ESkillModifierID::AddProjectile,
+			1,
+			FText::FromString(TEXT("投射物增幅")),
+			FText::FromString(TEXT("Q 增加一枚投射物，墨雷形态同样生效。")));
+		return true;
+	}
+
+	if (Matches({TEXT("InkGrenade"), TEXT("Q.InkGrenade"), TEXT("墨雷形态")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::TripleProjectile,
+			ESkillModifierID::InkGrenade,
+			1,
+			FText::FromString(TEXT("墨雷形态")),
+			FText::FromString(TEXT("Q 投射物变为延迟爆炸的墨雷。")));
+		return true;
+	}
+
+	if (Matches({TEXT("ExtraExplosion"), TEXT("Q.ExtraExplosion"), TEXT("余烬连爆")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::TripleProjectile,
+			ESkillModifierID::ExtraExplosion,
+			1,
+			FText::FromString(TEXT("余烬连爆")),
+			FText::FromString(TEXT("每枚 Q 墨雷在原地追加一次爆炸。")));
+		return true;
+	}
+
+	if (Matches({TEXT("Q.CooldownDown"), TEXT("QCooldownDown"), TEXT("疾速回转")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::TripleProjectile,
+			ESkillModifierID::CooldownDown,
+			1,
+			FText::FromString(TEXT("疾速回转")),
+			FText::FromString(TEXT("Q 冷却时间缩短 0.5 秒。")));
+		return true;
+	}
+
+	if (Matches({TEXT("TwinSlash"), TEXT("E.TwinSlash"), TEXT("双重环斩")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::CircularSlash,
+			ESkillModifierID::TwinSlash,
+			1,
+			FText::FromString(TEXT("双重环斩")),
+			FText::FromString(TEXT("E 在短暂延迟后追加一次斜向斩击，造成 80% 伤害。")));
+		return true;
+	}
+
+	if (Matches({TEXT("NullRing"), TEXT("E.NullRing"), TEXT("净墨环")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::CircularSlash,
+			ESkillModifierID::NullRing,
+			1,
+			FText::FromString(TEXT("净墨环")),
+			FText::FromString(TEXT("E 斩击区域会抹除其中的敌方投射物。")));
+		return true;
+	}
+
+	if (Matches({TEXT("RadiusUp"), TEXT("E.RadiusUp"), TEXT("扩展环斩")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::CircularSlash,
+			ESkillModifierID::RadiusUp,
+			1,
+			FText::FromString(TEXT("扩展环斩")),
+			FText::FromString(TEXT("E 斩击半径增加 60。")));
+		return true;
+	}
+
+	if (Matches({TEXT("E.CooldownDown"), TEXT("ECooldownDown"), TEXT("回锋")}))
+	{
+		OutOption = MakeModifierOption(
+			EPlayerSkillID::CircularSlash,
+			ESkillModifierID::CooldownDown,
+			1,
+			FText::FromString(TEXT("回锋")),
+			FText::FromString(TEXT("E 冷却时间缩短 0.4 秒。")));
+		return true;
+	}
+
+	return false;
 }
 
 void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option) const

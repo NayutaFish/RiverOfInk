@@ -28,6 +28,14 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugSelectFirstReward();
 
+	/** Development-only PIE helper: show one legal reward by title or modifier identifier. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugShowSpecificReward(const FString& RewardIdentifier);
+
+	/** Development-only PIE helper: show and immediately select one legal reward. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugSelectSpecificReward(const FString& RewardIdentifier);
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;

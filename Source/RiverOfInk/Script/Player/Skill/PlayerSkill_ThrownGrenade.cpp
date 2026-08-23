@@ -150,7 +150,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	FCombatEffectHandle InHomingMarkHandle,
 	float InHomingStartDelay,
 	float InHomingMaxDistance,
-	float InHomingAcceptanceRadius
+	float InHomingAcceptanceRadius,
+	EProjectileGuidanceMode InGuidanceMode,
+	FVector InGuidanceTargetOffset
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -172,7 +174,15 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InHomingStartDelay);
 	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InHomingMaxDistance);
 	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InHomingAcceptanceRadius);
+	ProjectileSpec.GuidanceMode = InGuidanceMode;
+	ProjectileSpec.GuidanceTargetOffset = InGuidanceTargetOffset;
 	ProjectileSpec.bEnableHoming = IsValid(InHomingTarget) && InHomingMarkHandle.IsValid();
+	if (ProjectileSpec.bEnableHoming && ProjectileSpec.GuidanceMode == EProjectileGuidanceMode::None)
+	{
+		// Preserve the original direct-projectile behavior for legacy callers that
+		// provide a target but do not yet specify a guidance mode.
+		ProjectileSpec.GuidanceMode = EProjectileGuidanceMode::SoftProjectileHoming;
+	}
 	DamageInfo.Attacker = InInstigator;
 	DamageInfo.DamageValue = Damage;
 	DamageInfo.DamageType = EDamageType::Unified;
@@ -199,9 +209,7 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		|| !Targeting
 		|| !Targeting->IsHomingMarkActive(Target, ProjectileSpec.HomingMarkHandle))
 	{
-		ProjectileSpec.bEnableHoming = false;
-		ProjectileSpec.HomingTarget = nullptr;
-		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		ClearGuidance();
 		return;
 	}
 
@@ -210,14 +218,18 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		return;
 	}
 
+	if (ProjectileSpec.GuidanceMode == EProjectileGuidanceMode::TargetedArcLanding)
+	{
+		UpdateTargetedArcGuidance(Target, DeltaTime);
+		return;
+	}
+
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
 	const float DistanceSquared = ToTarget.SizeSquared();
 	if (ProjectileSpec.HomingMaxDistance > 0.0f
 		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
 	{
-		ProjectileSpec.bEnableHoming = false;
-		ProjectileSpec.HomingTarget = nullptr;
-		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		ClearGuidance();
 		return;
 	}
 
@@ -237,6 +249,55 @@ void APlayerSkill_ThrownGrenade::UpdateHoming(float DeltaTime)
 		DeltaTime,
 		ProjectileSpec.HomingTurnRate);
 	Velocity = NewRotation.Vector() * CurrentSpeed;
+}
+
+void APlayerSkill_ThrownGrenade::UpdateTargetedArcGuidance(AEnemyBase* Target, float DeltaTime)
+{
+	if (!IsValid(Target))
+	{
+		ClearGuidance();
+		return;
+	}
+
+	FVector ToLandingPoint = Target->GetActorLocation() + ProjectileSpec.GuidanceTargetOffset - GetActorLocation();
+	ToLandingPoint.Z = 0.0f;
+	const float DistanceSquared = ToLandingPoint.SizeSquared();
+	if (ProjectileSpec.HomingMaxDistance > 0.0f
+		&& DistanceSquared > FMath::Square(ProjectileSpec.HomingMaxDistance))
+	{
+		ClearGuidance();
+		return;
+	}
+
+	FVector HorizontalVelocity = Velocity;
+	HorizontalVelocity.Z = 0.0f;
+	const float HorizontalSpeed = HorizontalVelocity.Size();
+	if (ToLandingPoint.IsNearlyZero()
+		|| (ProjectileSpec.HomingAcceptanceRadius > 0.0f
+			&& DistanceSquared <= FMath::Square(ProjectileSpec.HomingAcceptanceRadius))
+		|| HorizontalSpeed <= KINDA_SMALL_NUMBER
+		|| ProjectileSpec.HomingTurnRate <= 0.0f)
+	{
+		return;
+	}
+
+	const FRotator NewRotation = FMath::RInterpConstantTo(
+		HorizontalVelocity.Rotation(),
+		ToLandingPoint.Rotation(),
+		DeltaTime,
+		ProjectileSpec.HomingTurnRate);
+	const FVector NewHorizontalVelocity = NewRotation.Vector() * HorizontalSpeed;
+	Velocity.X = NewHorizontalVelocity.X;
+	Velocity.Y = NewHorizontalVelocity.Y;
+}
+
+void APlayerSkill_ThrownGrenade::ClearGuidance()
+{
+	ProjectileSpec.bEnableHoming = false;
+	ProjectileSpec.HomingTarget = nullptr;
+	ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+	ProjectileSpec.GuidanceMode = EProjectileGuidanceMode::None;
+	ProjectileSpec.GuidanceTargetOffset = FVector::ZeroVector;
 }
 
 bool APlayerSkill_ThrownGrenade::SweepForImpact(
