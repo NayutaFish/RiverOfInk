@@ -647,7 +647,9 @@ void ARoguelikeRewardManager::CloseRewardUI()
 		// consumed solely to recapture the viewport.
 		InputMode.SetConsumeCaptureMouseDown(false);
 		PlayerController->SetInputMode(InputMode);
-		PlayerController->SetShowMouseCursor(false);
+		// Gameplay keeps the cursor visible for aiming and mouse-driven attacks.
+		// Do not hide it when the modal reward UI gives input back to the game.
+		PlayerController->SetShowMouseCursor(true);
 		PlayerController->SetIgnoreMoveInput(false);
 		PlayerController->SetIgnoreLookInput(false);
 	}
