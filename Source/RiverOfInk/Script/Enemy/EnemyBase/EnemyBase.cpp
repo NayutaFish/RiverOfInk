@@ -15,6 +15,8 @@
 #include "Core/GameEvents.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
 #include "UI/EnemyHealthWidget.h"
@@ -25,6 +27,15 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "Materials/MaterialInstanceDynamic.h"
+
+namespace
+{
+	bool IsHomingMarkEffect(const FActiveCombatEffect& Effect)
+	{
+		return Effect.Spec.EffectTag.MatchesTag(
+			RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark);
+	}
+}
 
 AEnemyBase::AEnemyBase()
 {
@@ -41,6 +52,19 @@ AEnemyBase::AEnemyBase()
 	CapsuleCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	CombatEffectComponent = CreateDefaultSubobject<UCombatEffectComponent>(TEXT("CombatEffectComponent"));
+
+	HomingMarkVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("HomingMarkVFXComponent"));
+	HomingMarkVFXComponent->SetupAttachment(CapsuleCollision);
+	HomingMarkVFXComponent->SetAutoActivate(false);
+	HomingMarkVFXComponent->SetRelativeLocation(HomingMarkVFXRelativeLocation);
+	HomingMarkVFXComponent->SetRelativeScale3D(FVector(HomingMarkVFXScale));
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> HomingMarkVFXFinder(
+		TEXT("/Game/RAB/VFX/TrackingBuff/Niagara/NS_TrackingBuff.NS_TrackingBuff"));
+	if (HomingMarkVFXFinder.Succeeded())
+	{
+		HomingMarkVFX = HomingMarkVFXFinder.Object;
+		HomingMarkVFXComponent->SetAsset(HomingMarkVFX);
+	}
 
 	// 网格（仅显示用，碰撞走胶囊体）
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
@@ -123,6 +147,27 @@ void AEnemyBase::BeginPlay()
 	EnsureStateComponent(UEnemyState_Dead::StaticClass());
 	DisableStateComponentTicks();
 	SetupDissolveMaterials();
+	if (CombatEffectComponent)
+	{
+		CombatEffectComponent->OnEffectAdded.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkAdded);
+		CombatEffectComponent->OnEffectChanged.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkChanged);
+		CombatEffectComponent->OnEffectRemoved.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkRemoved);
+
+		for (const FActiveCombatEffect& ActiveEffect : CombatEffectComponent->ActiveEffects)
+		{
+			if (IsHomingMarkEffect(ActiveEffect))
+			{
+				ActivateHomingMarkVFX(ActiveEffect, true);
+				break;
+			}
+		}
+	}
 
 	// 显式进入初始 Idle 状态（敌人蓝图需挂载 EnemyState_Idle 组件）
 	SwitchState(UEnemyState_Idle::StaticClass());
@@ -131,6 +176,7 @@ void AEnemyBase::BeginPlay()
 void AEnemyBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateHomingMarkVFX(DeltaTime);
 
 	if (bIsDead)
 	{
@@ -147,6 +193,23 @@ void AEnemyBase::Tick(float DeltaTime)
 
 void AEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (CombatEffectComponent)
+	{
+		CombatEffectComponent->OnEffectAdded.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkAdded);
+		CombatEffectComponent->OnEffectChanged.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkChanged);
+		CombatEffectComponent->OnEffectRemoved.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkRemoved);
+	}
+	if (HomingMarkVFXComponent)
+	{
+		HomingMarkVFXComponent->Deactivate();
+	}
+
 	if (IsValid(CurrentState.Get()))
 	{
 		CurrentState->OnExit();
@@ -163,6 +226,108 @@ void AEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	CachedPlayer = nullptr;
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void AEnemyBase::HandleHomingMarkAdded(const FActiveCombatEffect& Effect)
+{
+	ActivateHomingMarkVFX(Effect, true);
+}
+
+void AEnemyBase::HandleHomingMarkChanged(const FActiveCombatEffect& Effect)
+{
+	ActivateHomingMarkVFX(Effect, true);
+}
+
+void AEnemyBase::HandleHomingMarkRemoved(const FActiveCombatEffect& Effect)
+{
+	DeactivateHomingMarkVFX(Effect);
+}
+
+void AEnemyBase::ActivateHomingMarkVFX(
+	const FActiveCombatEffect& Effect,
+	bool bRestartSystem)
+{
+	if (!IsHomingMarkEffect(Effect)
+		|| !Effect.Handle.IsValid()
+		|| !HomingMarkVFXComponent
+		|| !HomingMarkVFX)
+	{
+		return;
+	}
+
+	HomingMarkVFXHandle = Effect.Handle;
+	HomingMarkVFXInitialDuration = Effect.HasFiniteDuration()
+		? FMath::Max(Effect.RemainingTime, Effect.Spec.Duration)
+		: 0.0f;
+	HomingMarkVFXComponent->SetAsset(HomingMarkVFX);
+	HomingMarkVFXComponent->SetRelativeLocation(HomingMarkVFXRelativeLocation);
+	HomingMarkVFXComponent->SetRelativeScale3D(FVector(HomingMarkVFXScale));
+	HomingMarkVFXComponent->SetVariableFloat(
+		TEXT("User.Duration"),
+		FMath::Max(0.0f, Effect.RemainingTime));
+	HomingMarkVFXComponent->SetVariableFloat(TEXT("User.DecayAmount"), 0.0f);
+
+	if (bRestartSystem)
+	{
+		HomingMarkVFXComponent->ResetSystem();
+	}
+	if (!HomingMarkVFXComponent->IsActive())
+	{
+		HomingMarkVFXComponent->Activate(true);
+	}
+}
+
+void AEnemyBase::DeactivateHomingMarkVFX(const FActiveCombatEffect& Effect)
+{
+	if (!IsHomingMarkEffect(Effect)
+		|| !HomingMarkVFXHandle.IsValid()
+		|| Effect.Handle != HomingMarkVFXHandle)
+	{
+		return;
+	}
+
+	if (HomingMarkVFXComponent)
+	{
+		HomingMarkVFXComponent->Deactivate();
+	}
+	HomingMarkVFXHandle = FCombatEffectHandle();
+	HomingMarkVFXInitialDuration = 0.0f;
+}
+
+void AEnemyBase::UpdateHomingMarkVFX(float DeltaTime)
+{
+	if (!HomingMarkVFXComponent
+		|| !HomingMarkVFXComponent->IsActive()
+		|| !HomingMarkVFXHandle.IsValid()
+		|| !CombatEffectComponent)
+	{
+		return;
+	}
+
+	FActiveCombatEffect Mark;
+	if (!CombatEffectComponent->TryGetEffect(
+		RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark,
+		Mark)
+		|| Mark.Handle != HomingMarkVFXHandle)
+	{
+		HomingMarkVFXComponent->Deactivate();
+		HomingMarkVFXHandle = FCombatEffectHandle();
+		HomingMarkVFXInitialDuration = 0.0f;
+		return;
+	}
+
+	if (Mark.HasFiniteDuration() && HomingMarkVFXInitialDuration > KINDA_SMALL_NUMBER)
+	{
+		const float DecayAmount = 1.0f - FMath::Clamp(
+			Mark.RemainingTime / HomingMarkVFXInitialDuration,
+			0.0f,
+			1.0f);
+		HomingMarkVFXComponent->SetVariableFloat(
+			TEXT("User.DecayAmount"),
+			DecayAmount);
+	}
+
+	(void)DeltaTime;
 }
 
 void AEnemyBase::SwitchState(TSubclassOf<UStateBase> StateClass)
