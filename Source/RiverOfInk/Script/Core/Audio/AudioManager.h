@@ -30,10 +30,9 @@ public:
 	/**
 	 * 按名称播放 2D 音效（直接播到可听位置，不考虑 3D 左右声道）
 	 * @param AudioName      配置表中的音频名称
-	 * @param VolumeMultiplier 音量倍率
-	 * @param PitchMultiplier  音调倍率
+	 * @param bRandomizePitchVolume 为 true 时音量与音调在 80%~120% 间随机
 	 */
-	static void Play(const FString& AudioName, float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
+	static void Play(const FString& AudioName, bool bRandomizePitchVolume = false);
 
 private:
 	/** 懒加载配置资产（未加载过才尝试） */

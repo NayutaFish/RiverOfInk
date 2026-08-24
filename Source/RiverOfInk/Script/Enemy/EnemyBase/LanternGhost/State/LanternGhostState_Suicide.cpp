@@ -52,7 +52,7 @@ void ULanternGhostState_Suicide::Detonate()
 	{
 		if (!ExplosionSoundName.IsEmpty())
 		{
-			FAudioManager::Play(ExplosionSoundName);
+			FAudioManager::Play(ExplosionSoundName, true);
 		}
 
 		if (Enemy->AttackAreaClass)

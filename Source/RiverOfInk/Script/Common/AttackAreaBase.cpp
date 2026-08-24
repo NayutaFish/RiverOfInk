@@ -399,7 +399,7 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	// 播放命中音效（名称对应 AudioDataAsset 配置，未配置时静默跳过）
 	if (!HitSoundName.IsEmpty())
 	{
-		FAudioManager::Play(HitSoundName);
+		FAudioManager::Play(HitSoundName, true);
 	}
 
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))

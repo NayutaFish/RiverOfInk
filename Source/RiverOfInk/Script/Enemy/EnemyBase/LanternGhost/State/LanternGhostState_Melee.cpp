@@ -13,7 +13,7 @@ void ULanternGhostState_Melee::OnEnter_Implementation()
 {
 	if (!DashSoundName.IsEmpty())
 	{
-		FAudioManager::Play(DashSoundName);
+		FAudioManager::Play(DashSoundName, true);
 	}
 
 	Super::OnEnter_Implementation();

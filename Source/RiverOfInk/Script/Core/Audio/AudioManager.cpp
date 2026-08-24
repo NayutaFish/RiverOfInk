@@ -37,7 +37,7 @@ void FAudioManager::EnsureConfigLoaded()
 	}
 }
 
-void FAudioManager::Play(const FString& AudioName, float VolumeMultiplier, float PitchMultiplier)
+void FAudioManager::Play(const FString& AudioName, bool bRandomizePitchVolume)
 {
 	// 懒加载配置
 	EnsureConfigLoaded();
@@ -68,6 +68,10 @@ void FAudioManager::Play(const FString& AudioName, float VolumeMultiplier, float
 		UE_LOG(LogRiverOfInk, Error, TEXT("AudioManager: No world context for playing '%s'."), *AudioName);
 		return;
 	}
+
+	// 随机化时音调与音量在 80%~120% 间随机，否则为 1.0
+	const float VolumeMultiplier = bRandomizePitchVolume ? FMath::FRandRange(0.8f, 1.2f) : 1.0f;
+	const float PitchMultiplier = bRandomizePitchVolume ? FMath::FRandRange(0.8f, 1.2f) : 1.0f;
 
 	UGameplayStatics::PlaySound2D(World, *FoundSound, VolumeMultiplier, PitchMultiplier);
 	UE_LOG(LogRiverOfInk, Log, TEXT("AudioManager: Play '%s'."), *AudioName);
