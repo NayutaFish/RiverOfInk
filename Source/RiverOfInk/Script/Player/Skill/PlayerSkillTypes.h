@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Common/ProjectileTypes.h"
 #include "PlayerSkillTypes.generated.h"
 
 class UTexture2D;
@@ -103,6 +104,10 @@ struct FResolvedSkillSpec
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved")
 	ESkillPayloadType PayloadType = ESkillPayloadType::NormalProjectile;
 
+	/** Guidance policy resolved from the skill payload and persistent build. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q")
+	EProjectileGuidanceMode GuidanceMode = EProjectileGuidanceMode::None;
+
 	// Q / Triple Projectile fields.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0"))
 	int32 ProjectileCount = 0;
@@ -147,6 +152,10 @@ struct FResolvedSkillSpec
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0"))
 	float HomingAcceptanceRadius = 80.0f;
+
+	/** Horizontal landing spread used by the targeted arc payload. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q", meta = (ClampMin = "0.0"))
+	float GuidanceTargetSpread = 0.0f;
 
 	// E / Circular Slash fields.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))

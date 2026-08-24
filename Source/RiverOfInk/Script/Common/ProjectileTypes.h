@@ -9,12 +9,20 @@
 
 class AActor;
 
+/** Movement policy selected by the resolved skill payload. */
+UENUM(BlueprintType)
+enum class EProjectileGuidanceMode : uint8
+{
+	None UMETA(DisplayName = "None"),
+	SoftProjectileHoming UMETA(DisplayName = "Soft Projectile Homing"),
+	TargetedArcLanding UMETA(DisplayName = "Targeted Arc Landing")
+};
+
 /**
  * Runtime contract shared by player-owned moving projectiles.
  *
- * Damage remains owned by the projectile/skill class. This spec only carries
- * movement and targeting data so normal projectiles, Attack2, and the thrown
- * grenade can share the same homing rules.
+ * Damage remains owned by the projectile/skill class. This spec carries
+ * movement and targeting data; each payload selects its own guidance policy.
  */
 USTRUCT(BlueprintType)
 struct FProjectileSpec
@@ -34,6 +42,10 @@ struct FProjectileSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing")
 	bool bEnableHoming = false;
 
+	/** Payload-specific guidance policy. None preserves the original straight flight. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Guidance")
+	EProjectileGuidanceMode GuidanceMode = EProjectileGuidanceMode::None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0", Units = "deg/s"))
 	float HomingTurnRate = 360.0f;
 
@@ -48,6 +60,10 @@ struct FProjectileSpec
 	/** Once inside this radius, stop steering and let the projectile continue on its current heading. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Homing", meta = (ClampMin = "0.0"))
 	float HomingAcceptanceRadius = 80.0f;
+
+	/** Fixed horizontal offset used by targeted arc payloads to distribute landing points. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Guidance")
+	FVector GuidanceTargetOffset = FVector::ZeroVector;
 
 	/** Target selected at spawn time. A projectile never retargets mid-flight. */
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Homing")

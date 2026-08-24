@@ -605,10 +605,26 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 			: 1;
 		Spec.ExplosionDelay = ThrownGrenadeExplosionDelay;
 		Spec.bEnableHoming = HasProjectileHoming(SkillID);
-		Spec.HomingTurnRate = ProjectileHomingTurnRate;
-		Spec.HomingStartDelay = ProjectileHomingStartDelay;
-		Spec.HomingMaxDistance = ProjectileHomingMaxDistance;
-		Spec.HomingAcceptanceRadius = ProjectileHomingAcceptanceRadius;
+		Spec.GuidanceMode = Spec.bEnableHoming
+			? (bHasGrenadePayload
+				? EProjectileGuidanceMode::TargetedArcLanding
+				: EProjectileGuidanceMode::SoftProjectileHoming)
+			: EProjectileGuidanceMode::None;
+		Spec.HomingTurnRate = bHasGrenadePayload
+			? ThrownGrenadeGuidanceTurnRate
+			: ProjectileHomingTurnRate;
+		Spec.HomingStartDelay = bHasGrenadePayload
+			? ThrownGrenadeGuidanceStartDelay
+			: ProjectileHomingStartDelay;
+		Spec.HomingMaxDistance = bHasGrenadePayload
+			? ThrownGrenadeGuidanceMaxDistance
+			: ProjectileHomingMaxDistance;
+		Spec.HomingAcceptanceRadius = bHasGrenadePayload
+			? ThrownGrenadeGuidanceAcceptanceRadius
+			: ProjectileHomingAcceptanceRadius;
+		Spec.GuidanceTargetSpread = bHasGrenadePayload
+			? FMath::Max(0.0f, ThrownGrenadeGuidanceSpread)
+			: 0.0f;
 		Spec.Cooldown = GetTripleProjectileCooldown();
 		break;
 	}
@@ -1006,6 +1022,7 @@ bool USkillComponent::CastTripleProjectile()
 	FProjectileSpec ProjectileSpec;
 	ProjectileSpec.LifeTime = Spec.ProjectileLifeTime;
 	ProjectileSpec.ProjectileSpeed = Spec.ProjectileSpeed;
+	ProjectileSpec.GuidanceMode = Spec.GuidanceMode;
 	ProjectileSpec.HomingTurnRate = Spec.HomingTurnRate;
 	ProjectileSpec.HomingStartDelay = Spec.HomingStartDelay;
 	ProjectileSpec.HomingMaxDistance = Spec.HomingMaxDistance;
@@ -1013,6 +1030,7 @@ bool USkillComponent::CastTripleProjectile()
 	ProjectileSpec.HomingTarget = HomingTarget;
 	ProjectileSpec.HomingMarkHandle = HomingMarkHandle;
 	ProjectileSpec.bEnableHoming = Spec.bEnableHoming
+		&& Spec.GuidanceMode != EProjectileGuidanceMode::None
 		&& IsValid(HomingTarget)
 		&& HomingMarkHandle.IsValid();
 	if (ProjectileSpec.bEnableHoming)
@@ -1080,6 +1098,16 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			HomingTarget,
 			HomingMarkHandle);
 	}
+	FVector TargetRight = Right;
+	if (IsValid(HomingTarget))
+	{
+		FVector ToTarget = HomingTarget->GetActorLocation() - SpawnOrigin;
+		ToTarget.Z = 0.0f;
+		if (ToTarget.Normalize())
+		{
+			TargetRight = FVector::CrossProduct(FVector::UpVector, ToTarget).GetSafeNormal();
+		}
+	}
 	int32 SpawnedCount = 0;
 
 	for (int32 Index = 0; Index < GrenadeCount; ++Index)
@@ -1092,6 +1120,10 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			+ GrenadeDirection * ProjectileSpawnForwardOffset
 			+ Right * SideOffset
 			+ FVector(0.0f, 0.0f, 60.0f);
+		const float TargetOffsetAmount = (Index - (GrenadeCount - 1) * 0.5f) * Spec.GuidanceTargetSpread;
+		const FVector GuidanceTargetOffset = Spec.GuidanceMode == EProjectileGuidanceMode::TargetedArcLanding
+			? TargetRight * TargetOffsetAmount
+			: FVector::ZeroVector;
 		const FTransform SpawnTransform(GrenadeDirection.Rotation(), SpawnLocation);
 
 		APlayerSkill_ThrownGrenade* Grenade = World->SpawnActorDeferred<APlayerSkill_ThrownGrenade>(
@@ -1124,7 +1156,9 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			HomingMarkHandle,
 			Spec.HomingStartDelay,
 			Spec.HomingMaxDistance,
-			Spec.HomingAcceptanceRadius);
+			Spec.HomingAcceptanceRadius,
+			Spec.GuidanceMode,
+			GuidanceTargetOffset);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}

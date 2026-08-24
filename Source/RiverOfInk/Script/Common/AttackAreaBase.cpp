@@ -276,6 +276,11 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 	ProjectileSpec.HomingStartDelay = FMath::Max(0.0f, InProjectileSpec.HomingStartDelay);
 	ProjectileSpec.HomingMaxDistance = FMath::Max(0.0f, InProjectileSpec.HomingMaxDistance);
 	ProjectileSpec.HomingAcceptanceRadius = FMath::Max(0.0f, InProjectileSpec.HomingAcceptanceRadius);
+	if (ProjectileSpec.bEnableHoming && ProjectileSpec.GuidanceMode == EProjectileGuidanceMode::None)
+	{
+		// Keep legacy player-owned projectile callers on the original steering path.
+		ProjectileSpec.GuidanceMode = EProjectileGuidanceMode::SoftProjectileHoming;
+	}
 	if (!ProjectileSpec.bEnableHoming
 		|| !ProjectileSpec.HomingTarget
 		|| !ProjectileSpec.HomingMarkHandle.IsValid())
@@ -283,6 +288,8 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 		ProjectileSpec.bEnableHoming = false;
 		ProjectileSpec.HomingTarget = nullptr;
 		ProjectileSpec.HomingMarkHandle = FCombatEffectHandle();
+		ProjectileSpec.GuidanceMode = EProjectileGuidanceMode::None;
+		ProjectileSpec.GuidanceTargetOffset = FVector::ZeroVector;
 	}
 
 	LifeTime = ProjectileSpec.LifeTime;

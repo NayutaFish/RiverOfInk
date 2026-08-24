@@ -10,6 +10,7 @@
 
 class USphereComponent;
 class UStaticMeshComponent;
+class AEnemyBase;
 
 /**
  * First-pass Q form: a player-owned projectile that follows a short arc and
@@ -44,7 +45,9 @@ public:
 		FCombatEffectHandle InHomingMarkHandle = FCombatEffectHandle(),
 		float InHomingStartDelay = 0.06f,
 		float InHomingMaxDistance = 2500.0f,
-		float InHomingAcceptanceRadius = 80.0f
+		float InHomingAcceptanceRadius = 80.0f,
+		EProjectileGuidanceMode InGuidanceMode = EProjectileGuidanceMode::None,
+		FVector InGuidanceTargetOffset = FVector::ZeroVector
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -90,6 +93,8 @@ private:
 	void Detonate();
 	void PerformExplosion();
 	void UpdateHoming(float DeltaTime);
+	void UpdateTargetedArcGuidance(AEnemyBase* Target, float DeltaTime);
+	void ClearGuidance();
 	bool SweepForImpact(const FVector& Start, const FVector& End, FHitResult& OutHit) const;
 
 	UPROPERTY(Transient)
