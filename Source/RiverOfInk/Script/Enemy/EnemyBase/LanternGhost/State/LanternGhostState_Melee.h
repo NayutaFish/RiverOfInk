@@ -8,7 +8,7 @@
 
 /**
  * 灯笼怪近战攻击状态。
- * 继承自 EnemyState_Attack，具体实现待补充。
+ * 继承自 EnemyState_Attack；进入该状态时播放冲刺（Dash）音效。
  */
 UCLASS(meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API ULanternGhostState_Melee : public UEnemyState_Attack
@@ -17,4 +17,11 @@ class RIVEROFINK_API ULanternGhostState_Melee : public UEnemyState_Attack
 
 public:
 	ULanternGhostState_Melee();
+
+	/** 冲刺（Dash）音效名称（对应 AudioDataAsset 配置表中的键名） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Melee")
+	FString DashSoundName = TEXT("Dash");
+
+protected:
+	virtual void OnEnter_Implementation() override;
 };
