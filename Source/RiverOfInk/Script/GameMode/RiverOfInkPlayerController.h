@@ -36,6 +36,10 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugSelectSpecificReward(const FString& RewardIdentifier);
 
+	/** Development-only PIE helper: apply the current homing build to the nearest living enemy. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugApplyHomingMark(float Duration = 4.0f);
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;
