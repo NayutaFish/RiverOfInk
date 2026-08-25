@@ -14,6 +14,7 @@ class AAttackAreaBase;
 class APlayerCharacter;
 class APlayerSkill_CircleDamageArea;
 class APlayerSkill_ThrownGrenade;
+class UNiagaraSystem;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
 DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
@@ -136,6 +137,26 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
+
+	/** Placeholder E-form VFX. Defaults to the player's left-click slash asset. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	TObjectPtr<UNiagaraSystem> CircularSlashVFX;
+
+	/** Color passed to common Niagara user color parameters; black distinguishes E from left click. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	FLinearColor CircularSlashVFXColor = FLinearColor::Black;
+
+	/** Primary Niagara user parameter used by the placeholder slash material. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	FName CircularSlashVFXColorParameter = TEXT("User.Color");
+
+	/** Forward offset matching the existing player left-click VFX placement. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.0", Units = "cm"))
+	float CircularSlashVFXForwardOffset = 60.0f;
+
+	/** Uniform scale for the placeholder E VFX. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.01"))
+	float CircularSlashVFXScale = 1.0f;
 
 	/** E 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Audio")
@@ -287,6 +308,7 @@ private:
 		bool bListenForStage1Hit,
 		bool bUseArcHitbox,
 		float ArcHalfAngle);
+	void SpawnCircularSlashVFX(const FTransform& SpawnTransform);
 	void HandleCircularSlashStage1Hit(AActor* HitActor);
 	void ResolveCircularSlashStage1Miss();
 	bool CastTripleProjectile();

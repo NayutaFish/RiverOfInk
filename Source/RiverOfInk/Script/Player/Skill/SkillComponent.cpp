@@ -7,11 +7,15 @@
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/ProjectileTargetingComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
 #include "Player/Skill/PlayerSkill_ThrownGrenade.h"
+#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogSkill);
 
@@ -21,6 +25,13 @@ USkillComponent::USkillComponent()
 	CircularSlashAreaClass = APlayerSkill_CircleDamageArea::StaticClass();
 	ProjectileAttackAreaClass = AAttackAreaBase::StaticClass();
 	ThrownGrenadeClass = APlayerSkill_ThrownGrenade::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CommonSlashVFX(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/CommonSlash/NS/NS_CommonSlash.NS_CommonSlash"));
+	if (CommonSlashVFX.Succeeded())
+	{
+		CircularSlashVFX = CommonSlashVFX.Object;
+	}
 	InitializeSkillSlots();
 }
 
@@ -1133,7 +1144,57 @@ bool USkillComponent::SpawnCircularSlash(
 			Radius);
 	}
 	UGameplayStatics::FinishSpawningActor(DamageArea, SpawnTransform);
+	SpawnCircularSlashVFX(SpawnTransform);
 	return true;
+}
+
+void USkillComponent::SpawnCircularSlashVFX(const FTransform& SpawnTransform)
+{
+	UWorld* World = GetWorld();
+	if (!World || !CircularSlashVFX || !OwnerCharacter)
+	{
+		UE_LOG(LogSkill, Verbose,
+			TEXT("CircularSlash VFX skipped: World=%s Asset=%s Owner=%s."),
+			World ? TEXT("valid") : TEXT("invalid"),
+			*GetNameSafe(CircularSlashVFX),
+			*GetNameSafe(OwnerCharacter));
+		return;
+	}
+
+	const FVector Forward = OwnerCharacter->GetActorForwardVector();
+	const FVector SpawnLocation = SpawnTransform.GetLocation()
+		+ Forward * FMath::Max(0.0f, CircularSlashVFXForwardOffset);
+	const float Scale = FMath::Max(0.01f, CircularSlashVFXScale);
+	UNiagaraComponent* VFXComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		CircularSlashVFX,
+		SpawnLocation,
+		SpawnTransform.Rotator(),
+		FVector(Scale));
+	if (!VFXComponent)
+	{
+		UE_LOG(LogSkill, Warning, TEXT("CircularSlash VFX failed to spawn: Asset=%s."), *GetNameSafe(CircularSlashVFX));
+		return;
+	}
+
+	// The current left-click placeholder may expose one of several common user
+	// color names. Write the configured interface plus fallbacks so the eventual
+	// dedicated E Niagara system can keep the same black-color contract.
+	VFXComponent->SetVariableLinearColor(CircularSlashVFXColorParameter, CircularSlashVFXColor);
+	VFXComponent->SetVariableLinearColor(TEXT("User.Color"), CircularSlashVFXColor);
+	VFXComponent->SetVariableLinearColor(TEXT("User.BaseColor"), CircularSlashVFXColor);
+	VFXComponent->SetVariableLinearColor(TEXT("User.InkColor"), CircularSlashVFXColor);
+
+	UE_LOG(LogSkill, Log,
+		TEXT("CircularSlash VFX spawned: Asset=%s Color=(%.2f,%.2f,%.2f,%.2f) Offset=%.1f Scale=%.2f Parameter=%s."),
+		*GetNameSafe(CircularSlashVFX),
+		CircularSlashVFXColor.R,
+		CircularSlashVFXColor.G,
+		CircularSlashVFXColor.B,
+		CircularSlashVFXColor.A,
+		CircularSlashVFXForwardOffset,
+		Scale,
+		*CircularSlashVFXColorParameter.ToString());
 }
 
 void USkillComponent::HandleCircularSlashStage1Hit(AActor* HitActor)
