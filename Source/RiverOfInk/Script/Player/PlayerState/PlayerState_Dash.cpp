@@ -13,6 +13,7 @@
 
 void UPlayerState_Dash::OnEnter_Implementation()
 {
+	StateEnterSoundName = TEXT("PlayerDash");
 	Super::OnEnter_Implementation();
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
