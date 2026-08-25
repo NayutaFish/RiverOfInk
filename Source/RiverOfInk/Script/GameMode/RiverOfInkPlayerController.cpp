@@ -4,6 +4,8 @@
 
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "EngineUtils.h"
+#include "Player/PlayerCharacter.h"
+#include "Player/ProjectileTargetingComponent.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RiverOfInk.h"
 
@@ -147,4 +149,59 @@ void ARiverOfInkPlayerController::DebugSelectSpecificReward(const FString& Rewar
 	}
 
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectSpecificReward found no RoguelikeRewardManager."));
+}
+
+void ARiverOfInkPlayerController::DebugApplyHomingMark(float Duration)
+{
+	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetPawn());
+	if (!PlayerCharacter || !GetWorld())
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("DebugApplyHomingMark requires a possessed PlayerCharacter."));
+		return;
+	}
+
+	UProjectileTargetingComponent* Targeting = PlayerCharacter->GetProjectileTargetingComponent();
+	if (!Targeting || !Targeting->HasHomingBuild())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugApplyHomingMark requires the ProjectileHoming build first."));
+		return;
+	}
+
+	AEnemyBase* NearestEnemy = nullptr;
+	float NearestDistanceSquared = TNumericLimits<float>::Max();
+	for (TActorIterator<AEnemyBase> It(GetWorld()); It; ++It)
+	{
+		AEnemyBase* Enemy = *It;
+		if (!IsValid(Enemy) || Enemy->bIsDead)
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared(
+			PlayerCharacter->GetActorLocation(),
+			Enemy->GetActorLocation());
+		if (DistanceSquared < NearestDistanceSquared)
+		{
+			NearestDistanceSquared = DistanceSquared;
+			NearestEnemy = Enemy;
+		}
+	}
+
+	if (!NearestEnemy)
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("DebugApplyHomingMark found no living enemy."));
+		return;
+	}
+
+	const float AppliedDuration = FMath::Max(0.01f, Duration);
+	const FCombatEffectHandle Handle = Targeting->ApplyOrTransferHomingMark(
+		NearestEnemy,
+		AppliedDuration);
+	UE_LOG(LogRoguelike, Log,
+		TEXT("DebugApplyHomingMark applied: Target=%s Duration=%.3f Handle=%d Distance=%.1f."),
+		*GetNameSafe(NearestEnemy),
+		AppliedDuration,
+		Handle.Id,
+		FMath::Sqrt(NearestDistanceSquared));
 }

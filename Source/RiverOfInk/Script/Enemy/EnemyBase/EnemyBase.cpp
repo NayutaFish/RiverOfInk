@@ -15,6 +15,8 @@
 #include "Core/GameEvents.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
 #include "UI/EnemyHealthWidget.h"
@@ -25,6 +27,15 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Idle.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "Materials/MaterialInstanceDynamic.h"
+
+namespace
+{
+	bool IsHomingMarkEffect(const FActiveCombatEffect& Effect)
+	{
+		return Effect.Spec.EffectTag.MatchesTag(
+			RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark);
+	}
+}
 
 AEnemyBase::AEnemyBase()
 {
@@ -41,6 +52,20 @@ AEnemyBase::AEnemyBase()
 	CapsuleCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	CombatEffectComponent = CreateDefaultSubobject<UCombatEffectComponent>(TEXT("CombatEffectComponent"));
+
+	HomingMarkVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("HomingMarkVFXComponent"));
+	HomingMarkVFXComponent->SetupAttachment(CapsuleCollision);
+	HomingMarkVFXComponent->SetAbsolute(false, false, false);
+	HomingMarkVFXComponent->SetAutoActivate(false);
+	HomingMarkVFXComponent->SetRelativeLocation(HomingMarkVFXRelativeLocation);
+	HomingMarkVFXComponent->SetRelativeScale3D(FVector(HomingMarkVFXScale));
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> HomingMarkVFXFinder(
+		TEXT("/Game/RAB/VFX/TrackingBuff/Niagara/NS_TrackingBuff.NS_TrackingBuff"));
+	if (HomingMarkVFXFinder.Succeeded())
+	{
+		HomingMarkVFX = HomingMarkVFXFinder.Object;
+		HomingMarkVFXComponent->SetAsset(HomingMarkVFX);
+	}
 
 	// 网格（仅显示用，碰撞走胶囊体）
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
@@ -123,6 +148,27 @@ void AEnemyBase::BeginPlay()
 	EnsureStateComponent(UEnemyState_Dead::StaticClass());
 	DisableStateComponentTicks();
 	SetupDissolveMaterials();
+	if (CombatEffectComponent)
+	{
+		CombatEffectComponent->OnEffectAdded.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkAdded);
+		CombatEffectComponent->OnEffectChanged.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkChanged);
+		CombatEffectComponent->OnEffectRemoved.AddUniqueDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkRemoved);
+
+		for (const FActiveCombatEffect& ActiveEffect : CombatEffectComponent->ActiveEffects)
+		{
+			if (IsHomingMarkEffect(ActiveEffect))
+			{
+				ActivateHomingMarkVFX(ActiveEffect, true);
+				break;
+			}
+		}
+	}
 
 	// 显式进入初始 Idle 状态（敌人蓝图需挂载 EnemyState_Idle 组件）
 	SwitchState(UEnemyState_Idle::StaticClass());
@@ -131,6 +177,7 @@ void AEnemyBase::BeginPlay()
 void AEnemyBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateHomingMarkVFX(DeltaTime);
 
 	if (bIsDead)
 	{
@@ -147,6 +194,23 @@ void AEnemyBase::Tick(float DeltaTime)
 
 void AEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (CombatEffectComponent)
+	{
+		CombatEffectComponent->OnEffectAdded.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkAdded);
+		CombatEffectComponent->OnEffectChanged.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkChanged);
+		CombatEffectComponent->OnEffectRemoved.RemoveDynamic(
+			this,
+			&AEnemyBase::HandleHomingMarkRemoved);
+	}
+	if (HomingMarkVFXComponent)
+	{
+		HomingMarkVFXComponent->DeactivateImmediate();
+	}
+
 	if (IsValid(CurrentState.Get()))
 	{
 		CurrentState->OnExit();
@@ -163,6 +227,165 @@ void AEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	CachedPlayer = nullptr;
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void AEnemyBase::HandleHomingMarkAdded(const FActiveCombatEffect& Effect)
+{
+	ActivateHomingMarkVFX(Effect, true);
+}
+
+void AEnemyBase::HandleHomingMarkChanged(const FActiveCombatEffect& Effect)
+{
+	ActivateHomingMarkVFX(Effect, true);
+}
+
+void AEnemyBase::HandleHomingMarkRemoved(const FActiveCombatEffect& Effect)
+{
+	DeactivateHomingMarkVFX(Effect);
+}
+
+void AEnemyBase::ActivateHomingMarkVFX(
+	const FActiveCombatEffect& Effect,
+	bool bRestartSystem)
+{
+	if (!IsHomingMarkEffect(Effect)
+		|| !Effect.Handle.IsValid()
+		|| !HomingMarkVFXComponent
+		|| !HomingMarkVFX)
+	{
+		return;
+	}
+
+	HomingMarkVFXHandle = Effect.Handle;
+	HomingMarkVFXInitialDuration = Effect.HasFiniteDuration()
+		? FMath::Max(Effect.RemainingTime, KINDA_SMALL_NUMBER)
+		: 0.0f;
+	if (CapsuleCollision && HomingMarkVFXComponent->GetAttachParent() != CapsuleCollision)
+	{
+		HomingMarkVFXComponent->AttachToComponent(
+			CapsuleCollision,
+			FAttachmentTransformRules::KeepRelativeTransform);
+	}
+	HomingMarkVFXComponent->SetAbsolute(false, false, false);
+	HomingMarkVFXComponent->SetAsset(HomingMarkVFX);
+	HomingMarkVFXComponent->SetRelativeLocation(HomingMarkVFXRelativeLocation);
+	HomingMarkVFXComponent->SetRelativeScale3D(FVector(HomingMarkVFXScale));
+	// Seed the gameplay lifetime before ResetSystem so particle spawn modules
+	// linked to User.Duration read the buff duration during initialization.
+	HomingMarkVFXComponent->SetVariableFloat(
+		TEXT("User.Duration"),
+		FMath::Max(0.0f, Effect.RemainingTime));
+
+	if (bRestartSystem)
+	{
+		HomingMarkVFXComponent->ResetSystem();
+	}
+	// ResetSystem can restore system user parameters to their authored defaults.
+	// Write the gameplay lifetime after the reset so the ring cannot fall back to
+	// the Niagara default when the buff lasts longer than the authored preview.
+	HomingMarkVFXComponent->SetVariableFloat(
+		TEXT("User.Duration"),
+		FMath::Max(0.0f, Effect.RemainingTime));
+	HomingMarkVFXComponent->SetVariableFloat(TEXT("User.DecayAmount"), 0.0f);
+	if (!HomingMarkVFXComponent->IsActive())
+	{
+		HomingMarkVFXComponent->Activate(true);
+	}
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Tracking mark VFX activated: Enemy=%s Handle=%d Remaining=%.3f SpecDuration=%.3f Initial=%.3f Parent=%s Relative=(%.1f,%.1f,%.1f) EnemyWorld=(%.1f,%.1f,%.1f) ParentWorld=(%.1f,%.1f,%.1f) VFXWorld=(%.1f,%.1f,%.1f) Active=%s."),
+		*GetName(),
+		Effect.Handle.Id,
+		Effect.RemainingTime,
+		Effect.Spec.Duration,
+		HomingMarkVFXInitialDuration,
+		*GetNameSafe(HomingMarkVFXComponent->GetAttachParent()),
+		HomingMarkVFXComponent->GetRelativeLocation().X,
+		HomingMarkVFXComponent->GetRelativeLocation().Y,
+		HomingMarkVFXComponent->GetRelativeLocation().Z,
+		GetActorLocation().X,
+		GetActorLocation().Y,
+		GetActorLocation().Z,
+		HomingMarkVFXComponent->GetAttachParent()
+			? HomingMarkVFXComponent->GetAttachParent()->GetComponentLocation().X
+			: 0.0f,
+		HomingMarkVFXComponent->GetAttachParent()
+			? HomingMarkVFXComponent->GetAttachParent()->GetComponentLocation().Y
+			: 0.0f,
+		HomingMarkVFXComponent->GetAttachParent()
+			? HomingMarkVFXComponent->GetAttachParent()->GetComponentLocation().Z
+			: 0.0f,
+		HomingMarkVFXComponent->GetComponentLocation().X,
+		HomingMarkVFXComponent->GetComponentLocation().Y,
+		HomingMarkVFXComponent->GetComponentLocation().Z,
+		HomingMarkVFXComponent->IsActive() ? TEXT("true") : TEXT("false"));
+}
+
+void AEnemyBase::DeactivateHomingMarkVFX(const FActiveCombatEffect& Effect)
+{
+	if (!IsHomingMarkEffect(Effect)
+		|| !HomingMarkVFXHandle.IsValid()
+		|| Effect.Handle != HomingMarkVFXHandle)
+	{
+		return;
+	}
+
+	if (HomingMarkVFXComponent)
+	{
+		HomingMarkVFXComponent->DeactivateImmediate();
+	}
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Tracking mark VFX deactivated: Enemy=%s Handle=%d Remaining=%.3f."),
+		*GetName(),
+		Effect.Handle.Id,
+		Effect.RemainingTime);
+	HomingMarkVFXHandle = FCombatEffectHandle();
+	HomingMarkVFXInitialDuration = 0.0f;
+}
+
+void AEnemyBase::UpdateHomingMarkVFX(float DeltaTime)
+{
+	if (!HomingMarkVFXComponent
+		|| !HomingMarkVFXComponent->IsActive()
+		|| !HomingMarkVFXHandle.IsValid()
+		|| !CombatEffectComponent)
+	{
+		return;
+	}
+
+	if (CapsuleCollision && HomingMarkVFXComponent->GetAttachParent() != CapsuleCollision)
+	{
+		HomingMarkVFXComponent->AttachToComponent(
+			CapsuleCollision,
+			FAttachmentTransformRules::KeepRelativeTransform);
+		HomingMarkVFXComponent->SetRelativeLocation(HomingMarkVFXRelativeLocation);
+	}
+	HomingMarkVFXComponent->SetAbsolute(false, false, false);
+
+	FActiveCombatEffect Mark;
+	if (!CombatEffectComponent->TryGetEffect(
+		RiverOfInkCombatEffectTags::Effect_Debuff_HomingMark,
+		Mark)
+		|| Mark.Handle != HomingMarkVFXHandle)
+	{
+		HomingMarkVFXComponent->DeactivateImmediate();
+		HomingMarkVFXHandle = FCombatEffectHandle();
+		HomingMarkVFXInitialDuration = 0.0f;
+		return;
+	}
+
+	if (Mark.HasFiniteDuration() && HomingMarkVFXInitialDuration > KINDA_SMALL_NUMBER)
+	{
+		const float DecayAmount = 1.0f - FMath::Clamp(
+			Mark.RemainingTime / HomingMarkVFXInitialDuration,
+			0.0f,
+			1.0f);
+		HomingMarkVFXComponent->SetVariableFloat(
+			TEXT("User.DecayAmount"),
+			DecayAmount);
+	}
+
+	(void)DeltaTime;
 }
 
 void AEnemyBase::SwitchState(TSubclassOf<UStateBase> StateClass)

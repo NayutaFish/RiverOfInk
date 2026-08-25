@@ -79,7 +79,11 @@ FCombatEffectHandle UProjectileTargetingComponent::ApplyOrTransferHomingMark(
 	float Duration)
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player || !IsValid(NewTarget) || NewTarget->bIsDead || Duration <= 0.0f)
+	if (!Player
+		|| !HasHomingBuild()
+		|| !IsValid(NewTarget)
+		|| NewTarget->bIsDead
+		|| Duration <= 0.0f)
 	{
 		return FCombatEffectHandle();
 	}

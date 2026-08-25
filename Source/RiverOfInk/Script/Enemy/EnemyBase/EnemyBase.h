@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/GlobalStructs.h"
+#include "Common/CombatEffectTypes.h"
 #include "Enemy/EnemyBase/EnemyHealthTypes.h"
 #include "EnemyBase.generated.h"
 
@@ -18,6 +19,8 @@ class APlayerCharacter;
 class UEnemyHealthWidget;
 class UWidgetComponent;
 class UCombatEffectComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathSignature, AActor*, DeadEnemy);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyDamageResolvedSignature, const FDamageResult&, DamageResult);
@@ -55,6 +58,22 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Enemy|Effects")
 	UCombatEffectComponent* GetCombatEffectComponent() const { return CombatEffectComponent; }
+
+	/** Niagara presentation for the player-owned Tracking Buff mark. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|VFX|Tracking Buff")
+	TObjectPtr<UNiagaraSystem> HomingMarkVFX;
+
+	/** Reusable attached component; gameplay owns only its activation lifetime. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|VFX|Tracking Buff")
+	TObjectPtr<UNiagaraComponent> HomingMarkVFXComponent;
+
+	/** Ground-relative placement for the ring around this enemy. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|VFX|Tracking Buff")
+	FVector HomingMarkVFXRelativeLocation = FVector(0.0f, 0.0f, -45.0f);
+
+	/** Uniform scale for the authored Tracking Buff system. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|VFX|Tracking Buff", meta = (ClampMin = "0.01"))
+	float HomingMarkVFXScale = 1.0f;
 
 protected:
 	virtual void BeginPlay() override;
@@ -386,6 +405,19 @@ public:
 	void HandleDeadState();
 
 private:
+	UFUNCTION()
+	void HandleHomingMarkAdded(const FActiveCombatEffect& Effect);
+
+	UFUNCTION()
+	void HandleHomingMarkChanged(const FActiveCombatEffect& Effect);
+
+	UFUNCTION()
+	void HandleHomingMarkRemoved(const FActiveCombatEffect& Effect);
+
+	void ActivateHomingMarkVFX(const FActiveCombatEffect& Effect, bool bRestartSystem);
+	void DeactivateHomingMarkVFX(const FActiveCombatEffect& Effect);
+	void UpdateHomingMarkVFX(float DeltaTime);
+
 	void NormalizeDefenseFromLegacy();
 	void BroadcastHealthChanged(float PreviousHealth, EEnemyHealthChangeReason ChangeReason);
 	void UpdateHardValue(float DeltaTime);
@@ -402,6 +434,8 @@ private:
 	FTimerHandle DeathDestroyTimerHandle;
 	float HardValueRecoveryDelayRemaining = 0.0f;
 	float HardBreakCooldownRemaining = 0.0f;
+	FCombatEffectHandle HomingMarkVFXHandle;
+	float HomingMarkVFXInitialDuration = 0.0f;
 
 	/** 死亡溶解的动态材质实例（BeginPlay 时创建） */
 	UPROPERTY()
