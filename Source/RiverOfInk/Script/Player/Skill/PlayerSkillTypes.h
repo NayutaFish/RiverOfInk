@@ -26,7 +26,9 @@ enum class EPlayerSkillForm : uint8
 	Default UMETA(DisplayName = "Default"),
 	ThrownGrenade UMETA(DisplayName = "Thrown Grenade"),
 	NullRing UMETA(DisplayName = "Null Ring"),
-	TwinSlash UMETA(DisplayName = "Twin Slash")
+	TwinSlash UMETA(DisplayName = "Twin Slash"),
+	/** Two close-range arc stages; appended to preserve serialized form values. */
+	TwoStageArc UMETA(DisplayName = "Two Stage Arc")
 };
 
 UENUM(BlueprintType)
@@ -158,14 +160,35 @@ struct FResolvedSkillSpec
 	float GuidanceTargetSpread = 0.0f;
 
 	// E / Circular Slash fields.
+	/** Total damage-area judgments produced by one complete cast. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
 	int32 HitCount = 1;
+
+	/** Number of release stages. TwoStageArc keeps stage 2 locked until stage 1 hits. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
+	int32 StageCount = 1;
+
+	/** Number of independent damage judgments in each release stage. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
+	int32 JudgmentsPerStage = 1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
 	float Radius = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
 	float Damage = 0.0f;
+
+	/** Damage multiplier applied to every judgment in a stage. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
+	float StageDamageMultiplier = 1.0f;
+
+	/** True when the resolved hitboxes should use the close-range arc filter. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
+	bool bUseArcHitbox = false;
+
+	/** Horizontal half-angle of the close-range arc, in degrees. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float ArcHalfAngle = 180.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
 	float SecondHitDelay = 0.0f;

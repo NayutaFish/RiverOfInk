@@ -90,6 +90,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
 
+	/** True while the first TwoStageArc release is waiting for a hit result. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool IsCircularSlashStage1Active() const;
+
+	/** True after stage 1 hit and before the stage 2 release is confirmed. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool IsCircularSlashStage2Ready() const;
+
 	/** True when a target form belongs to this skill and differs from its current form. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	bool CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm) const;
@@ -145,13 +153,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.01"))
 	float CircularSlashLifeTime = 1.0f;
 
-	/** Twin Slash repeats the E hit after this short delay. */
+	/** Legacy timing value kept for serialized/editor compatibility; the current TwinSlash is simultaneous extra judgment. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "s"))
 	float TwinSlashDelay = 0.18f;
 
-	/** Damage multiplier used by Twin Slash's delayed second hit. */
+	/** Damage multiplier applied to every judgment when TwinSlash is present. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0"))
-	float TwinSlashSecondDamageMultiplier = 0.8f;
+	float TwinSlashSecondDamageMultiplier = 0.65f;
 
 	/** The delayed hit is placed in this yaw direction relative to the first cast. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
@@ -160,6 +168,18 @@ public:
 	/** Offset the delayed circular hit so the yaw angle has gameplay impact. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "cm"))
 	float TwinSlashSecondForwardOffset = 110.0f;
+
+	/** Base damage multiplier for each stage of the TwoStageArc form. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.0"))
+	float TwoStageArcStageDamageMultiplier = 0.8f;
+
+	/** Smaller radial reach used by each TwoStageArc judgment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "1.0", Units = "cm"))
+	float TwoStageArcRadius = 200.0f;
+
+	/** Horizontal half-angle of each TwoStageArc judgment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float TwoStageArcHalfAngle = 65.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
@@ -257,12 +277,18 @@ public:
 private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
+	bool CastCircularSlashStage2();
+	bool SpawnCircularSlashSet(const FResolvedSkillSpec& Spec, int32 StageIndex, bool bListenForStage1Hit);
 	bool SpawnCircularSlash(
 		const FTransform& SpawnTransform,
 		float Radius,
 		float Damage,
-		bool bNullifyEnemyProjectiles);
-	void CastTwinSlashSecondHit();
+		bool bNullifyEnemyProjectiles,
+		bool bListenForStage1Hit,
+		bool bUseArcHitbox,
+		float ArcHalfAngle);
+	void HandleCircularSlashStage1Hit(AActor* HitActor);
+	void ResolveCircularSlashStage1Miss();
 	bool CastTripleProjectile();
 	bool CastThrownGrenade(const FResolvedSkillSpec& Spec);
 	bool SpawnProjectile(
@@ -285,8 +311,7 @@ private:
 
 	TMap<EPlayerSkillID, double> LastCastTimes;
 
-	FTimerHandle TwinSlashTimerHandle;
-	FVector PendingTwinSlashOrigin = FVector::ZeroVector;
-	FRotator PendingTwinSlashRotation = FRotator::ZeroRotator;
-	FResolvedSkillSpec PendingTwinSlashSpec;
+	FTimerHandle CircularSlashStage1ResolutionTimerHandle;
+	bool bCircularSlashStage1Active = false;
+	bool bCircularSlashStage2Ready = false;
 };
