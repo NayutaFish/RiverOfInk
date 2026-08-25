@@ -26,6 +26,14 @@ public:
 	void OnEnter();
 	virtual void OnEnter_Implementation();
 
+	/** 进入状态时播放的音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State|Audio")
+	FString StateEnterSoundName;
+
+	/** 播放 StateEnterSoundName 时是否随机化音量与音调（默认 true） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State|Audio")
+	bool bPlayStateEnterSound = true;
+
 	/** 每帧更新（由状态机驱动） */
 	UFUNCTION(BlueprintNativeEvent, Category = "State")
 	void Update(float DeltaTime);

@@ -4,6 +4,7 @@
 
 #include "Common/AttackAreaBase.h"
 #include "Common/CombatEffectTags.h"
+#include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Player/PlayerCharacter.h"
@@ -870,6 +871,11 @@ bool USkillComponent::IsOnCooldown(EPlayerSkillID SkillID, float Cooldown) const
 
 bool USkillComponent::CastCircularSlash()
 {
+	if (!ECastSoundName.IsEmpty())
+	{
+		FAudioManager::Play(ECastSoundName, true);
+	}
+
 	UWorld* World = GetWorld();
 	if (!World || !CircularSlashAreaClass)
 	{
@@ -981,6 +987,11 @@ void USkillComponent::CastTwinSlashSecondHit()
 
 bool USkillComponent::CastTripleProjectile()
 {
+	if (!QCastSoundName.IsEmpty())
+	{
+		FAudioManager::Play(QCastSoundName, true);
+	}
+
 	const FResolvedSkillSpec Spec = ResolveSkillSpec(EPlayerSkillID::TripleProjectile);
 	if (Spec.PayloadType == ESkillPayloadType::InkGrenade)
 	{

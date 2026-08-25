@@ -2,6 +2,8 @@
 
 #include "Common/StateBase.h"
 
+#include "Core/Audio/AudioManager.h"
+
 UStateBase::UStateBase()
 {
 }
@@ -14,7 +16,10 @@ void UStateBase::BeginPlay()
 
 void UStateBase::OnEnter_Implementation()
 {
-	// 进入状态时的逻辑，子类可重写
+	if (!StateEnterSoundName.IsEmpty())
+	{
+		FAudioManager::Play(StateEnterSoundName, bPlayStateEnterSound);
+	}
 }
 
 void UStateBase::Update_Implementation(float DeltaTime)

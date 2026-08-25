@@ -129,6 +129,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
 
+	/** E 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Audio")
+	FString ECastSoundName = TEXT("CircleSlash");
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.0"))
 	float CircularSlashCooldown = 3.0f;
 
@@ -159,6 +163,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
+
+	/** Q 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|Audio")
+	FString QCastSoundName = TEXT("CircleMagic");
 
 	/** Legacy Q form actor. New builds select it through the InkGrenade modifier. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade")
