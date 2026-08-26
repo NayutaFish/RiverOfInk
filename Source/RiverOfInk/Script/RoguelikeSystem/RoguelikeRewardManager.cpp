@@ -370,18 +370,37 @@ void ARoguelikeRewardManager::SelectReward(int32 OptionIndex)
 
 bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdentifier)
 {
-	if (RewardIdentifier.TrimStartAndEnd().IsEmpty())
+	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
+	if (Identifier.IsEmpty())
 	{
 		UE_LOG(LogRoguelike, Warning,
 			TEXT("DebugShowSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
 		return false;
 	}
 
-	if (bRewardShownForRoom || ActiveRewardWidget)
+	if (bRewardSelectionInProgress)
 	{
 		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugShowSpecificReward ignored: reward UI already shown for this room."));
+			TEXT("DebugShowSpecificReward ignored: reward selection feedback is still in progress."));
 		return false;
+	}
+
+	if (ActiveRewardWidget)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward ignored: a reward UI is already visible. Select or close it first."));
+		return false;
+	}
+
+	// The production flow deliberately allows one reward UI per room. This
+	// debug-only entry point is used repeatedly in TestMap_1, so reopen the
+	// test card after a previous selection has closed the widget. Do not reset
+	// the gate while a live widget or selection feedback is still active.
+	if (bRewardShownForRoom)
+	{
+		UE_LOG(LogRoguelike, Display,
+			TEXT("DebugShowSpecificReward reopening the debug card after the room reward was already consumed."));
+		bRewardShownForRoom = false;
 	}
 
 	if (!ResolvePlayer())
@@ -392,11 +411,11 @@ bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdent
 	}
 
 	FRoguelikeRewardOption DebugOption;
-	if (!TryBuildDebugRewardOption(RewardIdentifier, DebugOption))
+	if (!TryBuildDebugRewardOption(Identifier, DebugOption))
 	{
 		UE_LOG(LogRoguelike, Warning,
 			TEXT("DebugShowSpecificReward rejected unknown identifier '%s'."),
-			*RewardIdentifier);
+			*Identifier);
 		return false;
 	}
 

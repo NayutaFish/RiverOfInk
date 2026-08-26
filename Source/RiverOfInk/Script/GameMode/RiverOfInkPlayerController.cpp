@@ -116,9 +116,10 @@ void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardI
 	{
 		if (ARoguelikeRewardManager* RewardManager = *It)
 		{
-			RewardManager->DebugShowSpecificReward(RewardIdentifier);
+			const bool bShown = RewardManager->DebugShowSpecificReward(RewardIdentifier);
 			UE_LOG(LogRoguelike, Log,
-				TEXT("DebugShowSpecificReward requested identifier '%s'."),
+				TEXT("DebugShowSpecificReward %s identifier '%s'."),
+				bShown ? TEXT("shown") : TEXT("failed to show"),
 				*RewardIdentifier);
 			return;
 		}
