@@ -477,6 +477,18 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 		return false;
 	}
 
+	// TestMap_1 keeps the production once-per-room gate, but the debug command
+	// is intentionally reusable for build-matrix testing. After the previous
+	// selection feedback has closed and cleared the widget, reopen the gate so
+	// a second identifier (for example TwoStageArc followed by TwinSlash) can
+	// be applied in the same PIE session.
+	if (bRewardShownForRoom && !ActiveRewardWidget && !bRewardSelectionInProgress)
+	{
+		UE_LOG(LogRoguelike, Display,
+			TEXT("DebugSelectSpecificReward reopening the debug card after the room reward was already consumed."));
+		bRewardShownForRoom = false;
+	}
+
 	// If a debug card is already open, only select it when it is the exact
 	// requested modifier. This keeps the command deterministic and prevents a
 	// typo from silently selecting a different reward card.
@@ -936,7 +948,10 @@ void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option
 		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
 		break;
 	case ESkillModifierID::TwinSlash:
-		Option.BeforeValue = static_cast<float>(BeforeSpec.HitCount);
+		// TwinSlash adds one independent judgment to every release stage. Show
+		// that per-stage change instead of exposing the total cast hit count,
+		// which would incorrectly display 2 -> 3 for TwoStageArc.
+		Option.BeforeValue = static_cast<float>(BeforeSpec.JudgmentsPerStage);
 		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
 		break;
 	case ESkillModifierID::NullRing:
@@ -1043,8 +1058,8 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion.T_UI_Build_ExtraExplosion");
 		break;
 	case ESkillModifierID::TwinSlash:
-		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.BeforeValue));
-		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.AfterValue));
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.AfterValue));
 		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash");
 		break;
 	case ESkillModifierID::NullRing:

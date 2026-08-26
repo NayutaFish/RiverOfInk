@@ -20,6 +20,8 @@ RewardManager
                  └─ ResolveSkillSpec()
                       ├─ StageCount = 2
                       ├─ JudgmentsPerStage = 1 或 TwinSlash 时为 2
+                      ├─ bHasTwinSlash = TwinSlash 是否已应用
+                      ├─ TwinSlashDamageMultiplier = 1.0 或 0.65
                       ├─ StageDamageMultiplier = 0.8
                       ├─ Radius = TwoStageArcRadius
                       └─ ArcHalfAngle = TwoStageArcHalfAngle
@@ -31,6 +33,11 @@ E 输入
   │         └─ 超时：写入 LastCastTimes，直接进入冷却
   └─ 第二次释放：SpawnCircularSlashSet(Stage=1)
        └─ 清除 stage2 ready，写入 LastCastTimes，进入冷却
+
+单次判定伤害
+  └─ BaseEDamage × StageDamageMultiplier × TwinSlashDamageMultiplier
+       ├─ 默认 E：D × 1.0
+       └─ TwoStageArc + TwinSlash：D × 0.8 × 0.65 = 0.52D
 ```
 
 ## 功能切片状态
@@ -104,7 +111,7 @@ E 输入
 
 首段有效命中
   └─ bCircularSlashStage2Ready = true
-       └─ 启动 Stage2InputWindow（默认 1.00s，限制在 0.8～1.2s）
+            └─ 启动 Stage2InputWindow（默认 2.00s，限制在 0.8～3.0s）
             ├─ 再次按 E -> 第二段生成并写入 E 冷却时间戳
             └─ 超时      -> 清除 Stage2Ready 并写入 E 冷却时间戳
 ```
@@ -123,9 +130,10 @@ PIE 验收结果（2026-08-26）：
 1. 普通 E 在 Ready 状态隐藏，释放后显示冷却环，冷却与完成反馈结束后再次隐藏；
 2. `DebugSelectSpecificReward TwoStageArc` 成功应用 E 两段形态，奖励 UI 关闭并恢复 Gameplay 输入，未释放第一段时 E 槽保持隐藏；
 3. `DebugPrepareTwoStageArc 100` 后首段进入 `Stage1Active`，日志确认解析出的 `Stage2Window=2.00`，画面中 E 槽显示；
-4. 本次 PIE 的调试敌人未被弧形命中筛选确认，因此 `Stage2Ready` 高亮、2 秒超时和第二段释放未作为通过项记录；后续应在命中测试工具修正后补验；
-5. Q 槽未被 E 的显示状态联动，Q 追踪相关源码未修改；
-6. 首段命中、二段释放和窗口超时过程中未出现新的 `Ensure condition failed`、`Fatal` 或 `Unhandled`。
+4. `DebugPrepareTwoStageArc 100` 配合固定玩家朝向后，首段实际命中并进入 `Stage2Ready`；日志确认 `Stage2Window=2.00`，HUD 显示可释放状态；
+5. 在 2 秒窗口内再次按 E 成功释放第二段，冷却开始；窗口超时日志确认 `stage 2 input window expired`；
+6. Q 槽未被 E 的显示状态联动，Q 追踪相关源码未修改；
+7. 首段命中、二段释放和窗口超时过程中未出现新的 `Ensure condition failed`、`Fatal` 或 `Unhandled`。
 
 可调接口：
 
@@ -151,6 +159,52 @@ SkillComponent 暴露以下可替换接口：
 - `CircularSlashVFXForwardOffset`、`CircularSlashVFXScale`：控制占位 VFX 的生成偏移与缩放；
 - `TwoStageArcRadius`、`TwoStageArcHalfAngle`：控制近距离弧形判定尺寸；
 - `TwoStageArcStageDamageMultiplier`：控制两段基础伤害倍率。
+
+### Slice 6：TwinSlash 显式解析与组合验收
+
+已完成并通过冷编译及 PIE。`FResolvedSkillSpec` 不再通过总 `HitCount` 推断 TwinSlash，改为显式输出：
+
+- `bHasTwinSlash`：是否拥有 TwinSlash；
+- `TwinSlashDamageMultiplier`：每次判定的倍率，默认 `1.0`，拥有 TwinSlash 时为 `0.65`；
+- `JudgmentsPerStage`：每个阶段的实际判定数，默认 `1`，拥有 TwinSlash 时为 `2`。
+
+运行时公式：
+
+```text
+TwoStageArc + TwinSlash
+  每段：2 次判定
+  每次：D × 0.8 × 0.65 = 0.52D
+  每段合计：1.04D
+  两段合计：2.08D
+```
+
+本次 PIE 日志验收（2026-08-26）：
+
+- `DebugSelectSpecificReward TwoStageArc` 成功应用形态；
+- 连续执行 `DebugSelectSpecificReward TwinSlash` 成功重新打开测试卡并应用 modifier；
+- 解析日志确认 `Stages=2 JudgmentsPerStage=2 TwinSlash=true TwinSlashMultiplier=0.65`；
+- 第一段日志确认 `DamagePerJudgment=62.4 StageTotal=124.8`；
+- 第二段日志确认同样为 `DamagePerJudgment=62.4 StageTotal=124.8`，且出现 `stage 2 released`；
+- 两段流程未生成第三段。
+
+### Slice 7：Debug 奖励入口与回归验收
+
+已完成。修复 `DebugSelectSpecificReward` 在同一 TestMap_1 PIE 会话连续选择不同奖励时仍受生产环境 `bRewardShownForRoom` 门闩阻挡的问题。生产流程的一次房间奖励限制保持不变，只有 Debug 入口在前一个反馈完成、`ActiveRewardWidget` 已清空后允许重新打开测试卡。
+
+推荐测试指令：
+
+```text
+DebugSelectSpecificReward TwoStageArc
+DebugSelectSpecificReward TwinSlash
+DebugPrepareTwoStageArc 100
+```
+
+Slice 7 验收结果：
+
+- 连续奖励指令不再报 `another reward UI is already shown`；
+- 第二个奖励仍经过正常 `ApplyReward`、反馈动画和输入恢复流程；
+- TwoStageArc 与 TwinSlash 可以同时存在，普通 E/Q 既有逻辑未被改变；
+- PIE 运行期间未出现新增编译错误、`Ensure condition failed`、`Fatal` 或 `Unhandled`。
 
 奖励 UI 暂不新增平面美术，`PopulateRewardPresentation` 使用已有 `Icon_CircularSlash` 作为占位图标。后续只需替换 `RewardIcon` 对应资源，不改变奖励数据流。
 
