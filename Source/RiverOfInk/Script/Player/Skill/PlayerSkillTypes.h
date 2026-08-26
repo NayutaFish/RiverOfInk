@@ -182,6 +182,14 @@ struct FResolvedSkillSpec
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
 	int32 JudgmentsPerStage = 1;
 
+	/** True when TwinSlash supplied the extra judgment for every release stage. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E|TwinSlash")
+	bool bHasTwinSlash = false;
+
+	/** Damage multiplier applied to each judgment when TwinSlash is present. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E|TwinSlash", meta = (ClampMin = "0.0"))
+	float TwinSlashDamageMultiplier = 1.0f;
+
 	/** Input window available after a valid TwoStageArc stage-1 hit. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "0.0", Units = "s"))
 	float Stage2InputWindow = 0.0f;

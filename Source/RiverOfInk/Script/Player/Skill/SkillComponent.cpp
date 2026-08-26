@@ -737,6 +737,10 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		const bool bTwoStageArc = LegacyForm == EPlayerSkillForm::TwoStageArc;
 		Spec.StageCount = bTwoStageArc ? 2 : 1;
 		Spec.JudgmentsPerStage = bHasTwinSlash ? 2 : 1;
+		Spec.bHasTwinSlash = bHasTwinSlash;
+		Spec.TwinSlashDamageMultiplier = bHasTwinSlash
+			? FMath::Max(0.0f, TwinSlashSecondDamageMultiplier)
+			: 1.0f;
 		Spec.HitCount = Spec.StageCount * Spec.JudgmentsPerStage;
 		Spec.Radius = GetCircularSlashRadius();
 		Spec.Damage = CircularSlashDamage;
@@ -757,9 +761,9 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.SecondHitDelay = TwinSlashDelay;
 		Spec.SecondHitAngle = TwinSlashSecondYawOffset;
 		Spec.SecondHitForwardOffset = TwinSlashSecondForwardOffset;
-		Spec.SecondHitDamageMultiplier = bHasTwinSlash
-			? FMath::Max(0.0f, TwinSlashSecondDamageMultiplier)
-			: 1.0f;
+		// Keep the legacy field populated for serialized/editor callers. Runtime
+		// damage resolution uses the explicit per-judgment field above.
+		Spec.SecondHitDamageMultiplier = Spec.TwinSlashDamageMultiplier;
 		Spec.bNullifyEnemyProjectiles = GetModifierStack(SkillID, ESkillModifierID::NullRing) > 0
 			|| LegacyForm == EPlayerSkillForm::NullRing;
 		Spec.Cooldown = GetCircularSlashCooldown();
@@ -771,7 +775,7 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Stages=%d JudgmentsPerStage=%d StageDamageMultiplier=%.2f Stage2Window=%.2f Arc=%s HalfAngle=%.1f Radius=%.0f Cooldown=%.2f."),
+		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Stages=%d JudgmentsPerStage=%d TwinSlash=%s TwinSlashMultiplier=%.2f StageDamageMultiplier=%.2f Stage2Window=%.2f Arc=%s HalfAngle=%.1f Radius=%.0f Cooldown=%.2f."),
 		*UEnum::GetValueAsString(SkillID),
 		*BuildModifierSummary(SkillID),
 		Spec.ProjectileCount,
@@ -780,6 +784,8 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.HitCount,
 		Spec.StageCount,
 		Spec.JudgmentsPerStage,
+		Spec.bHasTwinSlash ? TEXT("true") : TEXT("false"),
+		Spec.TwinSlashDamageMultiplier,
 		Spec.StageDamageMultiplier,
 		Spec.Stage2InputWindow,
 		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"),
@@ -1109,8 +1115,8 @@ bool USkillComponent::SpawnCircularSlashSet(
 
 	const FVector Origin = OwnerCharacter->GetActorLocation();
 	const FRotator BaseRotation = OwnerCharacter->GetActorRotation();
-	const float TwinSlashMultiplier = Spec.JudgmentsPerStage > 1
-		? Spec.SecondHitDamageMultiplier
+	const float TwinSlashMultiplier = Spec.bHasTwinSlash
+		? Spec.TwinSlashDamageMultiplier
 		: 1.0f;
 	const float JudgmentDamage = Spec.Damage * Spec.StageDamageMultiplier * TwinSlashMultiplier;
 
@@ -1145,11 +1151,13 @@ bool USkillComponent::SpawnCircularSlashSet(
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("CircularSlash stage spawned: Stage=%d/%d Judgments=%d Damage=%.1f Arc=%s."),
+		TEXT("CircularSlash stage spawned: Stage=%d/%d Judgments=%d DamagePerJudgment=%.1f StageTotal=%.1f TwinSlash=%s Arc=%s."),
 		StageIndex + 1,
 		Spec.StageCount,
 		Spec.JudgmentsPerStage,
 		JudgmentDamage,
+		JudgmentDamage * static_cast<float>(Spec.JudgmentsPerStage),
+		Spec.bHasTwinSlash ? TEXT("true") : TEXT("false"),
 		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"));
 	return true;
 }
