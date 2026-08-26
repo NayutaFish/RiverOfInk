@@ -1108,6 +1108,26 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			TargetRight = FVector::CrossProduct(FVector::UpVector, ToTarget).GetSafeNormal();
 		}
 	}
+	const bool bTargetedArcGuidance = Spec.GuidanceMode == EProjectileGuidanceMode::TargetedArcLanding
+		&& IsValid(HomingTarget)
+		&& HomingMarkHandle.IsValid();
+	const float GuidanceHorizontalDistance = bTargetedArcGuidance
+		? FVector::Dist2D(SpawnOrigin, HomingTarget->GetActorLocation())
+		: 0.0f;
+	float EffectiveFuseTime = Spec.FuseTime
+		+ (bTargetedArcGuidance ? FMath::Max(0.0f, ThrownGrenadeGuidanceExtraFuseTime) : 0.0f);
+	if (bTargetedArcGuidance && Spec.ProjectileSpeed > KINDA_SMALL_NUMBER)
+	{
+		// Keep the fuse long enough for the horizontal arc to reach a distant
+		// marked target. The small landing margin lets the projectile enter the
+		// acceptance radius before the fuse detonates.
+		const float MinimumGuidanceFlightTime = GuidanceHorizontalDistance / Spec.ProjectileSpeed + 0.15f;
+		EffectiveFuseTime = FMath::Max(EffectiveFuseTime, MinimumGuidanceFlightTime);
+	}
+	const float GuidanceTargetZ = bTargetedArcGuidance
+		? HomingTarget->GetActorLocation().Z + ThrownGrenadeGuidanceLandingHeightOffset
+		: 0.0f;
+	float GuidanceInitialVelocityZ = FMath::Max(0.0f, ThrownGrenadeGuidanceLaunchVelocityZ);
 	int32 SpawnedCount = 0;
 
 	for (int32 Index = 0; Index < GrenadeCount; ++Index)
@@ -1125,6 +1145,22 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			? TargetRight * TargetOffsetAmount
 			: FVector::ZeroVector;
 		const FTransform SpawnTransform(GrenadeDirection.Rotation(), SpawnLocation);
+		FVector InitialVelocity = GrenadeDirection * Spec.ProjectileSpeed;
+		if (bTargetedArcGuidance)
+		{
+			// Solve the vertical ballistic component against the target height and
+			// effective fuse time. The horizontal component is still corrected during
+			// flight, but the grenade no longer depends on the player and target being
+			// on the same white-box floor height.
+			const float GuidanceTime = FMath::Max(0.05f, EffectiveFuseTime);
+			const float GravityDisplacement = 0.5f * ThrownGrenadeGravityZ * FMath::Square(GuidanceTime);
+			const float RequiredLaunchVelocityZ = (GuidanceTargetZ - SpawnLocation.Z - GravityDisplacement) / GuidanceTime;
+			if (FMath::IsFinite(RequiredLaunchVelocityZ))
+			{
+				GuidanceInitialVelocityZ = RequiredLaunchVelocityZ;
+			}
+			InitialVelocity.Z = GuidanceInitialVelocityZ;
+		}
 
 		APlayerSkill_ThrownGrenade* Grenade = World->SpawnActorDeferred<APlayerSkill_ThrownGrenade>(
 			ThrownGrenadeClass,
@@ -1142,12 +1178,12 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 		}
 
 		Grenade->Initialize(
-			Spec.FuseTime,
+			EffectiveFuseTime,
 			Spec.ExplosionRadius,
 			Spec.ExplosionDamage,
 			ThrownGrenadeGravityZ,
 			Spec.CollisionRadius,
-			GrenadeDirection * Spec.ProjectileSpeed,
+			InitialVelocity,
 			OwnerCharacter,
 			Spec.ExplosionCount,
 			Spec.ExplosionDelay,
@@ -1163,11 +1199,24 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 		++SpawnedCount;
 	}
 
+	if (bTargetedArcGuidance)
+	{
+		UE_LOG(LogSkill, Display,
+			TEXT("ThrownGrenade guidance initialized: Mode=TargetedArcLanding Target=%s Distance=%.1f EffectiveFuse=%.2f SpawnZ=%.1f TargetZ=%.1f LaunchZ=%.1f TurnRate=%.1f."),
+			*HomingTarget->GetName(),
+			GuidanceHorizontalDistance,
+			EffectiveFuseTime,
+			SpawnOrigin.Z + 60.0f,
+			GuidanceTargetZ,
+			GuidanceInitialVelocityZ,
+			ThrownGrenadeGuidanceTurnRate);
+	}
+
 	UE_LOG(LogSkill, Display,
 		TEXT("TripleProjectile grenade cast: Spawned=%d/%d Fuse=%.2f Radius=%.0f Damage=%.1f Explosions=%d."),
 		SpawnedCount,
 		GrenadeCount,
-		Spec.FuseTime,
+		EffectiveFuseTime,
 		Spec.ExplosionRadius,
 		Spec.ExplosionDamage,
 		Spec.ExplosionCount);

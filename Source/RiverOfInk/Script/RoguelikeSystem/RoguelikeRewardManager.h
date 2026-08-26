@@ -45,6 +45,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
 	bool DebugSelectSpecificReward(const FString& RewardIdentifier);
 
+	/** Development-only helper that directly applies comma-separated legal rewards without opening the reward UI. */
+	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
+	bool DebugApplySpecificRewards(const FString& RewardIdentifiers);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|UI")
 	TSubclassOf<URoguelikeRewardWidget> RewardWidgetClass;
 

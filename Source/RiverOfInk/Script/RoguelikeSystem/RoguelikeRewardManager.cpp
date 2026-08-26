@@ -471,6 +471,78 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 	return true;
 }
 
+bool ARoguelikeRewardManager::DebugApplySpecificRewards(const FString& RewardIdentifiers)
+{
+	TArray<FString> Identifiers;
+	RewardIdentifiers.ParseIntoArray(Identifiers, TEXT(","), true);
+	for (FString& Identifier : Identifiers)
+	{
+		Identifier = Identifier.TrimStartAndEnd();
+	}
+	Identifiers.RemoveAll([](const FString& Identifier)
+	{
+		return Identifier.IsEmpty();
+	});
+
+	if (Identifiers.IsEmpty())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugApplySpecificRewards requires comma-separated identifiers, e.g. InkGrenade,ProjectileHoming."));
+		return false;
+	}
+
+	if (!ResolvePlayer() || ActiveRewardWidget || bRewardSelectionInProgress)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugApplySpecificRewards rejected: player unavailable or reward UI is active."));
+		return false;
+	}
+
+	TArray<FRoguelikeRewardOption> RequestedOptions;
+	RequestedOptions.Reserve(Identifiers.Num());
+	for (const FString& Identifier : Identifiers)
+	{
+		FRoguelikeRewardOption RequestedOption;
+		if (!TryBuildDebugRewardOption(Identifier, RequestedOption))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugApplySpecificRewards rejected unknown identifier '%s'."),
+				*Identifier);
+			return false;
+		}
+
+		if (RequestedOption.RewardType == ERoguelikeRewardType::Modifier
+			&& !CachedSkillComponent->CanApplyModifier(
+				RequestedOption.SkillID,
+				RequestedOption.ModifierID,
+				RequestedOption.StackDelta))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugApplySpecificRewards rejected illegal modifier '%s'."),
+				*Identifier);
+			return false;
+		}
+
+		RequestedOptions.Add(MoveTemp(RequestedOption));
+	}
+
+	for (const FRoguelikeRewardOption& RequestedOption : RequestedOptions)
+	{
+		if (!ApplyReward(RequestedOption))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugApplySpecificRewards failed while applying '%s'."),
+				*RequestedOption.Title.ToString());
+			return false;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Log,
+		TEXT("DebugApplySpecificRewards completed. Count=%d."),
+		RequestedOptions.Num());
+	return true;
+}
+
 void ARoguelikeRewardManager::FinishRewardSelection()
 {
 	if (!bRewardSelectionInProgress)

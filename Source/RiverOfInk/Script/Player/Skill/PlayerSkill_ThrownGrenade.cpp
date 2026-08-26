@@ -165,6 +165,7 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ExplosionsRemaining = ExplosionCount;
 	Velocity = InInitialVelocity;
 	DamageInstigator = InInstigator;
+	bGuidanceCorrectionLogged = false;
 	ProjectileSpec = FProjectileSpec();
 	ProjectileSpec.LifeTime = FuseTime;
 	ProjectileSpec.ProjectileSpeed = InInitialVelocity.Size();
@@ -287,6 +288,15 @@ void APlayerSkill_ThrownGrenade::UpdateTargetedArcGuidance(AEnemyBase* Target, f
 		DeltaTime,
 		ProjectileSpec.HomingTurnRate);
 	const FVector NewHorizontalVelocity = NewRotation.Vector() * HorizontalSpeed;
+	if (!bGuidanceCorrectionLogged && !NewHorizontalVelocity.Equals(HorizontalVelocity, 0.1f))
+	{
+		UE_LOG(LogSkill, Verbose,
+			TEXT("ThrownGrenade guidance steering: Target=%s DeltaYaw=%.1f Distance=%.1f."),
+			*Target->GetName(),
+			FMath::FindDeltaAngleDegrees(HorizontalVelocity.Rotation().Yaw, NewRotation.Yaw),
+			FMath::Sqrt(DistanceSquared));
+		bGuidanceCorrectionLogged = true;
+	}
 	Velocity.X = NewHorizontalVelocity.X;
 	Velocity.Y = NewHorizontalVelocity.Y;
 }
@@ -349,7 +359,12 @@ bool APlayerSkill_ThrownGrenade::SweepForImpact(
 		FCollisionShape::MakeSphere(CollisionRadius),
 		QueryParams);
 
-	if (bWorldHit && (!bEnemyHit || WorldHit.Time <= EnemyHit.Time))
+	// A grenade can be spawned exactly on the floor when the character capsule
+	// is standing on a low platform. Do not detonate on that initial overlap;
+	// the next sweep starts from the airborne position and still catches every
+	// real world collision afterwards. Enemy contact remains valid on spawn.
+	const bool bValidWorldHit = bWorldHit && !WorldHit.bStartPenetrating;
+	if (bValidWorldHit && (!bEnemyHit || WorldHit.Time <= EnemyHit.Time))
 	{
 		OutHit = WorldHit;
 	}

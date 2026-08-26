@@ -105,6 +105,7 @@ private:
 	FVector Velocity = FVector::ZeroVector;
 	float ElapsedTime = 0.0f;
 	bool bDetonated = false;
+	bool bGuidanceCorrectionLogged = false;
 	int32 ExplosionsRemaining = 1;
 	FTimerHandle ExplosionTimerHandle;
 };

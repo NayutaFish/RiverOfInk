@@ -221,7 +221,19 @@ public:
 
 	/** Horizontal turn rate for the Ink Grenade targeted-arc guidance mode. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float ThrownGrenadeGuidanceTurnRate = 150.0f;
+	float ThrownGrenadeGuidanceTurnRate = 300.0f;
+
+	/** Extra vertical launch speed used while a marked target is guiding an Ink Grenade. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeGuidanceLaunchVelocityZ = 600.0f;
+
+	/** Vertical offset applied to the ballistic end point relative to the marked target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (Units = "cm"))
+	float ThrownGrenadeGuidanceLandingHeightOffset = 0.0f;
+
+	/** Additional fuse time granted to a guided Ink Grenade so it can complete an off-axis arc. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0", Units = "s"))
+	float ThrownGrenadeGuidanceExtraFuseTime = 0.35f;
 
 	/** Delay before a targeted Ink Grenade begins correcting its landing direction. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Guidance", meta = (ClampMin = "0.0", Units = "s"))

@@ -36,6 +36,18 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugSelectSpecificReward(const FString& RewardIdentifier);
 
+	/** Development-only PIE helper: directly apply a comma-separated list of legal rewards. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugApplySpecificRewards(const FString& RewardIdentifiers);
+
+	/** Development-only PIE helper: apply the real homing mark to the nearest live enemy. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugMarkNearestHomingTarget(float Duration);
+
+	/** Development-only PIE helper: move the player near the nearest live enemy for homing validation. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugMoveNearNearestHomingTarget(float Distance = 500.0f);
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;
