@@ -222,6 +222,23 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 				FText::FromString(Description)));
 		}
 	};
+	const auto AddFormCandidate = [this, &Candidates](
+		EPlayerSkillID SkillID,
+		EPlayerSkillForm TargetForm,
+		const TCHAR* Title,
+		const TCHAR* Description)
+	{
+		if (CachedSkillComponent->CanApplySkillForm(SkillID, TargetForm))
+		{
+			Candidates.Add(MakeOption(
+				ERoguelikeRewardType::ChangeSkillForm,
+				SkillID,
+				ESkillUpgradeType::None,
+				TargetForm,
+				FText::FromString(Title),
+				FText::FromString(Description)));
+		}
+	};
 
 	// Q build candidates. Extra Explosion is gated by Ink Grenade inside
 	// CanApplyModifier, so it cannot be offered as a dead-end card.
@@ -251,14 +268,19 @@ TArray<FRoguelikeRewardOption> ARoguelikeRewardManager::GenerateRewardOptions()
 		TEXT("引墨"),
 		TEXT("右键命中的目标获得标记，Q 三枚弹幕在飞行中修正方向追踪该目标。"));
 
-	// E build candidates intentionally do not form an exclusive group. Twin
-	// Slash and Null Ring can coexist, so the resolver can produce two hits
-	// where both attack areas also erase enemy projectiles.
+	// E build candidates intentionally do not form an exclusive group. The
+	// TwoStageArc form can coexist with additive modifiers such as TwinSlash;
+	// the resolver applies those modifiers independently to each stage.
+	AddFormCandidate(
+		EPlayerSkillID::CircularSlash,
+		EPlayerSkillForm::TwoStageArc,
+		TEXT("两段弧斩"),
+		TEXT("E 分为两段近距离弧形攻击：第一段命中后立即解锁第二段；任一段未命中或第二段释放后进入冷却。"));
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::TwinSlash,
 		TEXT("双重环斩"),
-		TEXT("E 在短暂延迟后追加一次斜向斩击，造成 80% 伤害。"));
+		TEXT("E 每段增加一次独立伤害判定；每段攻击伤害倍率降为 65%，两段形态同样生效。"));
 	AddModifierCandidate(
 		EPlayerSkillID::CircularSlash,
 		ESkillModifierID::NullRing,
@@ -348,18 +370,37 @@ void ARoguelikeRewardManager::SelectReward(int32 OptionIndex)
 
 bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdentifier)
 {
-	if (RewardIdentifier.TrimStartAndEnd().IsEmpty())
+	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
+	if (Identifier.IsEmpty())
 	{
 		UE_LOG(LogRoguelike, Warning,
 			TEXT("DebugShowSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
 		return false;
 	}
 
-	if (bRewardShownForRoom || ActiveRewardWidget)
+	if (bRewardSelectionInProgress)
 	{
 		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugShowSpecificReward ignored: reward UI already shown for this room."));
+			TEXT("DebugShowSpecificReward ignored: reward selection feedback is still in progress."));
 		return false;
+	}
+
+	if (ActiveRewardWidget)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward ignored: a reward UI is already visible. Select or close it first."));
+		return false;
+	}
+
+	// The production flow deliberately allows one reward UI per room. This
+	// debug-only entry point is used repeatedly in TestMap_1, so reopen the
+	// test card after a previous selection has closed the widget. Do not reset
+	// the gate while a live widget or selection feedback is still active.
+	if (bRewardShownForRoom)
+	{
+		UE_LOG(LogRoguelike, Display,
+			TEXT("DebugShowSpecificReward reopening the debug card after the room reward was already consumed."));
+		bRewardShownForRoom = false;
 	}
 
 	if (!ResolvePlayer())
@@ -370,11 +411,11 @@ bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdent
 	}
 
 	FRoguelikeRewardOption DebugOption;
-	if (!TryBuildDebugRewardOption(RewardIdentifier, DebugOption))
+	if (!TryBuildDebugRewardOption(Identifier, DebugOption))
 	{
 		UE_LOG(LogRoguelike, Warning,
 			TEXT("DebugShowSpecificReward rejected unknown identifier '%s'."),
-			*RewardIdentifier);
+			*Identifier);
 		return false;
 	}
 
@@ -436,6 +477,18 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 		return false;
 	}
 
+	// TestMap_1 keeps the production once-per-room gate, but the debug command
+	// is intentionally reusable for build-matrix testing. After the previous
+	// selection feedback has closed and cleared the widget, reopen the gate so
+	// a second identifier (for example TwoStageArc followed by TwinSlash) can
+	// be applied in the same PIE session.
+	if (bRewardShownForRoom && !ActiveRewardWidget && !bRewardSelectionInProgress)
+	{
+		UE_LOG(LogRoguelike, Display,
+			TEXT("DebugSelectSpecificReward reopening the debug card after the room reward was already consumed."));
+		bRewardShownForRoom = false;
+	}
+
 	// If a debug card is already open, only select it when it is the exact
 	// requested modifier. This keeps the command deterministic and prevents a
 	// typo from silently selecting a different reward card.
@@ -445,7 +498,8 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 			&& CurrentRewardOptions[0].RewardType == RequestedOption.RewardType
 			&& CurrentRewardOptions[0].SkillID == RequestedOption.SkillID
 			&& CurrentRewardOptions[0].ModifierID == RequestedOption.ModifierID
-			&& CurrentRewardOptions[0].StackDelta == RequestedOption.StackDelta;
+			&& CurrentRewardOptions[0].StackDelta == RequestedOption.StackDelta
+			&& CurrentRewardOptions[0].TargetSkillForm == RequestedOption.TargetSkillForm;
 		if (!bMatchesVisibleOption)
 		{
 			UE_LOG(LogRoguelike, Warning,
@@ -819,7 +873,19 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 			ESkillModifierID::TwinSlash,
 			1,
 			FText::FromString(TEXT("双重环斩")),
-			FText::FromString(TEXT("E 在短暂延迟后追加一次斜向斩击，造成 80% 伤害。")));
+			FText::FromString(TEXT("E 每段增加一次独立伤害判定；每段攻击伤害倍率降为 65%，两段形态同样生效。")));
+		return true;
+	}
+
+	if (Matches({TEXT("TwoStageArc"), TEXT("E.TwoStageArc"), TEXT("两段弧斩"), TEXT("近战两段形态")}))
+	{
+		OutOption = MakeOption(
+			ERoguelikeRewardType::ChangeSkillForm,
+			EPlayerSkillID::CircularSlash,
+			ESkillUpgradeType::None,
+			EPlayerSkillForm::TwoStageArc,
+			FText::FromString(TEXT("两段弧斩")),
+			FText::FromString(TEXT("E 分为两段近距离弧形攻击：第一段命中后立即解锁第二段；任一段未命中或第二段释放后进入冷却。")));
 		return true;
 	}
 
@@ -882,7 +948,10 @@ void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option
 		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
 		break;
 	case ESkillModifierID::TwinSlash:
-		Option.BeforeValue = static_cast<float>(BeforeSpec.HitCount);
+		// TwinSlash adds one independent judgment to every release stage. Show
+		// that per-stage change instead of exposing the total cast hit count,
+		// which would incorrectly display 2 -> 3 for TwoStageArc.
+		Option.BeforeValue = static_cast<float>(BeforeSpec.JudgmentsPerStage);
 		Option.AfterValue = Option.BeforeValue + static_cast<float>(Option.StackDelta);
 		break;
 	case ESkillModifierID::NullRing:
@@ -913,6 +982,25 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 	if (Option.ShortDescription.IsEmpty())
 	{
 		Option.ShortDescription = Option.Description;
+	}
+
+	if (Option.RewardType == ERoguelikeRewardType::ChangeSkillForm)
+	{
+		Option.OldValue = FText::FromString(TEXT("环斩"));
+		Option.NewValue = Option.TargetSkillForm == EPlayerSkillForm::TwoStageArc
+			? FText::FromString(TEXT("两段弧斩"))
+			: FText::FromString(TEXT("新形态"));
+		Option.PrimaryValue = FText::FromString(FString::Printf(TEXT("%s → %s"),
+			*Option.OldValue.ToString(),
+			*Option.NewValue.ToString()));
+		Option.TargetSkill = FText::FromString(TEXT("E  环斩"));
+		Option.BuildType = FText::FromString(TEXT("形态构筑"));
+		// No dedicated flat art is required for this slice. Reuse the existing
+		// E skill icon until the reward-specific plane artwork is supplied.
+		Option.RewardIcon = LoadObject<UTexture2D>(
+			nullptr,
+			TEXT("/Game/RawContent/UI/Texture/Icon_CircularSlash.Icon_CircularSlash"));
+		return;
 	}
 
 	if (Option.RewardType == ERoguelikeRewardType::Currency)
@@ -970,8 +1058,8 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion.T_UI_Build_ExtraExplosion");
 		break;
 	case ESkillModifierID::TwinSlash:
-		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.BeforeValue));
-		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 段"), Option.AfterValue));
+		Option.OldValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.BeforeValue));
+		Option.NewValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.AfterValue));
 		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash");
 		break;
 	case ESkillModifierID::NullRing:

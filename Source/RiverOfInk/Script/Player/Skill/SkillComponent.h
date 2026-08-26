@@ -88,8 +88,32 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashCooldown() const;
 
+	/** Stage-2 input window after a valid TwoStageArc stage-1 hit. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
+	float GetTwoStageArcStage2InputWindow() const;
+
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
+
+	/** True while the first TwoStageArc release is waiting for a hit result. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool IsCircularSlashStage1Active() const;
+
+	/** True after stage 1 hit and before the stage 2 release is confirmed. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool IsCircularSlashStage2Ready() const;
+
+	/** Resolve the current runtime state used by gameplay HUDs. */
+	UFUNCTION(BlueprintPure, Category = "Skill|State")
+	EPlayerSkillRuntimeState GetSkillRuntimeState(EPlayerSkillID SkillID) const;
+
+	/**
+	 * Returns whether the E input may enter the skill state right now.
+	 * TwoStageArc keeps stage 1 input-locked while its hit window resolves,
+	 * while an unlocked stage 2 bypasses the normal cooldown gate.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool CanTriggerCircularSlashInput() const;
 
 	/** True when a target form belongs to this skill and differs from its current form. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
@@ -130,6 +154,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
 
+	/** Placeholder E-form VFX. Defaults to the player's left-click slash asset. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	TObjectPtr<UNiagaraSystem> CircularSlashVFX;
+
+	/** Color passed to common Niagara user color parameters; black distinguishes E from left click. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	FLinearColor CircularSlashVFXColor = FLinearColor::Black;
+
+	/** Primary Niagara user parameter used by the placeholder slash material. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
+	FName CircularSlashVFXColorParameter = TEXT("User.Color");
+
+	/** Forward offset matching the existing player left-click VFX placement. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.0", Units = "cm"))
+	float CircularSlashVFXForwardOffset = 60.0f;
+
+	/** Uniform scale for the placeholder E VFX. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.01"))
+	float CircularSlashVFXScale = 1.0f;
+
 	/** E 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Audio")
 	FString ECastSoundName = TEXT("CircleSlash");
@@ -146,13 +190,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.01"))
 	float CircularSlashLifeTime = 1.0f;
 
-	/** Twin Slash repeats the E hit after this short delay. */
+	/** Legacy timing value kept for serialized/editor compatibility; the current TwinSlash is simultaneous extra judgment. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "s"))
 	float TwinSlashDelay = 0.18f;
 
-	/** Damage multiplier used by Twin Slash's delayed second hit. */
+	/** Damage multiplier applied to every judgment when TwinSlash is present. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0"))
-	float TwinSlashSecondDamageMultiplier = 0.8f;
+	float TwinSlashSecondDamageMultiplier = 0.65f;
 
 	/** The delayed hit is placed in this yaw direction relative to the first cast. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
@@ -161,6 +205,22 @@ public:
 	/** Offset the delayed circular hit so the yaw angle has gameplay impact. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwinSlash", meta = (ClampMin = "0.0", Units = "cm"))
 	float TwinSlashSecondForwardOffset = 110.0f;
+
+	/** Base damage multiplier for each stage of the TwoStageArc form. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.0"))
+	float TwoStageArcStageDamageMultiplier = 0.8f;
+
+	/** Smaller radial reach used by each TwoStageArc judgment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "1.0", Units = "cm"))
+	float TwoStageArcRadius = 200.0f;
+
+	/** Horizontal half-angle of each TwoStageArc judgment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float TwoStageArcHalfAngle = 65.0f;
+
+	/** Time available to press E again after stage 1 confirms a hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.8", ClampMax = "3.0", UIMin = "0.8", UIMax = "3.0", Units = "s"))
+	float TwoStageArcStage2InputWindow = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
@@ -262,12 +322,20 @@ public:
 private:
 	bool CanCastSkill() const;
 	bool CastCircularSlash();
+	bool CastCircularSlashStage2();
+	bool SpawnCircularSlashSet(const FResolvedSkillSpec& Spec, int32 StageIndex, bool bListenForStage1Hit);
 	bool SpawnCircularSlash(
 		const FTransform& SpawnTransform,
 		float Radius,
 		float Damage,
-		bool bNullifyEnemyProjectiles);
-	void CastTwinSlashSecondHit();
+		bool bNullifyEnemyProjectiles,
+		bool bListenForStage1Hit,
+		bool bUseArcHitbox,
+		float ArcHalfAngle);
+	void SpawnCircularSlashVFX(const FTransform& SpawnTransform);
+	void HandleCircularSlashStage1Hit(AActor* HitActor);
+	void ResolveCircularSlashStage1Miss();
+	void ResolveCircularSlashStage2Timeout();
 	bool CastTripleProjectile();
 	bool CastThrownGrenade(const FResolvedSkillSpec& Spec);
 	bool SpawnProjectile(
@@ -290,8 +358,7 @@ private:
 
 	TMap<EPlayerSkillID, double> LastCastTimes;
 
-	FTimerHandle TwinSlashTimerHandle;
-	FVector PendingTwinSlashOrigin = FVector::ZeroVector;
-	FRotator PendingTwinSlashRotation = FRotator::ZeroRotator;
-	FResolvedSkillSpec PendingTwinSlashSpec;
+	FTimerHandle CircularSlashStage1ResolutionTimerHandle;
+	bool bCircularSlashStage1Active = false;
+	bool bCircularSlashStage2Ready = false;
 };
