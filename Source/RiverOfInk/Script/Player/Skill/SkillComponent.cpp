@@ -586,7 +586,7 @@ float USkillComponent::GetCircularSlashCooldown() const
 
 float USkillComponent::GetTwoStageArcStage2InputWindow() const
 {
-	return FMath::Clamp(TwoStageArcStage2InputWindow, 0.8f, 1.2f);
+	return FMath::Clamp(TwoStageArcStage2InputWindow, 0.8f, 3.0f);
 }
 
 EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const

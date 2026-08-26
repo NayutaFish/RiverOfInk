@@ -219,8 +219,8 @@ public:
 	float TwoStageArcHalfAngle = 65.0f;
 
 	/** Time available to press E again after stage 1 confirms a hit. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.8", ClampMax = "1.2", UIMin = "0.8", UIMax = "1.2", Units = "s"))
-	float TwoStageArcStage2InputWindow = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.8", ClampMax = "3.0", UIMin = "0.8", UIMax = "3.0", Units = "s"))
+	float TwoStageArcStage2InputWindow = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;

@@ -66,7 +66,7 @@ public:
 		float InCooldownRemaining,
 		float InCooldownDuration);
 
-	/** Keep this slot visible while Ready; used by the E stage preview. */
+	/** Keep this slot visible while Ready; the gameplay Q/E HUD leaves this false. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void SetKeepVisibleWhenReady(bool bInKeepVisibleWhenReady);
 
@@ -106,7 +106,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "1.0", ClampMax = "1.12"))
 	float Stage2ReadyScale = 1.04f;
 
-	/** E keeps its icon visible while Ready; Q keeps the existing hidden-ready behavior. */
+	/** When true, Ready remains visible. The gameplay Q/E HUD uses hidden-ready behavior. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	bool bKeepVisibleWhenReady = false;
 

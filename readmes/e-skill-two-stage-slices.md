@@ -81,7 +81,7 @@ E                         // 二段释放，日志应出现 stage 2 released
 
 ### Slice 5：输入、冷却与 HUD 状态
 
-已完成并通过冷编译及 `TestMap_1` PIE 验收。本切片不修改 Q 追踪逻辑，也不改变普通 E 的既有表现。
+已完成冷编译并完成 `TestMap_0`/`TestMap_1` PIE 验证。本切片不修改 Q 追踪逻辑；普通 E 的 Ready 显示规则与 Q 保持一致。
 
 运行时状态由 `USkillComponent::GetSkillRuntimeState()` 统一输出：
 
@@ -111,23 +111,25 @@ E 输入
 
 HUD 规则：
 
-- E 槽在 `Ready`、`Stage1Active`、`Stage2Ready` 和 `Cooldown` 均保持独立显示；
+- Q 与普通 E 在 `Ready` 状态隐藏，进入 `Cooldown` 后才显示原有冷却动画；
+- 获得 TwoStageArc 后，E 在尚未释放第一段时保持隐藏；
+- E 进入 `Stage1Active` 后显示，第一段命中进入 `Stage2Ready`；
 - `Stage2Ready` 使用轻微金色按键高亮和 `1.04` 倍缩放提示可释放第二段；
-- Q 槽仍保持原有 Ready 隐藏逻辑，不受 E 的显示状态影响；
-- HUD 通过 `UpdateRuntimeState()` 消费状态，不使用整个 Skill HUD 的统一 Visibility 控制。
+- 第二段释放或 Stage2InputWindow 超时后进入原有 `Cooldown`，冷却完成反馈结束后再次隐藏；
+- 每个 Skill Slot 独立消费 `UpdateRuntimeState()`，不使用整个 Skill HUD 的统一 Visibility 控制。
 
 PIE 验收结果（2026-08-26）：
 
-1. `DebugSelectSpecificReward TwoStageArc` 成功应用 E 两段形态，奖励 UI 关闭并恢复 Gameplay 输入；
-2. `DebugPrepareTwoStageArc 100` 后首段命中，日志确认 `stage 2 unlocked for 1.00s`，画面中 E 槽保持显示并进入高亮状态；
-3. 不再次输入时，日志确认 `stage 2 input window expired; E cooldown started`；
-4. 在窗口内快速再次输入 E，日志确认生成 `Stage=2/2` 并出现 `stage 2 released`，随后进入 E 冷却；
-5. Q 槽未被显示状态联动，Q 追踪相关源码未修改；
+1. 普通 E 在 Ready 状态隐藏，释放后显示冷却环，冷却与完成反馈结束后再次隐藏；
+2. `DebugSelectSpecificReward TwoStageArc` 成功应用 E 两段形态，奖励 UI 关闭并恢复 Gameplay 输入，未释放第一段时 E 槽保持隐藏；
+3. `DebugPrepareTwoStageArc 100` 后首段进入 `Stage1Active`，日志确认解析出的 `Stage2Window=2.00`，画面中 E 槽显示；
+4. 本次 PIE 的调试敌人未被弧形命中筛选确认，因此 `Stage2Ready` 高亮、2 秒超时和第二段释放未作为通过项记录；后续应在命中测试工具修正后补验；
+5. Q 槽未被 E 的显示状态联动，Q 追踪相关源码未修改；
 6. 首段命中、二段释放和窗口超时过程中未出现新的 `Ensure condition failed`、`Fatal` 或 `Unhandled`。
 
 可调接口：
 
-- `USkillComponent::TwoStageArcStage2InputWindow`：编辑器/蓝图可调，默认 `1.0s`，运行时限制 `0.8～1.2s`；
+- `USkillComponent::TwoStageArcStage2InputWindow`：编辑器/蓝图可调，默认 `2.0s`，运行时限制 `0.8～3.0s`；
 - `USkillComponent::GetSkillRuntimeState()`：供 HUD 或其他观察者读取 E 当前状态；
 - `EPlayerSkillRuntimeState`：以 BlueprintType 枚举暴露 `Ready`、`Stage1Active`、`Stage2Ready`、`Cooldown`。
 

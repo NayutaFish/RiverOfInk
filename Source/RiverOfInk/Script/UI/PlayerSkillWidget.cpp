@@ -195,7 +195,9 @@ void UPlayerSkillWidget::RefreshSlot(
 	const EPlayerSkillID SkillID = SkillSlot.SkillID == EPlayerSkillID::None ? FallbackSkillID : SkillSlot.SkillID;
 	SkillSlotWidget->InitializeSkillSlot(SkillID, FText::FromString(KeyLabel));
 	SkillSlotWidget->SetSkillIcon(LoadSkillIcon(SkillID));
-	SkillSlotWidget->SetKeepVisibleWhenReady(SkillID == EPlayerSkillID::CircularSlash);
+	// Q and the normal E both hide while Ready. TwoStageArc becomes visible
+	// only through its Stage1Active/Stage2Ready/Cooldown runtime states.
+	SkillSlotWidget->SetKeepVisibleWhenReady(false);
 }
 
 UTexture2D* UPlayerSkillWidget::LoadSkillIcon(EPlayerSkillID SkillID)
