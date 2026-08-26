@@ -12,6 +12,8 @@
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "Engine/OverlapResult.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/ProjectileTargetingComponent.h"
@@ -57,6 +59,13 @@ APlayerSkill_ThrownGrenade::APlayerSkill_ThrownGrenade()
 		VisualMesh->SetMaterial(0, SphereMaterialAsset.Object);
 	}
 
+	NiagaraEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("NiagaraEffect"));
+	NiagaraEffect->SetupAttachment(CollisionSphere);
+	NiagaraEffect->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	NiagaraEffect->SetGenerateOverlapEvents(false);
+	NiagaraEffect->SetCastShadow(false);
+	NiagaraEffect->SetAutoActivate(false);
+
 	DamageInfo.DamageType = EDamageType::Unified;
 	DamageInfo.bCanCauseDeath = true;
 	DamageInfo.bIsDirectDamage = true;
@@ -86,6 +95,40 @@ void APlayerSkill_ThrownGrenade::BeginPlay()
 			VisualMesh->SetMaterial(0, GrenadeMaterial);
 		}
 	}
+
+	if (ProjectileNiagaraSystem)
+	{
+		if (NiagaraEffect)
+		{
+			NiagaraEffect->SetAsset(ProjectileNiagaraSystem);
+			NiagaraEffect->SetRelativeLocation(FVector::ZeroVector);
+			NiagaraEffect->SetRelativeRotation(FRotator::ZeroRotator);
+			NiagaraEffect->SetRelativeScale3D(FVector::OneVector);
+			NiagaraEffect->Activate(true);
+		}
+
+		if (VisualMesh)
+		{
+			VisualMesh->SetVisibility(false, true);
+		}
+	}
+	else
+	{
+		if (NiagaraEffect)
+		{
+			NiagaraEffect->SetAsset(nullptr);
+			NiagaraEffect->DeactivateImmediate();
+		}
+
+		if (VisualMesh)
+		{
+			VisualMesh->SetVisibility(true, true);
+		}
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("ThrownGrenade visual: Niagara=%s."),
+		ProjectileNiagaraSystem ? TEXT("assigned") : TEXT("fallback blue sphere"));
 
 	UE_LOG(LogSkill, Log,
 		TEXT("ThrownGrenade launched: Fuse=%.2f Radius=%.0f Damage=%.1f Velocity=%s."),
@@ -152,7 +195,8 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	float InHomingMaxDistance,
 	float InHomingAcceptanceRadius,
 	EProjectileGuidanceMode InGuidanceMode,
-	FVector InGuidanceTargetOffset
+	FVector InGuidanceTargetOffset,
+	UNiagaraSystem* InNiagaraSystem
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -164,6 +208,7 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ExplosionDelay = FMath::Max(0.0f, InExplosionDelay);
 	ExplosionsRemaining = ExplosionCount;
 	Velocity = InInitialVelocity;
+	ProjectileNiagaraSystem = InNiagaraSystem;
 	DamageInstigator = InInstigator;
 	ProjectileSpec = FProjectileSpec();
 	ProjectileSpec.LifeTime = FuseTime;

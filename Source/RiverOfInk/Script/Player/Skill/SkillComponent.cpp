@@ -1169,7 +1169,8 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.HomingMaxDistance,
 			Spec.HomingAcceptanceRadius,
 			Spec.GuidanceMode,
-			GuidanceTargetOffset);
+			GuidanceTargetOffset,
+			ThrownGrenadeNiagaraSystem);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}

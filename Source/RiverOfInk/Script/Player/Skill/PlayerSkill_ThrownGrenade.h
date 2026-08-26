@@ -10,6 +10,8 @@
 
 class USphereComponent;
 class UStaticMeshComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
 class AEnemyBase;
 
 /**
@@ -47,7 +49,8 @@ public:
 		float InHomingMaxDistance = 2500.0f,
 		float InHomingAcceptanceRadius = 80.0f,
 		EProjectileGuidanceMode InGuidanceMode = EProjectileGuidanceMode::None,
-		FVector InGuidanceTargetOffset = FVector::ZeroVector
+		FVector InGuidanceTargetOffset = FVector::ZeroVector,
+		UNiagaraSystem* InNiagaraSystem = nullptr
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -56,6 +59,14 @@ public:
 	/** Blue-white placeholder mesh for the in-flight grenade. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Visual")
 	TObjectPtr<UStaticMeshComponent> VisualMesh;
+
+	/** 飞行中的雷电球 Niagara 特效；在编辑器里赋值后，将替代蓝色占位球体。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Visual")
+	TObjectPtr<UNiagaraSystem> ProjectileNiagaraSystem;
+
+	/** 已挂接在投射物上的 Niagara 特效组件。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Visual")
+	TObjectPtr<UNiagaraComponent> NiagaraEffect;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade", meta = (ClampMin = "0.05"))
 	float FuseTime = 0.9f;

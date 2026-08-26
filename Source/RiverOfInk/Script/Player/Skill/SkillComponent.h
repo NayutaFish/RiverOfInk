@@ -14,6 +14,7 @@ class AAttackAreaBase;
 class APlayerCharacter;
 class APlayerSkill_CircleDamageArea;
 class APlayerSkill_ThrownGrenade;
+class UNiagaraSystem;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
 DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
@@ -192,6 +193,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "1.0"))
 	float ThrownGrenadeCollisionRadius = 32.0f;
+
+	/** 雷电球飞行特效；在编辑器里赋值后，会传给每个抛出的雷电球。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Visual")
+	TObjectPtr<UNiagaraSystem> ThrownGrenadeNiagaraSystem;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile", meta = (ClampMin = "0.0"))
 	float TripleProjectileCooldown = 4.0f;
