@@ -584,6 +584,11 @@ float USkillComponent::GetCircularSlashCooldown() const
 	return FMath::Max(1.6f, CircularSlashCooldown - (UpgradeCount + ModifierCount) * 0.4f);
 }
 
+float USkillComponent::GetTwoStageArcStage2InputWindow() const
+{
+	return FMath::Clamp(TwoStageArcStage2InputWindow, 0.8f, 1.2f);
+}
+
 EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
 {
 	const int32 SlotIndex = FindSkillSlot(SkillID);
@@ -628,6 +633,27 @@ bool USkillComponent::IsCircularSlashStage1Active() const
 bool USkillComponent::IsCircularSlashStage2Ready() const
 {
 	return bCircularSlashStage2Ready;
+}
+
+EPlayerSkillRuntimeState USkillComponent::GetSkillRuntimeState(EPlayerSkillID SkillID) const
+{
+	if (SkillID == EPlayerSkillID::CircularSlash
+		&& GetSkillForm(SkillID) == EPlayerSkillForm::TwoStageArc)
+	{
+		if (bCircularSlashStage1Active)
+		{
+			return EPlayerSkillRuntimeState::Stage1Active;
+		}
+
+		if (bCircularSlashStage2Ready)
+		{
+			return EPlayerSkillRuntimeState::Stage2Ready;
+		}
+	}
+
+	return IsOnCooldown(SkillID, GetSkillCooldown(SkillID))
+		? EPlayerSkillRuntimeState::Cooldown
+		: EPlayerSkillRuntimeState::Ready;
 }
 
 bool USkillComponent::CanTriggerCircularSlashInput() const
@@ -717,6 +743,9 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.StageDamageMultiplier = bTwoStageArc
 			? FMath::Max(0.0f, TwoStageArcStageDamageMultiplier)
 			: 1.0f;
+		Spec.Stage2InputWindow = bTwoStageArc
+			? GetTwoStageArcStage2InputWindow()
+			: 0.0f;
 		Spec.bUseArcHitbox = bTwoStageArc;
 		Spec.ArcHalfAngle = bTwoStageArc
 			? FMath::Clamp(TwoStageArcHalfAngle, 0.0f, 180.0f)
@@ -742,7 +771,7 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Stages=%d JudgmentsPerStage=%d StageDamageMultiplier=%.2f Arc=%s HalfAngle=%.1f Radius=%.0f Cooldown=%.2f."),
+		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Stages=%d JudgmentsPerStage=%d StageDamageMultiplier=%.2f Stage2Window=%.2f Arc=%s HalfAngle=%.1f Radius=%.0f Cooldown=%.2f."),
 		*UEnum::GetValueAsString(SkillID),
 		*BuildModifierSummary(SkillID),
 		Spec.ProjectileCount,
@@ -752,6 +781,7 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.StageCount,
 		Spec.JudgmentsPerStage,
 		Spec.StageDamageMultiplier,
+		Spec.Stage2InputWindow,
 		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"),
 		Spec.ArcHalfAngle,
 		Spec.Radius,
@@ -1056,6 +1086,10 @@ bool USkillComponent::CastCircularSlashStage2()
 
 	bCircularSlashStage2Ready = false;
 	bCircularSlashStage1Active = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
+	}
 	UE_LOG(LogSkill, Display,
 		TEXT("TwoStageArc stage 2 released: DamageMultiplier=%.2f JudgmentsPerStage=%d."),
 		Spec.StageDamageMultiplier,
@@ -1237,9 +1271,19 @@ void USkillComponent::HandleCircularSlashStage1Hit(AActor* HitActor)
 	}
 	bCircularSlashStage1Active = false;
 	bCircularSlashStage2Ready = true;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			CircularSlashStage1ResolutionTimerHandle,
+			this,
+			&USkillComponent::ResolveCircularSlashStage2Timeout,
+			GetTwoStageArcStage2InputWindow(),
+			false);
+	}
 	UE_LOG(LogSkill, Display,
-		TEXT("TwoStageArc stage 1 hit %s; stage 2 unlocked."),
-		*GetNameSafe(HitActor));
+		TEXT("TwoStageArc stage 1 hit %s; stage 2 unlocked for %.2fs."),
+		*GetNameSafe(HitActor),
+		GetTwoStageArcStage2InputWindow());
 	OnSkillStateChanged.Broadcast();
 }
 
@@ -1258,6 +1302,23 @@ void USkillComponent::ResolveCircularSlashStage1Miss()
 		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
 	}
 	UE_LOG(LogSkill, Display, TEXT("TwoStageArc stage 1 missed; E cooldown started without stage 2."));
+	OnSkillStateChanged.Broadcast();
+}
+
+void USkillComponent::ResolveCircularSlashStage2Timeout()
+{
+	if (!bCircularSlashStage2Ready)
+	{
+		return;
+	}
+
+	bCircularSlashStage2Ready = false;
+	if (UWorld* World = GetWorld())
+	{
+		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
+	}
+	UE_LOG(LogSkill, Display,
+		TEXT("TwoStageArc stage 2 input window expired; E cooldown started."));
 	OnSkillStateChanged.Broadcast();
 }
 

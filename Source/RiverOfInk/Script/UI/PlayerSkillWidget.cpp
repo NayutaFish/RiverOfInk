@@ -171,7 +171,8 @@ void UPlayerSkillWidget::RefreshCooldowns()
 			return;
 		}
 
-		SkillSlotWidget->UpdateCooldown(
+		SkillSlotWidget->UpdateRuntimeState(
+			ObservedSkillComponent->GetSkillRuntimeState(SkillID),
 			ObservedSkillComponent->GetRemainingSkillCooldown(SkillID),
 			ObservedSkillComponent->GetSkillCooldown(SkillID));
 	};
@@ -194,6 +195,7 @@ void UPlayerSkillWidget::RefreshSlot(
 	const EPlayerSkillID SkillID = SkillSlot.SkillID == EPlayerSkillID::None ? FallbackSkillID : SkillSlot.SkillID;
 	SkillSlotWidget->InitializeSkillSlot(SkillID, FText::FromString(KeyLabel));
 	SkillSlotWidget->SetSkillIcon(LoadSkillIcon(SkillID));
+	SkillSlotWidget->SetKeepVisibleWhenReady(SkillID == EPlayerSkillID::CircularSlash);
 }
 
 UTexture2D* UPlayerSkillWidget::LoadSkillIcon(EPlayerSkillID SkillID)

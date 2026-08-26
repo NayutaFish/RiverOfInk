@@ -21,7 +21,10 @@ enum class EPlayerSkillHudSlotState : uint8
 	Hidden,
 	Cooldown,
 	ReadyFeedback,
-	FadeOut
+	FadeOut,
+	Ready,
+	Stage1Active,
+	Stage2Ready
 };
 
 /**
@@ -56,6 +59,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void UpdateCooldown(float InCooldownRemaining, float InCooldownDuration);
 
+	/** Consume the gameplay-owned state and keep cooldown timing out of the widget. */
+	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
+	void UpdateRuntimeState(
+		EPlayerSkillRuntimeState InRuntimeState,
+		float InCooldownRemaining,
+		float InCooldownDuration);
+
+	/** Keep this slot visible while Ready; used by the E stage preview. */
+	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
+	void SetKeepVisibleWhenReady(bool bInKeepVisibleWhenReady);
+
 	/** Finish the angular reveal and play the short ready/fade feedback. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Skill Slot")
 	void FinishCooldown();
@@ -85,6 +99,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor KeyTextColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	FLinearColor Stage2ReadyColor = FLinearColor(1.0f, 0.78f, 0.22f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "1.0", ClampMax = "1.12"))
+	float Stage2ReadyScale = 1.04f;
+
+	/** E keeps its icon visible while Ready; Q keeps the existing hidden-ready behavior. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	bool bKeepVisibleWhenReady = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "64.0", ClampMax = "160.0"))
 	/** The slot is deliberately larger than the icon so the ink reads as an outer ring. */
@@ -124,6 +148,7 @@ private:
 	void BuildDefaultWidgetTree();
 	void EnsureCooldownMaterial();
 	void ApplyCooldownRevealParameters();
+	void ApplyRuntimeState(EPlayerSkillRuntimeState InRuntimeState);
 	void SetVisualScale(float Scale);
 	void UpdateReadyFeedback();
 	void ClearFeedbackTimer();

@@ -88,6 +88,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashCooldown() const;
 
+	/** Stage-2 input window after a valid TwoStageArc stage-1 hit. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
+	float GetTwoStageArcStage2InputWindow() const;
+
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
 
@@ -98,6 +102,10 @@ public:
 	/** True after stage 1 hit and before the stage 2 release is confirmed. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	bool IsCircularSlashStage2Ready() const;
+
+	/** Resolve the current runtime state used by gameplay HUDs. */
+	UFUNCTION(BlueprintPure, Category = "Skill|State")
+	EPlayerSkillRuntimeState GetSkillRuntimeState(EPlayerSkillID SkillID) const;
 
 	/**
 	 * Returns whether the E input may enter the skill state right now.
@@ -210,6 +218,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
 	float TwoStageArcHalfAngle = 65.0f;
 
+	/** Time available to press E again after stage 1 confirms a hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc", meta = (ClampMin = "0.8", ClampMax = "1.2", UIMin = "0.8", UIMax = "1.2", Units = "s"))
+	float TwoStageArcStage2InputWindow = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile")
 	TSubclassOf<AAttackAreaBase> ProjectileAttackAreaClass;
 
@@ -319,6 +331,7 @@ private:
 	void SpawnCircularSlashVFX(const FTransform& SpawnTransform);
 	void HandleCircularSlashStage1Hit(AActor* HitActor);
 	void ResolveCircularSlashStage1Miss();
+	void ResolveCircularSlashStage2Timeout();
 	bool CastTripleProjectile();
 	bool CastThrownGrenade(const FResolvedSkillSpec& Spec);
 	bool SpawnProjectile(

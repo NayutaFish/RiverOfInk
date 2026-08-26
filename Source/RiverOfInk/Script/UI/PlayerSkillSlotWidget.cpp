@@ -133,6 +133,51 @@ void UPlayerSkillSlotWidget::UpdateCooldown(float InCooldownRemaining, float InC
 	}
 }
 
+void UPlayerSkillSlotWidget::UpdateRuntimeState(
+	EPlayerSkillRuntimeState InRuntimeState,
+	float InCooldownRemaining,
+	float InCooldownDuration)
+{
+	if (InRuntimeState == EPlayerSkillRuntimeState::Cooldown)
+	{
+		UpdateCooldown(InCooldownRemaining, InCooldownDuration);
+		return;
+	}
+
+	if (InRuntimeState == EPlayerSkillRuntimeState::Stage1Active
+		|| InRuntimeState == EPlayerSkillRuntimeState::Stage2Ready)
+	{
+		ApplyRuntimeState(InRuntimeState);
+		return;
+	}
+
+	// A zero remaining value is the transition edge from Cooldown to Ready.
+	// Let the existing pulse/fade feedback finish before exposing the stable
+	// Ready state, otherwise the pulse would be cancelled on the next tick.
+	if (bCooldownActive)
+	{
+		UpdateCooldown(0.0f, InCooldownDuration);
+		return;
+	}
+
+	if (SlotState == EPlayerSkillHudSlotState::ReadyFeedback
+		|| SlotState == EPlayerSkillHudSlotState::FadeOut)
+	{
+		return;
+	}
+
+	ApplyRuntimeState(EPlayerSkillRuntimeState::Ready);
+}
+
+void UPlayerSkillSlotWidget::SetKeepVisibleWhenReady(bool bInKeepVisibleWhenReady)
+{
+	bKeepVisibleWhenReady = bInKeepVisibleWhenReady;
+	if (SlotState == EPlayerSkillHudSlotState::Ready)
+	{
+		ApplyRuntimeState(EPlayerSkillRuntimeState::Ready);
+	}
+}
+
 void UPlayerSkillSlotWidget::FinishCooldown()
 {
 	if (!bCooldownActive)
@@ -175,6 +220,47 @@ void UPlayerSkillSlotWidget::SetCooldownRevealAngleRange(float InStartAngle, flo
 	CooldownRevealSweepAngle = FMath::Clamp(InSweepAngle, 0.0f, 360.0f);
 	EnsureCooldownMaterial();
 	ApplyCooldownRevealParameters();
+}
+
+void UPlayerSkillSlotWidget::ApplyRuntimeState(EPlayerSkillRuntimeState InRuntimeState)
+{
+	ClearFeedbackTimer();
+	bCooldownActive = false;
+	SetCooldownProgress(0.0f);
+
+	const bool bIsReady = InRuntimeState == EPlayerSkillRuntimeState::Ready;
+	const bool bShowSlot = !bIsReady || bKeepVisibleWhenReady;
+	SetVisibility(bShowSlot ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	SetRenderOpacity(bShowSlot ? 1.0f : 0.0f);
+
+	if (ImageSkillIcon)
+	{
+		ImageSkillIcon->SetColorAndOpacity(SkillIconColor);
+	}
+	if (TextKey)
+	{
+		TextKey->SetColorAndOpacity(
+			InRuntimeState == EPlayerSkillRuntimeState::Stage2Ready
+				? Stage2ReadyColor
+				: KeyTextColor);
+	}
+
+	switch (InRuntimeState)
+	{
+	case EPlayerSkillRuntimeState::Stage1Active:
+		SlotState = EPlayerSkillHudSlotState::Stage1Active;
+		SetVisualScale(1.0f);
+		break;
+	case EPlayerSkillRuntimeState::Stage2Ready:
+		SlotState = EPlayerSkillHudSlotState::Stage2Ready;
+		SetVisualScale(FMath::Max(1.0f, Stage2ReadyScale));
+		break;
+	case EPlayerSkillRuntimeState::Ready:
+	default:
+		SlotState = EPlayerSkillHudSlotState::Ready;
+		SetVisualScale(1.0f);
+		break;
+	}
 }
 
 void UPlayerSkillSlotWidget::BuildDefaultWidgetTree()
@@ -329,9 +415,11 @@ void UPlayerSkillSlotWidget::UpdateReadyFeedback()
 		if (FadeAlpha >= 1.0f)
 		{
 			ClearFeedbackTimer();
-			SlotState = EPlayerSkillHudSlotState::Hidden;
-			SetVisibility(ESlateVisibility::Collapsed);
-			SetRenderOpacity(0.0f);
+			SlotState = EPlayerSkillHudSlotState::Ready;
+			SetVisibility(bKeepVisibleWhenReady
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
+			SetRenderOpacity(bKeepVisibleWhenReady ? 1.0f : 0.0f);
 			SetVisualScale(1.0f);
 			SetCooldownProgress(0.0f);
 		}

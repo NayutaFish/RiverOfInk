@@ -31,6 +31,16 @@ enum class EPlayerSkillForm : uint8
 	TwoStageArc UMETA(DisplayName = "Two Stage Arc")
 };
 
+/** Runtime state exposed to gameplay HUDs without duplicating skill logic. */
+UENUM(BlueprintType)
+enum class EPlayerSkillRuntimeState : uint8
+{
+	Ready UMETA(DisplayName = "Ready"),
+	Stage1Active UMETA(DisplayName = "Stage 1 Active"),
+	Stage2Ready UMETA(DisplayName = "Stage 2 Ready"),
+	Cooldown UMETA(DisplayName = "Cooldown")
+};
+
 UENUM(BlueprintType)
 enum class ESkillUpgradeType : uint8
 {
@@ -171,6 +181,10 @@ struct FResolvedSkillSpec
 	/** Number of independent damage judgments in each release stage. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "1"))
 	int32 JudgmentsPerStage = 1;
+
+	/** Input window available after a valid TwoStageArc stage-1 hit. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E", meta = (ClampMin = "0.0", Units = "s"))
+	float Stage2InputWindow = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
 	float Radius = 0.0f;
