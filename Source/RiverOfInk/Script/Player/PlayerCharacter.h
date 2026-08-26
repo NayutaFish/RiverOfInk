@@ -15,6 +15,7 @@ class AAttackArea_PlayerAttack1;
 class AAttackArea_PlayerAttack2;
 class UStateBase;
 class UPlayerState_Attack1;
+class UPlayerCharacter_CommonAttackManage;
 class USkillComponent;
 class UHealthComponent;
 class UCombatEffectComponent;
@@ -55,11 +56,19 @@ public:
 
 	// 开始攻击
 	UFUNCTION(BlueprintCallable, Category = "Attack")
-	void BeginAttack(bool bRestartMontage = false);
+	void BeginAttack(UAnimMontage* InMontage = nullptr, bool bRestartMontage = false);
 
 	// 结束攻击
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void EndAttack();
+
+	/** 普攻请求；由普攻管理组件决定进入哪个 attackStage 的 PlayerState_Attack1。 */
+	UFUNCTION(BlueprintCallable, Category = "Player|Attack")
+	void RequestNormalAttack();
+
+	/** 切换到指定的具体状态组件（不同于按类名查找的 SwitchState）。 */
+	UFUNCTION(BlueprintCallable, Category = "State")
+	void SwitchToState(UStateBase* NewState);
 
 	UFUNCTION(BlueprintCallable, Category = "Player|Skill")
 	void TryCastSkill1();
@@ -133,6 +142,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State|Attack")
 	TObjectPtr<UPlayerState_Attack1> PlayerState_Attack1;
 
+	/** 第二段普通攻击状态组件（attackStage = 2）。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State|Attack")
+	TObjectPtr<UPlayerState_Attack1> PlayerState_Attack1_2;
+
+	/** 第三段普通攻击状态组件（attackStage = 3）。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State|Attack")
+	TObjectPtr<UPlayerState_Attack1> PlayerState_Attack1_3;
+
+	/** 普通攻击多段管理组件：负责按 attackStage 路由普攻。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State|Attack")
+	TObjectPtr<UPlayerCharacter_CommonAttackManage> CommonAttackManage;
+
 	/** 切换到指定状态（查找对应组件并切入） */
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void SwitchState(TSubclassOf<UStateBase> StateClass);
@@ -186,7 +207,7 @@ protected:
 // 攻击动画蒙太奇
 // 之后在 BP_Hikari 类默认值里指定为 AM_Hikari_Attack_01
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")
-TObjectPtr<UAnimMontage> AttackMontage;
+TObjectPtr<UAnimMontage> DefaultAttackMontage;
 
 	// 攻击被中断时的动画淡出时间
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack")

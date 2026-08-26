@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Attack1.h"
 #include "RiverOfInk.h"
@@ -12,6 +12,8 @@
 #include "Common/AttackAreaBase.h"
 #include "Player/Attack/AttackArea_PlayerAttack1.h"
 #include "Components/SphereComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Engine/World.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -24,6 +26,44 @@ UPlayerState_Attack1::UPlayerState_Attack1()
 	if (CommonSlashVFX.Succeeded())
 	{
 		AttackVFX = CommonSlashVFX.Object;
+	}
+}
+
+void UPlayerState_Attack1::SetAttackStageCount(int32 InCount)
+{
+	countAttackStageCount = FMath::Max(0, InCount);
+}
+
+void UPlayerState_Attack1::ResetAttackStageCount()
+{
+	countAttackStageCount = 0;
+}
+
+void UPlayerState_Attack1::PlayAttackMontage()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	if (!AttackMontage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayerState_Attack1: AttackMontage is not set (attackStage=%d)."), attackStage);
+		return;
+	}
+
+	// 由 PlayerCharacter::BeginAttack 统一处理动作状态、Montage 播放与结束回调。
+	Player->BeginAttack(AttackMontage);
+}
+
+void UPlayerState_Attack1::OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	// 保留实现：Montage 结束后的清理已由 PlayerCharacter::OnAttackMontageEnded 处理，
+	// 这里仅作为状态侧的兜底，避免状态退出时残留 Attacking 状态。
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+	{
+		Player->EndAttack();
 	}
 }
 
@@ -175,18 +215,11 @@ void UPlayerState_Attack1::OnMoveY(float Value)
 
 void UPlayerState_Attack1::OnLmb()
 {
-	if (ComboStep >= FMath::Clamp(MaxComboSteps, 1, 2))
-	{
-		return;
-	}
-
-	bAttackQueued = true;
-	AttackInputBufferAge = 0.0f;
-	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Player Attack1 input buffered: Step=%d Phase=%s Window=%.2f."),
-		ComboStep,
-		*UEnum::GetValueAsString(CurrentPhase),
-		AttackInputBufferWindow);
+// 多段普攻的段数切换由 PlayerCharacter 的普攻管理组件负责；
+// 状态内不再缓存连段输入，避免与 attackStage 组件切换逻辑冲突。
+UE_LOG(LogRiverOfInk, Verbose,
+TEXT("Player Attack1 stage %d ignores in-state LMB (manager owns combo routing)."),
+attackStage);
 }
 
 void UPlayerState_Attack1::OnSpace()
@@ -230,7 +263,7 @@ void UPlayerState_Attack1::StartAttackStep()
 	CurrentPhase = EPlayerAttackPhase::Startup;
 
 	// 第一段使用普通进入；二段强制重播当前攻击 Montage。
-	Player->BeginAttack(ComboStep > 1);
+	PlayAttackMontage();
 	UE_LOG(LogRiverOfInk, Log,
 		TEXT("Player Attack1 step started: Step=%d Startup=%.2f Active=%.2f Recovery=%.2f."),
 		ComboStep,
@@ -350,25 +383,9 @@ void UPlayerState_Attack1::FinishAttackStep()
 
 	ClearActiveAttackArea();
 
-	const bool bCanContinueCombo = ComboStep < FMath::Clamp(MaxComboSteps, 1, 2);
-	const bool bBufferedInWindow = bAttackQueued
-		&& AttackInputBufferAge >= 0.0f
-		&& AttackInputBufferAge <= AttackInputBufferWindow;
-	if (bCanContinueCombo && bBufferedInWindow)
-	{
-		++ComboStep;
-		bAttackQueued = false;
-		AttackInputBufferAge = -1.0f;
-		FaceAttackDirection();
-		StartAttackStep();
-		return;
-	}
-
-	bAttackQueued = false;
-	AttackInputBufferAge = -1.0f;
-	Player->EndAttack();
-	UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 finished: Steps=%d."), ComboStep);
-	SwitchAfterAttack();
+Player->EndAttack();
+UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 stage %d finished."), attackStage);
+SwitchAfterAttack();
 }
 
 void UPlayerState_Attack1::ClearActiveAttackArea()

@@ -7,6 +7,7 @@
 #include "PlayerState_Attack1.generated.h"
 
 class AAttackArea_PlayerAttack1;
+class UAnimMontage;
 class UNiagaraSystem;
 
 UENUM(BlueprintType)
@@ -27,6 +28,30 @@ class RIVEROFINK_API UPlayerState_Attack1 : public UStateBase
 	GENERATED_BODY()
 
 public:
+
+	/** 当前这个攻击状态对应的普攻段数（1 / 2 / 3 ...）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Stage")
+	int32 attackStage = 1;
+
+	/** 两次普攻之间的最大间隔；超过后攻击段数会重置回 1。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Stage", meta = (ClampMin = "0.0", Units = "s"))
+	float maxAttackInterval = 1.6f;
+
+	/** 该段普攻使用的攻击蒙太奇；在蓝图里手动拖拽赋值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Animation")
+	TObjectPtr<UAnimMontage> AttackMontage;
+
+	UFUNCTION(BlueprintPure, Category = "Attack|Stage")
+	int32 GetAttackStage() const { return attackStage; }
+
+	UFUNCTION(BlueprintPure, Category = "Attack|Stage")
+	int32 GetAttackStageCount() const { return countAttackStageCount; }
+
+	UFUNCTION(BlueprintCallable, Category = "Attack|Stage")
+	void SetAttackStageCount(int32 InCount);
+
+	UFUNCTION(BlueprintCallable, Category = "Attack|Stage")
+	void ResetAttackStageCount();
 	UPlayerState_Attack1();
 
 protected:
@@ -48,6 +73,9 @@ private:
 	void FaceAttackDirection();
 	void SpawnAttackVFX();
 	void SwitchAfterAttack();
+
+	void PlayAttackMontage();
+	void OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	/** 攻击前摇，结束后才生成伤害范围。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Timing", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
@@ -138,6 +166,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "AttackState|Runtime")
 	int32 ComboStep = 1;
+
+	/** 记录短时间内连续普攻的段数（由 PlayerCharacter 的普攻管理组件维护）。 */
+	int32 countAttackStageCount = 0;
 
 	bool bHadMoveInput = false;
 	bool bAttackQueued = false;

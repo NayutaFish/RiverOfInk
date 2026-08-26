@@ -25,6 +25,7 @@
 #include "Player/PlayerState/PlayerState_Idle.h"
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Player/PlayerState/PlayerState_Attack1.h"
+#include "Player/PlayerCharacter_CommonAttackManage.h"
 #include "Player/PlayerState/PlayerState_Attack2.h"
 #include "Player/PlayerState/PlayerState_Dash.h"
 #include "Player/PlayerState/PlayerState_HitBack.h"
@@ -72,7 +73,15 @@ APlayerCharacter::APlayerCharacter()
 	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
 	CreateDefaultSubobject<UPlayerState_Idle>(TEXT("PlayerState_Idle"));
 	CreateDefaultSubobject<UPlayerState_Move>(TEXT("PlayerState_Move"));
-	PlayerState_Attack1 = CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1"));
+	PlayerState_Attack1 = CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1_1"));
+	PlayerState_Attack1->attackStage = 1;
+
+	PlayerState_Attack1_2 = CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1_2"));
+	PlayerState_Attack1_2->attackStage = 2;
+
+	PlayerState_Attack1_3 = CreateDefaultSubobject<UPlayerState_Attack1>(TEXT("PlayerState_Attack1_3"));
+	PlayerState_Attack1_3->attackStage = 3;
+	CommonAttackManage = CreateDefaultSubobject<UPlayerCharacter_CommonAttackManage>(TEXT("CommonAttackManage"));
 	CreateDefaultSubobject<UPlayerState_Attack2>(TEXT("PlayerState_Attack2"));
 	CreateDefaultSubobject<UPlayerState_Dash>(TEXT("PlayerState_Dash"));
 	CreateDefaultSubobject<UPlayerState_HitBack>(TEXT("PlayerState_HitBack"));
@@ -540,6 +549,34 @@ void APlayerCharacter::SwitchState(TSubclassOf<UStateBase> StateClass)
 	CurrentState->OnEnter();
 }
 
+void APlayerCharacter::RequestNormalAttack()
+{
+	if (CommonAttackManage)
+	{
+		CommonAttackManage->RequestNormalAttack();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("APlayerCharacter::RequestNormalAttack called but CommonAttackManage is null."));
+	}
+}
+
+void APlayerCharacter::SwitchToState(UStateBase* NewState)
+{
+	if (!NewState || NewState == CurrentState)
+	{
+		return;
+	}
+
+	if (CurrentState)
+	{
+		CurrentState->OnExit();
+	}
+
+	CurrentState = NewState;
+	CurrentState->OnEnter();
+}
+
 // ── 状态 ──
 
 bool APlayerCharacter::CanMove() const
@@ -560,14 +597,15 @@ void APlayerCharacter::SetActionState(EHikariActionState NewState)
 
 // ── 攻击动画（左键） ──
 
-void APlayerCharacter::BeginAttack(bool bRestartMontage)
+void APlayerCharacter::BeginAttack(UAnimMontage* InMontage, bool bRestartMontage)
 {
 	if (!bRestartMontage && !CanStartAction()) return;
-	if (!AttackMontage)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AttackMontage is not set."));
-		return;
-	}
+UAnimMontage* MontageToPlay = InMontage ? InMontage : DefaultAttackMontage.Get();
+if (!MontageToPlay)
+{
+UE_LOG(LogTemp, Warning, TEXT("BeginAttack has no montage (InMontage and DefaultAttackMontage are both null)."));
+return;
+}
 
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (!AnimInstance) return;
@@ -575,14 +613,14 @@ void APlayerCharacter::BeginAttack(bool bRestartMontage)
 	// A buffered combo step reuses the current montage when no second montage
 	// asset exists. Stop the old section first so the second step restarts at
 	// the beginning instead of continuing from the previous frame.
-	if (bRestartMontage && AnimInstance->Montage_IsPlaying(AttackMontage))
+	if (bRestartMontage && AnimInstance->Montage_IsPlaying(MontageToPlay))
 	{
-		AnimInstance->Montage_Stop(0.0f, AttackMontage);
+		AnimInstance->Montage_Stop(0.0f, MontageToPlay);
 	}
 
 	SetActionState(EHikariActionState::Attacking);
 
-	float MontageLength = PlayAnimMontage(AttackMontage);
+	float MontageLength = PlayAnimMontage(MontageToPlay);
 	if (MontageLength <= 0.0f)
 	{
 		SetActionState(EHikariActionState::Normal);
@@ -591,7 +629,7 @@ void APlayerCharacter::BeginAttack(bool bRestartMontage)
 
 	FOnMontageEnded Delegate;
 	Delegate.BindUObject(this, &APlayerCharacter::OnAttackMontageEnded);
-	AnimInstance->Montage_SetEndDelegate(Delegate, AttackMontage);
+	AnimInstance->Montage_SetEndDelegate(Delegate, MontageToPlay);
 }
 
 void APlayerCharacter::EndAttack()
@@ -602,7 +640,7 @@ void APlayerCharacter::EndAttack()
 
 void APlayerCharacter::OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-	if (Montage != AttackMontage) return;
+
 	EndAttack();
 }
 
@@ -610,7 +648,7 @@ void APlayerCharacter::CancelAttack()
 {
 	if (CurrentActionState != EHikariActionState::Attacking) return;
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-		AnimInstance->Montage_Stop(AttackCancelBlendOutTime, AttackMontage);
+		AnimInstance->Montage_Stop(AttackCancelBlendOutTime);
 	SetActionState(EHikariActionState::Normal);
 	UE_LOG(LogTemp, Log, TEXT("Hikari Attack Canceled"));
 }
