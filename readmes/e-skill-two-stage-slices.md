@@ -79,6 +79,14 @@ E                         // 二段释放，日志应出现 stage 2 released
 - 二段释放后在同一输入窗口再次按 E 未生成第三段，确认普通 E 冷却门控生效；
 - 另行验证首段未命中时，日志出现 `stage 1 missed; E cooldown started without stage 2`。
 
+### VFX 修复：TwoStageArc 仅保留黑色左键占位
+
+`BP_PlayerSkill_CircleDamage` 仍保留旧 E 的 `NS_PlayerCircleSlash` 组件。此前该组件会与
+`SkillComponent` 生成的黑色 `NS_CommonSlash` 同时激活，造成蓝色原 E 环与黑色占位叠加。
+现在生成 `TwoStageArc` 伤害区域时会设置 `bUsePlaceholderVFXOnly`，在 BeginPlay 中停用并隐藏
+伤害区域蓝图上的 Niagara 组件；普通 E 仍保留原有蓝图 VFX。后续接入正式 E VFX 时，只需替换
+`CircularSlashVFX` 或移除旧蓝图组件，不改变伤害数据流。
+
 ## 美术接口
 
 SkillComponent 暴露以下可替换接口：

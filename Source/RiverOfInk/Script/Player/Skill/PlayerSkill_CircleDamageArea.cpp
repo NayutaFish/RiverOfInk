@@ -11,6 +11,7 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "NiagaraComponent.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -61,6 +62,11 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	if (VisualPlane)
 	{
 		VisualPlane->SetVisibility(false, true);
+	}
+
+	if (bUsePlaceholderVFXOnly)
+	{
+		SuppressLegacyNiagaraVFX();
 	}
 
 #if ENABLE_DRAW_DEBUG
@@ -129,6 +135,18 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	}
 }
 
+void APlayerSkill_CircleDamageArea::SetUsePlaceholderVFXOnly(bool bInUsePlaceholderVFXOnly)
+{
+	bUsePlaceholderVFXOnly = bInUsePlaceholderVFXOnly;
+
+	// Deferred-spawn callers set this before FinishSpawningActor. Keep the
+	// setter safe for Blueprint/debug callers that may invoke it afterwards.
+	if (bUsePlaceholderVFXOnly && HasActorBegunPlay())
+	{
+		SuppressLegacyNiagaraVFX();
+	}
+}
+
 void APlayerSkill_CircleDamageArea::Initialize(
 	float InRadius,
 	float InDamage,
@@ -152,6 +170,30 @@ void APlayerSkill_CircleDamageArea::Initialize(
 	{
 		SetLifeSpan(LifeTime);
 	}
+}
+
+void APlayerSkill_CircleDamageArea::SuppressLegacyNiagaraVFX()
+{
+	TArray<UNiagaraComponent*> NiagaraComponents;
+	GetComponents<UNiagaraComponent>(NiagaraComponents);
+
+	int32 SuppressedCount = 0;
+	for (UNiagaraComponent* NiagaraComponent : NiagaraComponents)
+	{
+		if (!IsValid(NiagaraComponent))
+		{
+			continue;
+		}
+
+		NiagaraComponent->DeactivateImmediate();
+		NiagaraComponent->SetVisibility(false, true);
+		++SuppressedCount;
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("TwoStageArc placeholder VFX: suppressed %d legacy Niagara component(s) on %s."),
+		SuppressedCount,
+		*GetNameSafe(this));
 }
 
 void APlayerSkill_CircleDamageArea::NullifyEnemyProjectilesInRange()

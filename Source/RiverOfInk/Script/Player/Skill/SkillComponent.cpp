@@ -1154,6 +1154,10 @@ bool USkillComponent::SpawnCircularSlash(
 		bNullifyEnemyProjectiles,
 		bUseArcHitbox,
 		ArcHalfAngle);
+	// BP_PlayerSkill_CircleDamage still carries the original E Niagara
+	// component. TwoStageArc deliberately uses only the black left-click
+	// placeholder spawned below, so suppress the legacy component on its area.
+	DamageArea->SetUsePlaceholderVFXOnly(bUseArcHitbox);
 	if (bListenForStage1Hit)
 	{
 		DamageArea->OnHitConfirmed.AddUObject(this, &USkillComponent::HandleCircularSlashStage1Hit);
