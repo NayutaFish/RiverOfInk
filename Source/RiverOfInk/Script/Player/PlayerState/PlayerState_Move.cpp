@@ -146,7 +146,7 @@ void UPlayerState_Move::OnE()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player || !Player->SkillComponent) return;
 
-	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::CircularSlash, Player->SkillComponent->GetCircularSlashCooldown()))
+	if (Player->SkillComponent->CanTriggerCircularSlashInput())
 	{
 		Player->SwitchState(UPlayerState_Skill2::StaticClass());
 	}

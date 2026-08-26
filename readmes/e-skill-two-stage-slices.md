@@ -52,6 +52,33 @@ E 输入
 
 已完成并通过冷编译及 PIE。E 两段复用左键 `NS_CommonSlash`；日志确认 Niagara 实例生成时使用 `(0,0,0,1)` 黑色接口、前向偏移 `60 cm`、缩放 `1.0`。
 
+### Slice 4：输入态机与完整二段链路验收
+
+已实现：
+
+- `CanTriggerCircularSlashInput()` 统一 E 输入门控；首段命中窗口内重复按 E 不再重新进入技能状态或重复播放技能动画；首段命中后，二段立即绕过普通冷却门控；
+- 新增 PIE 辅助命令 `DebugPrepareTwoStageArc [ForwardDistance]`，将最近存活敌人放到玩家正前方的近距离弧形判定内，用于稳定复现首段命中；
+- 保留首段未命中超时进入冷却、二段释放后进入冷却的原有规则，并通过 `OnSkillStateChanged` 同步状态观察者。
+
+PIE 验收顺序：
+
+```text
+DebugSelectSpecificReward TwoStageArc
+DebugPrepareTwoStageArc 140
+E                         // 首段命中，日志应出现 stage 2 unlocked
+E                         // 二段释放，日志应出现 stage 2 released
+```
+
+回归项：首段命中窗口内再次按 E 不生成第二个首段；首段未命中仍在 `CircularSlashLifeTime` 到期后进入正常 E 冷却；二段释放只写入一次 E 冷却时间戳。
+
+本次 PIE 验收结果（2026-08-26）：
+
+- `DebugSelectSpecificReward TwoStageArc` 成功应用 E 形态，奖励 UI 正常关闭并恢复 Gameplay 输入；
+- `DebugPrepareTwoStageArc 100` 配合固定玩家朝向后，第一段实际命中敌人，日志出现 `stage 1 hit ...; stage 2 unlocked`；
+- 紧接按 E 成功生成 `Stage=2/2`，日志出现 `stage 2 released: DamageMultiplier=0.80`；
+- 二段释放后在同一输入窗口再次按 E 未生成第三段，确认普通 E 冷却门控生效；
+- 另行验证首段未命中时，日志出现 `stage 1 missed; E cooldown started without stage 2`。
+
 ## 美术接口
 
 SkillComponent 暴露以下可替换接口：

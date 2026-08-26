@@ -630,6 +630,29 @@ bool USkillComponent::IsCircularSlashStage2Ready() const
 	return bCircularSlashStage2Ready;
 }
 
+bool USkillComponent::CanTriggerCircularSlashInput() const
+{
+	if (GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::TwoStageArc)
+	{
+		// Do not enter UPlayerState_Skill2 for a second time while stage 1 is
+		// still resolving. That would replay the skill animation even though
+		// TryCastSkillSlot correctly rejects the cast.
+		if (bCircularSlashStage1Active)
+		{
+			return false;
+		}
+
+		// A confirmed stage-1 hit unlocks stage 2 immediately, without waiting
+		// for the normal E cooldown gate.
+		if (bCircularSlashStage2Ready)
+		{
+			return true;
+		}
+	}
+
+	return !IsOnCooldown(EPlayerSkillID::CircularSlash, GetCircularSlashCooldown());
+}
+
 FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) const
 {
 	FResolvedSkillSpec Spec;

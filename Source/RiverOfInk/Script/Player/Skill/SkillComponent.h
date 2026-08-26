@@ -99,6 +99,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	bool IsCircularSlashStage2Ready() const;
 
+	/**
+	 * Returns whether the E input may enter the skill state right now.
+	 * TwoStageArc keeps stage 1 input-locked while its hit window resolves,
+	 * while an unlocked stage 2 bypasses the normal cooldown gate.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Skill|Form")
+	bool CanTriggerCircularSlashInput() const;
+
 	/** True when a target form belongs to this skill and differs from its current form. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	bool CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm NewForm) const;
