@@ -13,6 +13,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Engine/OverlapResult.h"
 #include "Player/PlayerCharacter.h"
@@ -196,7 +197,9 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	float InHomingAcceptanceRadius,
 	EProjectileGuidanceMode InGuidanceMode,
 	FVector InGuidanceTargetOffset,
-	UNiagaraSystem* InNiagaraSystem
+	UNiagaraSystem* InNiagaraSystem,
+	UNiagaraSystem* InImpactNiagaraSystem,
+	bool bInDrawDebugExplosion
 )
 {
 	FuseTime = FMath::Max(0.05f, InFuseTime);
@@ -209,6 +212,8 @@ void APlayerSkill_ThrownGrenade::Initialize(
 	ExplosionsRemaining = ExplosionCount;
 	Velocity = InInitialVelocity;
 	ProjectileNiagaraSystem = InNiagaraSystem;
+	bDrawDebugExplosion = bInDrawDebugExplosion;
+	ImpactNiagaraSystem = InImpactNiagaraSystem;
 	DamageInstigator = InInstigator;
 	ProjectileSpec = FProjectileSpec();
 	ProjectileSpec.LifeTime = FuseTime;
@@ -457,6 +462,15 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 	if (!GetWorld() || ExplosionsRemaining <= 0)
 	{
 		return;
+	}
+
+	if (ImpactNiagaraSystem)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			GetWorld(),
+			ImpactNiagaraSystem,
+			GetActorLocation(),
+			GetActorRotation());
 	}
 
 	const int32 ExplosionIndex = ExplosionCount - ExplosionsRemaining + 1;

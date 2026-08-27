@@ -50,7 +50,9 @@ public:
 		float InHomingAcceptanceRadius = 80.0f,
 		EProjectileGuidanceMode InGuidanceMode = EProjectileGuidanceMode::None,
 		FVector InGuidanceTargetOffset = FVector::ZeroVector,
-		UNiagaraSystem* InNiagaraSystem = nullptr
+		UNiagaraSystem* InNiagaraSystem = nullptr,
+		UNiagaraSystem* InImpactNiagaraSystem = nullptr,
+		bool bInDrawDebugExplosion = true
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -63,6 +65,10 @@ public:
 	/** 飞行中的雷电球 Niagara 特效；在编辑器里赋值后，将替代蓝色占位球体。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Visual")
 	TObjectPtr<UNiagaraSystem> ProjectileNiagaraSystem;
+
+	/** 雷电球落地/爆炸时生成的 Niagara 特效；在编辑器里赋值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Impact")
+	TObjectPtr<UNiagaraSystem> ImpactNiagaraSystem;
 
 	/** 已挂接在投射物上的 Niagara 特效组件。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Visual")

@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/Skill/SkillComponent.h"
 
@@ -1515,7 +1515,9 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.HomingAcceptanceRadius,
 			Spec.GuidanceMode,
 			GuidanceTargetOffset,
-			ThrownGrenadeNiagaraSystem);
+			ThrownGrenadeNiagaraSystem,
+			ThrownGrenadeImpactNiagaraSystem,
+			bDrawThrownGrenadeDebugExplosion);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}
