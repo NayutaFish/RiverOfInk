@@ -154,25 +154,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
 
-	/** Placeholder E-form VFX. Defaults to the player's left-click slash asset. */
+	/** Dedicated close-range diagonal ink slash for E. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
 	TObjectPtr<UNiagaraSystem> CircularSlashVFX;
 
-	/** Color passed to common Niagara user color parameters; black distinguishes E from left click. */
+	/** Core tint passed to the dedicated E Niagara system. The sheet and ink layers keep their authored user-variable palette. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
-	FLinearColor CircularSlashVFXColor = FLinearColor::Black;
+	FLinearColor CircularSlashVFXColor = FLinearColor(0.0f, 0.004f, 0.12f, 0.90f);
 
-	/** Primary Niagara user parameter used by the placeholder slash material. */
+	/** Primary Niagara user parameter for the sharp inner slash core. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
-	FName CircularSlashVFXColorParameter = TEXT("User.Color");
+	FName CircularSlashVFXColorParameter = TEXT("User.Color_Spiral1");
 
-	/** Forward offset matching the existing player left-click VFX placement. */
+	/** Keeps the inner edge close to the player while the authored arc extends outward. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.0", Units = "cm"))
-	float CircularSlashVFXForwardOffset = 60.0f;
+	float CircularSlashVFXForwardOffset = 12.0f;
 
-	/** Uniform scale for the placeholder E VFX. */
+	/** Uniform scale for the authored E arc. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.01"))
-	float CircularSlashVFXScale = 1.0f;
+	float CircularSlashVFXScale = 1.15f;
+
+	/** Fixed diagonal bias relative to the current attack direction until an animation socket trail is available. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
+	float CircularSlashVFXYawOffset = -35.0f;
 
 	/** E 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Audio")

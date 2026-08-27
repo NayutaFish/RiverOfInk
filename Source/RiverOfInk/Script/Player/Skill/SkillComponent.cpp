@@ -26,11 +26,11 @@ USkillComponent::USkillComponent()
 	ProjectileAttackAreaClass = AAttackAreaBase::StaticClass();
 	ThrownGrenadeClass = APlayerSkill_ThrownGrenade::StaticClass();
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CommonSlashVFX(
-		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/CommonSlash/NS/NS_CommonSlash.NS_CommonSlash"));
-	if (CommonSlashVFX.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> DiagonalSlashVFX(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerESlash/NS_E_DiagonalSlash.NS_E_DiagonalSlash"));
+	if (DiagonalSlashVFX.Succeeded())
 	{
-		CircularSlashVFX = CommonSlashVFX.Object;
+		CircularSlashVFX = DiagonalSlashVFX.Object;
 	}
 	InitializeSkillSlots();
 }
@@ -1196,10 +1196,11 @@ bool USkillComponent::SpawnCircularSlash(
 		bNullifyEnemyProjectiles,
 		bUseArcHitbox,
 		ArcHalfAngle);
-	// BP_PlayerSkill_CircleDamage still carries the original E Niagara
-	// component. TwoStageArc deliberately uses only the black left-click
-	// placeholder spawned below, so suppress the legacy component on its area.
-	DamageArea->SetUsePlaceholderVFXOnly(bUseArcHitbox);
+	// BP_PlayerSkill_CircleDamage still carries the original E Niagara component.
+	// Keep that legacy presentation hidden for every E form: the standalone
+	// NS_E_DiagonalSlash spawned below is the sole visual layer. This does not
+	// change the damage-area lifetime, overlap, or hit-processing behavior.
+	DamageArea->SetUsePlaceholderVFXOnly(true);
 	if (bListenForStage1Hit)
 	{
 		DamageArea->OnHitConfirmed.AddUObject(this, &USkillComponent::HandleCircularSlashStage1Hit);
@@ -1234,11 +1235,13 @@ void USkillComponent::SpawnCircularSlashVFX(const FTransform& SpawnTransform)
 	const FVector SpawnLocation = SpawnTransform.GetLocation()
 		+ Forward * FMath::Max(0.0f, CircularSlashVFXForwardOffset);
 	const float Scale = FMath::Max(0.01f, CircularSlashVFXScale);
+	FRotator SpawnRotation = SpawnTransform.Rotator();
+	SpawnRotation.Yaw += CircularSlashVFXYawOffset;
 	UNiagaraComponent* VFXComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		CircularSlashVFX,
 		SpawnLocation,
-		SpawnTransform.Rotator(),
+		SpawnRotation,
 		FVector(Scale));
 	if (!VFXComponent)
 	{
@@ -1246,16 +1249,12 @@ void USkillComponent::SpawnCircularSlashVFX(const FTransform& SpawnTransform)
 		return;
 	}
 
-	// The current left-click placeholder may expose one of several common user
-	// color names. Write the configured interface plus fallbacks so the eventual
-	// dedicated E Niagara system can keep the same black-color contract.
+	// The system authors its sheet, outer ink, and splatter from the player's
+	// established Niagara palette. Expose only the sharp core for optional tuning.
 	VFXComponent->SetVariableLinearColor(CircularSlashVFXColorParameter, CircularSlashVFXColor);
-	VFXComponent->SetVariableLinearColor(TEXT("User.Color"), CircularSlashVFXColor);
-	VFXComponent->SetVariableLinearColor(TEXT("User.BaseColor"), CircularSlashVFXColor);
-	VFXComponent->SetVariableLinearColor(TEXT("User.InkColor"), CircularSlashVFXColor);
 
 	UE_LOG(LogSkill, Log,
-		TEXT("CircularSlash VFX spawned: Asset=%s Color=(%.2f,%.2f,%.2f,%.2f) Offset=%.1f Scale=%.2f Parameter=%s."),
+		TEXT("CircularSlash VFX spawned: Asset=%s CoreColor=(%.2f,%.2f,%.2f,%.2f) Offset=%.1f Scale=%.2f YawOffset=%.1f Parameter=%s."),
 		*GetNameSafe(CircularSlashVFX),
 		CircularSlashVFXColor.R,
 		CircularSlashVFXColor.G,
@@ -1263,6 +1262,7 @@ void USkillComponent::SpawnCircularSlashVFX(const FTransform& SpawnTransform)
 		CircularSlashVFXColor.A,
 		CircularSlashVFXForwardOffset,
 		Scale,
+		CircularSlashVFXYawOffset,
 		*CircularSlashVFXColorParameter.ToString());
 }
 
