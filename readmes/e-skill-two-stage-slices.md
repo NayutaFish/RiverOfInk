@@ -23,7 +23,7 @@ RewardManager
                       ├─ bHasTwinSlash = TwinSlash 是否已应用
                       ├─ TwinSlashDamageMultiplier = 1.0 或 0.65
                       ├─ StageDamageMultiplier = 0.8
-                      ├─ Radius = TwoStageArcRadius
+                      ├─ Radius = TwoStageArcRadius + E Mechanic/RadiusUp growth (cap 440 cm)
                       └─ ArcHalfAngle = TwoStageArcHalfAngle
 
 E 输入
@@ -255,7 +255,7 @@ Slice 7 验收结果：
 兼容边界和注意事项：
 
 - `TwoStageArc` 是 E 的形态字段；`TwinSlash`、`NullRing` 是可叠加 Modifier。新奖励流程应先应用 `TwoStageArc`，再通过 `ApplyModifier()` 添加其他 E Modifier；旧的 `ApplySkillForm(CircularSlash, TwinSlash/NullRing)` 兼容入口会改写旧形态字段，可能覆盖 `TwoStageArc`，不应用于新的叠加奖励。
-- `RadiusUp` 可以通过规则校验并保存到 E，但当前 `ResolveSkillSpec()` 在识别 `TwoStageArc` 后会把半径改为 `TwoStageArcRadius`，因此它对 TwoStageArc 的弧形判定半径暂时没有实际效果；这是当前唯一需要特别标记的 E 构筑参数语义边界。
+- `RadiusUp` 对 TwoStageArc 生效：以 `TwoStageArcRadius` 为基础，沿用 E 的 Mechanic 等级和 `RadiusUp` 层数，每级增加 `60cm`，最终沿用 `440cm` 上限。它只扩大判定距离，不改变 `TwoStageArcHalfAngle`。
 - `CooldownDown` 对所有 E 构筑有效，影响普通 E 冷却和二段释放/超时后的冷却；它不改变 `TwoStageArcStage2InputWindow`，也不会人为增加二段解锁延迟。
 - `TwinSlashDelay`、`TwinSlashSecondYawOffset`、`TwinSlashSecondForwardOffset` 仍保留为序列化/编辑器兼容字段；当前运行时 TwinSlash 使用每阶段两次同时判定，不再按旧字段延迟生成第二次判定。
 - VFX 方面，`TwoStageArc` 使用专用正向/镜像刀光；叠加 `TwinSlash` 时每阶段的第二个判定使用镜像刀光，形成 X 形叠加；`NullRing` 只改变消弹逻辑，不额外替换刀光资源。

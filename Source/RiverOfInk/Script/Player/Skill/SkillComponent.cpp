@@ -605,7 +605,11 @@ float USkillComponent::GetCircularSlashRadius() const
 {
 	const int32 UpgradeCount = GetSkillUpgradeState(EPlayerSkillID::CircularSlash).MechanicLevel;
 	const int32 ModifierCount = GetModifierStack(EPlayerSkillID::CircularSlash, ESkillModifierID::RadiusUp);
-	return FMath::Min(440.0f, CircularSlashRadius + (UpgradeCount + ModifierCount) * 60.0f);
+	const bool bTwoStageArc = GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::TwoStageArc;
+	const float BaseRadius = bTwoStageArc ? TwoStageArcRadius : CircularSlashRadius;
+	return FMath::Min(
+		440.0f,
+		FMath::Max(1.0f, BaseRadius) + (UpgradeCount + ModifierCount) * 60.0f);
 }
 
 float USkillComponent::GetCircularSlashCooldown() const
@@ -808,10 +812,6 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.ArcHalfAngle = bTwoStageArc
 			? FMath::Clamp(TwoStageArcHalfAngle, 0.0f, 180.0f)
 			: 180.0f;
-		if (bTwoStageArc)
-		{
-			Spec.Radius = FMath::Max(1.0f, TwoStageArcRadius);
-		}
 		Spec.SecondHitDelay = TwinSlashDelay;
 		Spec.SecondHitAngle = TwinSlashSecondYawOffset;
 		Spec.SecondHitForwardOffset = TwinSlashSecondForwardOffset;

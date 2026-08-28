@@ -959,7 +959,9 @@ void ARoguelikeRewardManager::FillModifierPreview(FRoguelikeRewardOption& Option
 		Option.AfterValue = 1.0f;
 		break;
 	case ESkillModifierID::RadiusUp:
-		Option.BeforeValue = CachedSkillComponent->GetCircularSlashRadius();
+		// Use the resolved spec so TwoStageArc previews its own base radius
+		// instead of the normal CircularSlash radius.
+		Option.BeforeValue = BeforeSpec.Radius;
 		Option.AfterValue = FMath::Min(440.0f, Option.BeforeValue + 60.0f * static_cast<float>(Option.StackDelta));
 		break;
 	case ESkillModifierID::CooldownDown:

@@ -97,6 +97,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetTripleProjectileCooldown() const;
 
+	/** Effective E radius after the current form, mechanic upgrades, and RadiusUp modifiers. */
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetCircularSlashRadius() const;
 

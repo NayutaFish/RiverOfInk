@@ -154,7 +154,7 @@ E 二段当前配置来自 `USkillComponent`：`TwoStageArcStageDamageMultiplier
 
 `TwinSlashDelay = 0.18s`、`TwinSlashSecondYawOffset = 35°`、`TwinSlashSecondForwardOffset = 110cm` 仍保留用于序列化/编辑器兼容，但当前 TwinSlash 运行时是每阶段同时生成的第二个判定，不再使用这些旧字段制造延迟。
 
-代码层兼容统计：普通 E、普通 E + TwinSlash、普通 E + NullRing、普通 E + TwinSlash + NullRing，以及对应的四种 TwoStageArc 组合共 `8/8` 可解析。`RadiusUp` 虽能应用到 E，但当前 TwoStageArc 会优先使用 `TwoStageArcRadius`，所以该 Modifier 对两段弧形判定暂时没有实际半径增益；`CooldownDown` 则对所有 E 构筑有效。
+代码层兼容统计：普通 E、普通 E + TwinSlash、普通 E + NullRing、普通 E + TwinSlash + NullRing，以及对应的四种 TwoStageArc 组合共 `8/8` 可解析。`RadiusUp` 现在以 `TwoStageArcRadius` 为基础生效，沿用每层 `+60cm` 和 `440cm` 上限；`CooldownDown` 则对所有 E 构筑有效。
 
 ## 4. 旧版兼容边界
 
