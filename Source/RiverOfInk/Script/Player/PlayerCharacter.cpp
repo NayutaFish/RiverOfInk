@@ -524,6 +524,65 @@ void APlayerCharacter::TryCastSkillSlot3()
 	}
 }
 
+void APlayerCharacter::RequestSkill2Input()
+{
+	if (IsDead() || !SkillComponent)
+	{
+		return;
+	}
+
+	// A second press before the first hit is confirmed is a request for stage 2,
+	// not a new stage-1 cast. Keep exactly one request and wait for the hit event.
+	if (SkillComponent->IsCircularSlashStage1Active())
+	{
+		SkillComponent->BufferCircularSlashStage2Input();
+		return;
+	}
+
+	if (SkillComponent->IsCircularSlashStage2Ready())
+	{
+		SkillComponent->BufferCircularSlashStage2Input();
+		TryConsumeBufferedCircularSlashStage2Input();
+		return;
+	}
+
+	if (SkillComponent->CanTriggerCircularSlashInput())
+	{
+		SwitchState(UPlayerState_Skill2::StaticClass());
+	}
+}
+
+void APlayerCharacter::TryConsumeBufferedCircularSlashStage2Input()
+{
+	if (!SkillComponent
+		|| !SkillComponent->HasBufferedCircularSlashStage2Input()
+		|| !SkillComponent->IsCircularSlashStage2Ready())
+	{
+		return;
+	}
+
+	if (Cast<UPlayerState_Skill2>(CurrentState))
+	{
+		// Skill2 owns the input while its normal action gate is active. Release
+		// stage 2 now and restart the montage so the second slash is responsive.
+		if (SkillComponent->TryCastCircularSlashStage2Immediately())
+		{
+			BeginAttack(nullptr, true);
+		}
+		return;
+	}
+
+	// If another action is still playing, EndAttack() will retry this request as
+	// soon as the generic action gate returns to Normal.
+	if (!CanStartAction())
+	{
+		return;
+	}
+
+	// Skill2's OnEnter performs the normal stage-2 cast and consumes the buffer.
+	SwitchState(UPlayerState_Skill2::StaticClass());
+}
+
 // ── 状态机 ──
 
 void APlayerCharacter::SwitchState(TSubclassOf<UStateBase> StateClass)
@@ -636,6 +695,7 @@ void APlayerCharacter::EndAttack()
 {
 	if (CurrentActionState != EHikariActionState::Attacking) return;
 	SetActionState(EHikariActionState::Normal);
+	TryConsumeBufferedCircularSlashStage2Input();
 }
 
 void APlayerCharacter::OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)

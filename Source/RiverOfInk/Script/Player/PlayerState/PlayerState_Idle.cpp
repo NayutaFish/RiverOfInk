@@ -108,8 +108,5 @@ void UPlayerState_Idle::OnE()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player || !Player->SkillComponent) return;
 
-	if (Player->SkillComponent->CanTriggerCircularSlashInput())
-	{
-		Player->SwitchState(UPlayerState_Skill2::StaticClass());
-	}
+	Player->RequestSkill2Input();
 }

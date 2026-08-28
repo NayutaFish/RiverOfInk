@@ -40,6 +40,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	void TryCastSkillSlot(int32 SlotIndex);
 
+	/**
+	 * Remember a second E press during the current TwoStageArc transaction.
+	 * The request is consumed only after stage 1 confirms a hit.
+	 */
+	void BufferCircularSlashStage2Input();
+
+	/** True when a buffered TwoStageArc stage-2 request is waiting to be consumed. */
+	bool HasBufferedCircularSlashStage2Input() const;
+
+	/**
+	 * Release stage 2 while the Skill2 state still owns the input. This bypasses
+	 * only the generic action-state gate; death and sprint restrictions remain.
+	 */
+	bool TryCastCircularSlashStage2Immediately();
+
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	bool HasSkill(EPlayerSkillID SkillID) const;
 
@@ -154,25 +169,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
 
-	/** Placeholder E-form VFX. Defaults to the player's left-click slash asset. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
-	TObjectPtr<UNiagaraSystem> CircularSlashVFX;
+	/** Dedicated crescent blade VFX used only by the TwoStageArc form. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX")
+	TObjectPtr<UNiagaraSystem> TwoStageArcVFX;
 
-	/** Color passed to common Niagara user color parameters; black distinguishes E from left click. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
-	FLinearColor CircularSlashVFXColor = FLinearColor::Black;
+	/** UV-mirrored crescent used for the opposite slash direction and TwinSlash overlay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX")
+	TObjectPtr<UNiagaraSystem> TwoStageArcMirrorVFX;
 
-	/** Primary Niagara user parameter used by the placeholder slash material. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX")
-	FName CircularSlashVFXColorParameter = TEXT("User.Color");
+	/** Uniform scale for the authored TwoStageArc crescent sprite. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (ClampMin = "0.01"))
+	float TwoStageArcVFXScale = 0.9f;
 
-	/** Forward offset matching the existing player left-click VFX placement. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.0", Units = "cm"))
-	float CircularSlashVFXForwardOffset = 60.0f;
+	/** Vertical lift that keeps the translucent crescent above the floor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (Units = "cm"))
+	float TwoStageArcVFXHeightOffset = 8.0f;
 
-	/** Uniform scale for the placeholder E VFX. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|VFX", meta = (ClampMin = "0.01"))
-	float CircularSlashVFXScale = 1.0f;
+	/** Offset along the player's horizontal facing direction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (Units = "cm"))
+	float TwoStageArcVFXForwardOffset = 0.0f;
+
+	/** Offset along the player's horizontal right direction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (Units = "cm"))
+	float TwoStageArcVFXRightOffset = 0.0f;
+
+	/** Half-angle between the normal and mirrored blades when they form the TwinSlash X. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (ClampMin = "-180.0", ClampMax = "180.0", Units = "deg"))
+	float TwoStageArcVFXYawOffset = 45.0f;
+
+	/** Tilt of the crescent plane relative to the ground; shared by normal and mirrored VFX. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (ClampMin = "-90.0", ClampMax = "90.0", Units = "deg"))
+	float TwoStageArcVFXGroundAngle = 25.0f;
 
 	/** E 技能施放音效名称（对应 AudioDataAsset 配置表中的键名，留空则跳过） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Audio")
@@ -328,19 +355,28 @@ public:
 	bool IsOnCooldown(EPlayerSkillID SkillID, float Cooldown) const;
 
 private:
-	bool CanCastSkill() const;
+	bool CanCastSkill(bool bIgnoreActionState = false) const;
+	bool TryCastSkillSlotInternal(int32 SlotIndex, bool bIgnoreActionState);
 	bool CastCircularSlash();
 	bool CastCircularSlashStage2();
 	bool SpawnCircularSlashSet(const FResolvedSkillSpec& Spec, int32 StageIndex, bool bListenForStage1Hit);
 	bool SpawnCircularSlash(
 		const FTransform& SpawnTransform,
+		const FTransform& VFXSpawnTransform,
 		float Radius,
 		float Damage,
 		bool bNullifyEnemyProjectiles,
 		bool bListenForStage1Hit,
 		bool bUseArcHitbox,
-		float ArcHalfAngle);
-	void SpawnCircularSlashVFX(const FTransform& SpawnTransform);
+		float ArcHalfAngle,
+		int32 StageIndex,
+		int32 JudgmentIndex,
+		bool bHasTwinSlash);
+	void SpawnTwoStageArcVFX(
+		const FTransform& SpawnTransform,
+		int32 StageIndex,
+		int32 JudgmentIndex,
+		bool bHasTwinSlash);
 	void HandleCircularSlashStage1Hit(AActor* HitActor);
 	void ResolveCircularSlashStage1Miss();
 	void ResolveCircularSlashStage2Timeout();
@@ -369,4 +405,5 @@ private:
 	FTimerHandle CircularSlashStage1ResolutionTimerHandle;
 	bool bCircularSlashStage1Active = false;
 	bool bCircularSlashStage2Ready = false;
+	bool bCircularSlashStage2InputBuffered = false;
 };

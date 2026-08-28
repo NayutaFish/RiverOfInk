@@ -20,6 +20,7 @@ protected:
 private:
 	void OnMoveX(float Value);
 	void OnMoveY(float Value);
+	void OnE();
 	void OnSkillTimer();
 
 	bool bHadMoveInput = false;

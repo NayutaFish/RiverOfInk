@@ -31,14 +31,9 @@ public:
 		bool bInUseArcHitbox = false,
 		float InArcHalfAngle = 180.0f);
 
-	/**
-	 * Enables the TwoStageArc placeholder presentation. The damage-area
-	 * Blueprint still contains the legacy E Niagara component, so this flag
-	 * suppresses that component and leaves the standalone black slash VFX as
-	 * the only skill presentation.
-	 */
+	/** Keep the original Blueprint circular slash VFX for the normal E path. */
 	UFUNCTION(BlueprintCallable, Category = "SkillArea|Visual")
-	void SetUsePlaceholderVFXOnly(bool bInUsePlaceholderVFXOnly);
+	void SetUseLegacyCircularSlashVFX(bool bInUseLegacyCircularSlashVFX);
 
 	/** Native notification emitted once for each enemy damaged by this area. */
 	FOnPlayerSkillAreaHitConfirmed OnHitConfirmed;
@@ -91,9 +86,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Arc", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
 	float ArcHalfAngle = 180.0f;
 
-	/** True when legacy Blueprint VFX must be hidden for the placeholder form. */
+	/** False only when a dedicated skill form supplies its own VFX. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Visual")
-	bool bUsePlaceholderVFXOnly = false;
+	bool bUseLegacyCircularSlashVFX = true;
 
 protected:
 	virtual void BeginPlay() override;
@@ -109,7 +104,7 @@ protected:
 
 private:
 	void UpdateVisualPlaneScale();
-	void SuppressLegacyNiagaraVFX();
+	void SuppressLegacyCircularSlashVFX();
 	void TryDamageActor(AActor* OtherActor);
 	void NullifyEnemyProjectilesInRange();
 
