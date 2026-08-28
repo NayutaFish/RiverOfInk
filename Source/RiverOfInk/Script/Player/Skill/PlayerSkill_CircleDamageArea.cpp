@@ -64,9 +64,9 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 		VisualPlane->SetVisibility(false, true);
 	}
 
-	if (bUsePlaceholderVFXOnly)
+	if (!bUseLegacyCircularSlashVFX)
 	{
-		SuppressLegacyNiagaraVFX();
+		SuppressLegacyCircularSlashVFX();
 	}
 
 #if ENABLE_DRAW_DEBUG
@@ -135,15 +135,15 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	}
 }
 
-void APlayerSkill_CircleDamageArea::SetUsePlaceholderVFXOnly(bool bInUsePlaceholderVFXOnly)
+void APlayerSkill_CircleDamageArea::SetUseLegacyCircularSlashVFX(bool bInUseLegacyCircularSlashVFX)
 {
-	bUsePlaceholderVFXOnly = bInUsePlaceholderVFXOnly;
+	bUseLegacyCircularSlashVFX = bInUseLegacyCircularSlashVFX;
 
 	// Deferred-spawn callers set this before FinishSpawningActor. Keep the
-	// setter safe for Blueprint/debug callers that may invoke it afterwards.
-	if (bUsePlaceholderVFXOnly && HasActorBegunPlay())
+	// setter safe for Blueprint/debug callers that invoke it afterwards.
+	if (!bUseLegacyCircularSlashVFX && HasActorBegunPlay())
 	{
-		SuppressLegacyNiagaraVFX();
+		SuppressLegacyCircularSlashVFX();
 	}
 }
 
@@ -172,7 +172,7 @@ void APlayerSkill_CircleDamageArea::Initialize(
 	}
 }
 
-void APlayerSkill_CircleDamageArea::SuppressLegacyNiagaraVFX()
+void APlayerSkill_CircleDamageArea::SuppressLegacyCircularSlashVFX()
 {
 	TArray<UNiagaraComponent*> NiagaraComponents;
 	GetComponents<UNiagaraComponent>(NiagaraComponents);
@@ -191,7 +191,7 @@ void APlayerSkill_CircleDamageArea::SuppressLegacyNiagaraVFX()
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("TwoStageArc placeholder VFX: suppressed %d legacy Niagara component(s) on %s."),
+		TEXT("CircularSlash legacy VFX suppressed: Count=%d Area=%s."),
 		SuppressedCount,
 		*GetNameSafe(this));
 }

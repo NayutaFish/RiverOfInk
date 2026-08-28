@@ -7,7 +7,6 @@
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
-#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
@@ -26,11 +25,17 @@ USkillComponent::USkillComponent()
 	ProjectileAttackAreaClass = AAttackAreaBase::StaticClass();
 	ThrownGrenadeClass = APlayerSkill_ThrownGrenade::StaticClass();
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> DiagonalSlashVFX(
-		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerESlash/NS_E_DiagonalSlash.NS_E_DiagonalSlash"));
-	if (DiagonalSlashVFX.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TwoStageArcVFXAsset(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerTwoStageArc/NS/NS_TwoStageArc_Animated.NS_TwoStageArc_Animated"));
+	if (TwoStageArcVFXAsset.Succeeded())
 	{
-		CircularSlashVFX = DiagonalSlashVFX.Object;
+		TwoStageArcVFX = TwoStageArcVFXAsset.Object;
+	}
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TwoStageArcMirrorVFXAsset(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerTwoStageArc/NS/NS_TwoStageArc_Animated_Mirror.NS_TwoStageArc_Animated_Mirror"));
+	if (TwoStageArcMirrorVFXAsset.Succeeded())
+	{
+		TwoStageArcMirrorVFX = TwoStageArcMirrorVFXAsset.Object;
 	}
 	InitializeSkillSlots();
 }
@@ -1137,14 +1142,22 @@ bool USkillComponent::SpawnCircularSlashSet(
 		}
 
 		const FTransform JudgmentTransform(JudgmentRotation, JudgmentLocation);
+		const FTransform VisualTransform =
+			Spec.bUseArcHitbox && Spec.bHasTwinSlash
+			? FTransform(BaseRotation, Origin)
+			: JudgmentTransform;
 		if (!SpawnCircularSlash(
 			JudgmentTransform,
+			VisualTransform,
 			Spec.Radius,
 			JudgmentDamage,
 			Spec.bNullifyEnemyProjectiles,
 			bListenForStage1Hit,
 			Spec.bUseArcHitbox,
-			Spec.ArcHalfAngle))
+			Spec.ArcHalfAngle,
+			StageIndex,
+			JudgmentIndex,
+			Spec.bHasTwinSlash))
 		{
 			return false;
 		}
@@ -1164,12 +1177,16 @@ bool USkillComponent::SpawnCircularSlashSet(
 
 bool USkillComponent::SpawnCircularSlash(
 	const FTransform& SpawnTransform,
+	const FTransform& VFXSpawnTransform,
 	float Radius,
 	float Damage,
 	bool bNullifyEnemyProjectiles,
 	bool bListenForStage1Hit,
 	bool bUseArcHitbox,
-	float ArcHalfAngle)
+	float ArcHalfAngle,
+	int32 StageIndex,
+	int32 JudgmentIndex,
+	bool bHasTwinSlash)
 {
 	UWorld* World = GetWorld();
 	if (!World || !CircularSlashAreaClass || !OwnerCharacter)
@@ -1196,11 +1213,10 @@ bool USkillComponent::SpawnCircularSlash(
 		bNullifyEnemyProjectiles,
 		bUseArcHitbox,
 		ArcHalfAngle);
-	// BP_PlayerSkill_CircleDamage still carries the original E Niagara component.
-	// Keep that legacy presentation hidden for every E form: the standalone
-	// NS_E_DiagonalSlash spawned below is the sole visual layer. This does not
-	// change the damage-area lifetime, overlap, or hit-processing behavior.
-	DamageArea->SetUsePlaceholderVFXOnly(true);
+	// The normal E keeps the original BP circular slash VFX. TwoStageArc owns
+	// its presentation and therefore hides only the legacy component on this
+	// arc damage area before the deferred actor begins play.
+	DamageArea->SetUseLegacyCircularSlashVFX(!bUseArcHitbox);
 	if (bListenForStage1Hit)
 	{
 		DamageArea->OnHitConfirmed.AddUObject(this, &USkillComponent::HandleCircularSlashStage1Hit);
@@ -1214,56 +1230,81 @@ bool USkillComponent::SpawnCircularSlash(
 			Radius);
 	}
 	UGameplayStatics::FinishSpawningActor(DamageArea, SpawnTransform);
-	SpawnCircularSlashVFX(SpawnTransform);
+	if (bUseArcHitbox)
+	{
+		SpawnTwoStageArcVFX(VFXSpawnTransform, StageIndex, JudgmentIndex, bHasTwinSlash);
+	}
 	return true;
 }
 
-void USkillComponent::SpawnCircularSlashVFX(const FTransform& SpawnTransform)
+void USkillComponent::SpawnTwoStageArcVFX(
+	const FTransform& SpawnTransform,
+	int32 StageIndex,
+	int32 JudgmentIndex,
+	bool bHasTwinSlash)
 {
 	UWorld* World = GetWorld();
-	if (!World || !CircularSlashVFX || !OwnerCharacter)
+	const bool bMirrorVFX = bHasTwinSlash ? JudgmentIndex > 0 : StageIndex > 0;
+	UNiagaraSystem* SelectedVFX = bMirrorVFX && TwoStageArcMirrorVFX
+		? TwoStageArcMirrorVFX
+		: TwoStageArcVFX;
+	if (!World || !SelectedVFX || !OwnerCharacter)
 	{
-		UE_LOG(LogSkill, Verbose,
-			TEXT("CircularSlash VFX skipped: World=%s Asset=%s Owner=%s."),
+		UE_LOG(LogSkill, Warning,
+			TEXT("TwoStageArc VFX skipped: World=%s Asset=%s Mirror=%s Owner=%s."),
 			World ? TEXT("valid") : TEXT("invalid"),
-			*GetNameSafe(CircularSlashVFX),
+			*GetNameSafe(SelectedVFX),
+			bMirrorVFX ? TEXT("true") : TEXT("false"),
 			*GetNameSafe(OwnerCharacter));
 		return;
 	}
 
-	const FVector Forward = OwnerCharacter->GetActorForwardVector();
-	const FVector SpawnLocation = SpawnTransform.GetLocation()
-		+ Forward * FMath::Max(0.0f, CircularSlashVFXForwardOffset);
-	const float Scale = FMath::Max(0.01f, CircularSlashVFXScale);
 	FRotator SpawnRotation = SpawnTransform.Rotator();
-	SpawnRotation.Yaw += CircularSlashVFXYawOffset;
-	UNiagaraComponent* VFXComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+	const float SweepYaw = (bMirrorVFX ? -1.0f : 1.0f)
+		* FMath::Clamp(TwoStageArcVFXYawOffset, -180.0f, 180.0f);
+	SpawnRotation.Yaw += SweepYaw;
+	const float GroundAngle = FMath::Clamp(TwoStageArcVFXGroundAngle, -90.0f, 90.0f);
+	SpawnRotation.Pitch += GroundAngle;
+
+	FVector Forward = OwnerCharacter->GetActorForwardVector();
+	Forward.Z = 0.0f;
+	if (!Forward.Normalize())
+	{
+		Forward = FVector::ForwardVector;
+	}
+
+	FVector Right = OwnerCharacter->GetActorRightVector();
+	Right.Z = 0.0f;
+	if (!Right.Normalize())
+	{
+		Right = FVector::RightVector;
+	}
+
+	const FVector SpawnLocation = SpawnTransform.GetLocation()
+		+ Forward * TwoStageArcVFXForwardOffset
+		+ Right * TwoStageArcVFXRightOffset
+		+ FVector::UpVector * TwoStageArcVFXHeightOffset;
+	const float Scale = FMath::Max(0.01f, TwoStageArcVFXScale);
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
-		CircularSlashVFX,
+		SelectedVFX,
 		SpawnLocation,
 		SpawnRotation,
 		FVector(Scale));
-	if (!VFXComponent)
-	{
-		UE_LOG(LogSkill, Warning, TEXT("CircularSlash VFX failed to spawn: Asset=%s."), *GetNameSafe(CircularSlashVFX));
-		return;
-	}
-
-	// The system authors its sheet, outer ink, and splatter from the player's
-	// established Niagara palette. Expose only the sharp core for optional tuning.
-	VFXComponent->SetVariableLinearColor(CircularSlashVFXColorParameter, CircularSlashVFXColor);
 
 	UE_LOG(LogSkill, Log,
-		TEXT("CircularSlash VFX spawned: Asset=%s CoreColor=(%.2f,%.2f,%.2f,%.2f) Offset=%.1f Scale=%.2f YawOffset=%.1f Parameter=%s."),
-		*GetNameSafe(CircularSlashVFX),
-		CircularSlashVFXColor.R,
-		CircularSlashVFXColor.G,
-		CircularSlashVFXColor.B,
-		CircularSlashVFXColor.A,
-		CircularSlashVFXForwardOffset,
+		TEXT("TwoStageArc VFX spawned: Asset=%s Stage=%d Judgment=%d Twin=%s Mirror=%s Scale=%.2f Yaw=%.1f Pitch=%.1f Offset=(Forward=%.1f Right=%.1f Height=%.1f)."),
+		*GetNameSafe(SelectedVFX),
+		StageIndex + 1,
+		JudgmentIndex + 1,
+		bHasTwinSlash ? TEXT("true") : TEXT("false"),
+		bMirrorVFX ? TEXT("true") : TEXT("false"),
 		Scale,
-		CircularSlashVFXYawOffset,
-		*CircularSlashVFXColorParameter.ToString());
+		SweepYaw,
+		GroundAngle,
+		TwoStageArcVFXForwardOffset,
+		TwoStageArcVFXRightOffset,
+		TwoStageArcVFXHeightOffset);
 }
 
 void USkillComponent::HandleCircularSlashStage1Hit(AActor* HitActor)
