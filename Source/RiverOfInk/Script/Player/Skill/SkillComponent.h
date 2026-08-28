@@ -40,6 +40,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	void TryCastSkillSlot(int32 SlotIndex);
 
+	/**
+	 * Remember a second E press during the current TwoStageArc transaction.
+	 * The request is consumed only after stage 1 confirms a hit.
+	 */
+	void BufferCircularSlashStage2Input();
+
+	/** True when a buffered TwoStageArc stage-2 request is waiting to be consumed. */
+	bool HasBufferedCircularSlashStage2Input() const;
+
+	/**
+	 * Release stage 2 while the Skill2 state still owns the input. This bypasses
+	 * only the generic action-state gate; death and sprint restrictions remain.
+	 */
+	bool TryCastCircularSlashStage2Immediately();
+
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	bool HasSkill(EPlayerSkillID SkillID) const;
 
@@ -332,7 +347,8 @@ public:
 	bool IsOnCooldown(EPlayerSkillID SkillID, float Cooldown) const;
 
 private:
-	bool CanCastSkill() const;
+	bool CanCastSkill(bool bIgnoreActionState = false) const;
+	bool TryCastSkillSlotInternal(int32 SlotIndex, bool bIgnoreActionState);
 	bool CastCircularSlash();
 	bool CastCircularSlashStage2();
 	bool SpawnCircularSlashSet(const FResolvedSkillSpec& Spec, int32 StageIndex, bool bListenForStage1Hit);
@@ -381,4 +397,5 @@ private:
 	FTimerHandle CircularSlashStage1ResolutionTimerHandle;
 	bool bCircularSlashStage1Active = false;
 	bool bCircularSlashStage2Ready = false;
+	bool bCircularSlashStage2InputBuffered = false;
 };

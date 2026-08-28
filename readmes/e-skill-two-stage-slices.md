@@ -27,12 +27,19 @@ RewardManager
                       └─ ArcHalfAngle = TwoStageArcHalfAngle
 
 E 输入
-  ├─ 首次释放：SpawnCircularSlashSet(Stage=0)
-  │    └─ CircleDamageArea 球体粗筛 → 水平弧形点积精筛 → OnHitConfirmed
-  │         ├─ 命中：bCircularSlashStage2Ready = true
-  │         └─ 超时：写入 LastCastTimes，直接进入冷却
-  └─ 第二次释放：SpawnCircularSlashSet(Stage=1)
-       └─ 清除 stage2 ready，写入 LastCastTimes，进入冷却
+  └─ APlayerCharacter::RequestSkill2Input()
+       ├─ Stage1Active -> 缓存一次第二段请求，等待首段命中
+       ├─ Stage2Ready  -> 立即消费；若动作态仍阻塞，则由 EndAttack() 重试
+       ├─ Ready        -> SwitchState(Skill2) -> TryCastSkillSlot(1)
+       └─ Cooldown     -> 拒绝新的首段输入
+
+首次释放：SpawnCircularSlashSet(Stage=0)
+  └─ CircleDamageArea 球体粗筛 → 水平弧形点积精筛 → OnHitConfirmed
+       ├─ 命中：bCircularSlashStage2Ready = true，并消费已缓存的第二段请求
+       └─ 超时：写入 LastCastTimes，直接进入冷却
+
+第二次释放：SpawnCircularSlashSet(Stage=1)
+  └─ 清除 stage2 ready，写入 LastCastTimes，进入冷却
 
 单次判定伤害
   └─ BaseEDamage × StageDamageMultiplier × TwinSlashDamageMultiplier
@@ -55,15 +62,16 @@ E 输入
 - `TwoStageArcStageDamageMultiplier = 0.8`；
 - `TwinSlash` 时每段 `JudgmentsPerStage = 2`，每个判定仍使用 `0.65` 伤害倍率。
 
-### Slice 3：占位 VFX 与美术接口
+### Slice 3：TwoStageArc 专用 VFX 与美术接口
 
-已完成并通过冷编译及 PIE。E 两段复用左键 `NS_CommonSlash`；日志确认 Niagara 实例生成时使用 `(0,0,0,1)` 黑色接口、前向偏移 `60 cm`、缩放 `1.0`。
+已完成并通过冷编译及 PIE。普通 E 继续使用原有 `NS_CommonSlash`；`TwoStageArc` 使用专用正向刀光和镜像刀光，并按玩家水平朝向计算生成旋转与偏移。专用资源通过 `TwoStageArcVFX` / `TwoStageArcMirrorVFX` 配置，不再依赖左键黑色占位资源。
 
 ### Slice 4：输入态机与完整二段链路验收
 
 已实现：
 
 - `CanTriggerCircularSlashInput()` 统一 E 输入门控；首段命中窗口内重复按 E 不再重新进入技能状态或重复播放技能动画；首段命中后，二段立即绕过普通冷却门控；
+- `Idle`、`Move`、`Skill2` 三个状态统一转发到 `RequestSkill2Input()`；`Skill2` 状态也持续监听 E，因此连续按键不会因为状态切换丢失；
 - 新增 PIE 辅助命令 `DebugPrepareTwoStageArc [ForwardDistance]`，将最近存活敌人放到玩家正前方的近距离弧形判定内，用于稳定复现首段命中；
 - 保留首段未命中超时进入冷却、二段释放后进入冷却的原有规则，并通过 `OnSkillStateChanged` 同步状态观察者。
 
@@ -103,17 +111,20 @@ Cooldown
 
 ```text
 E 输入
-  └─ TryCastSkillSlot(1)
-       ├─ Ready       -> CastCircularSlash(Stage=0)
-       ├─ Stage1Active -> 拒绝重复输入，等待命中或首段窗口结束
-       ├─ Stage2Ready  -> CastCircularSlashStage2(Stage=1)
-       └─ Cooldown     -> 拒绝输入
+  └─ APlayerCharacter::RequestSkill2Input()
+       ├─ Stage1Active -> BufferCircularSlashStage2Input()，只保留一次请求
+       ├─ Stage2Ready  -> TryConsumeBufferedCircularSlashStage2Input()
+       │                    └─ TryCastCircularSlashStage2Immediately()
+       ├─ Ready        -> SwitchState(Skill2)
+       │                    └─ OnEnter -> TryCastSkillSlot(1) -> CastCircularSlash(Stage=0)
+       └─ Cooldown     -> 拒绝新的首段输入
 
 首段有效命中
   └─ bCircularSlashStage2Ready = true
-            └─ 启动 Stage2InputWindow（默认 2.00s，限制在 0.8～3.0s）
-            ├─ 再次按 E -> 第二段生成并写入 E 冷却时间戳
-            └─ 超时      -> 清除 Stage2Ready 并写入 E 冷却时间戳
+             └─ 启动 Stage2InputWindow（默认 2.00s，限制在 0.8～3.0s）
+             ├─ 已有缓存 -> 立即消费缓存并生成第二段，写入 E 冷却时间戳
+             ├─ 再次按 E -> 缓存后立即消费，生成第二段并写入 E 冷却时间戳
+             └─ 超时      -> 清除 Stage2Ready 并写入 E 冷却时间戳
 ```
 
 HUD 规则：
@@ -141,13 +152,12 @@ PIE 验收结果（2026-08-26）：
 - `USkillComponent::GetSkillRuntimeState()`：供 HUD 或其他观察者读取 E 当前状态；
 - `EPlayerSkillRuntimeState`：以 BlueprintType 枚举暴露 `Ready`、`Stage1Active`、`Stage2Ready`、`Cooldown`。
 
-### VFX 修复：TwoStageArc 仅保留黑色左键占位
+### VFX 实现：TwoStageArc 专用正向/镜像刀光
 
-`BP_PlayerSkill_CircleDamage` 仍保留旧 E 的 `NS_PlayerCircleSlash` 组件。此前该组件会与
-`SkillComponent` 生成的黑色 `NS_CommonSlash` 同时激活，造成蓝色原 E 环与黑色占位叠加。
-现在生成 `TwoStageArc` 伤害区域时会设置 `bUsePlaceholderVFXOnly`，在 BeginPlay 中停用并隐藏
-伤害区域蓝图上的 Niagara 组件；普通 E 仍保留原有蓝图 VFX。后续接入正式 E VFX 时，只需替换
-`CircularSlashVFX` 或移除旧蓝图组件，不改变伤害数据流。
+`BP_PlayerSkill_CircleDamage` 的旧 `NS_PlayerCircleSlash` 组件只在普通 E 路径保留；生成
+`TwoStageArc` 伤害区域时会隐藏该旧组件，由 `SkillComponent` 生成专用 `TwoStageArcVFX`。
+`TwoStageArcMirrorVFX` 用于镜像挥砍方向；叠加 `TwinSlash` 时，每阶段的第二个判定使用镜像资源，形成 X 形叠加。
+专用 VFX 的地面夹角、玩家前后/左右偏移、缩放和镜像 Yaw 均由 `SkillComponent` 参数控制，不改变伤害数据流。
 
 ## 美术接口
 
@@ -157,6 +167,9 @@ SkillComponent 暴露以下可替换接口：
 - `CircularSlashVFXColor`：默认黑色，用于区别左键；
 - `CircularSlashVFXColorParameter`：默认 `User.Color`；运行时同时尝试 `User.Color`、`User.BaseColor`、`User.InkColor`，专用资源可统一保留其中一个参数；
 - `CircularSlashVFXForwardOffset`、`CircularSlashVFXScale`：控制占位 VFX 的生成偏移与缩放；
+- `TwoStageArcVFX`、`TwoStageArcMirrorVFX`：TwoStageArc 的正向与镜像专用刀光；
+- `TwoStageArcVFXScale`、`TwoStageArcVFXHeightOffset`、`TwoStageArcVFXForwardOffset`、`TwoStageArcVFXRightOffset`：控制专用刀光的缩放和相对玩家位置；
+- `TwoStageArcVFXYawOffset`、`TwoStageArcVFXGroundAngle`：控制沿玩家朝向的镜像夹角和刀光平面与地面的夹角，均支持负角度；
 - `TwoStageArcRadius`、`TwoStageArcHalfAngle`：控制近距离弧形判定尺寸；
 - `TwoStageArcStageDamageMultiplier`：控制两段基础伤害倍率。
 
@@ -207,6 +220,45 @@ Slice 7 验收结果：
 - PIE 运行期间未出现新增编译错误、`Ensure condition failed`、`Fatal` 或 `Unhandled`。
 
 奖励 UI 暂不新增平面美术，`PopulateRewardPresentation` 使用已有 `Icon_CircularSlash` 作为占位图标。后续只需替换 `RewardIcon` 对应资源，不改变奖励数据流。
+
+### Slice 8：第二段 E 手感——输入缓存与命中后即时消费（2026-08-28）
+
+本次更新只调整 E 输入路由和第二段执行时机，不改变伤害公式、命中判定、E 冷却、第二段输入窗口或 VFX 选择。
+
+实现内容：
+
+- 新增 `bCircularSlashStage2InputBuffered`，作为一次性输入缓存；首段进行中连续按 E 时只记录一个请求，不重新进入 `Skill2` 或重复播放首段动画；
+- `Idle`、`Move`、`Skill2` 的 E 事件统一进入 `APlayerCharacter::RequestSkill2Input()`；`PlayerState_Skill2` 在状态期间订阅 `OnEDelegate`，解决连续按 E 时事件被状态切换吞掉的问题；
+- 首段命中确认后，如果缓存存在，立即调用二段消费路径；该路径只绕过通用 `CanStartAction()` 门槛，不绕过死亡、冲刺等安全限制；
+- 如果命中回调发生时角色仍处于其他攻击动作，缓存不会丢失，`EndAttack()` 将在动作恢复到可施放状态后再次尝试消费；
+- 在首段未命中、第二段窗口超时、形态切换、RuntimeData 应用、二段成功释放和结束游戏时清除缓存，避免跨技能串键。
+
+本轮 PIE 已由用户完成；本文记录的是本次代码更新的预期链路和代码层结果，不替代逐个构筑的画面、伤害与消弹实测记录。
+
+## TwoStageArc 与其他 E 技能构筑兼容性统计（代码层）
+
+统计口径：以 `ResolveSkillSpec(CircularSlash)`、`CanApplyModifier()` 和 `ApplyModifier()` 的实际代码为准；“兼容”表示构筑可以被保存、解析并进入对应运行时路径，不代表每个组合的视觉表现都已在 PIE 中逐项验收。`D` 表示基础 E 单次判定伤害，以下合计假设所有判定均命中同一目标。
+
+当前 8 个核心形态/功能组合均可解析：
+
+| 构筑 | 阶段数 | 每阶段判定数 | 单次判定 / 附加效果 | 代码层结论 |
+| --- | ---: | ---: | --- | --- |
+| 普通 E | 1 | 1 | `D` | ✅ 兼容 |
+| 普通 E + `TwinSlash` | 1 | 2 | 每次 `0.65D`，全段 `1.30D`；同时判定 | ✅ 兼容 |
+| 普通 E + `NullRing` | 1 | 1 | `D`；范围内消除标记敌方投射物 | ✅ 兼容 |
+| 普通 E + `TwinSlash` + `NullRing` | 1 | 2 | 每次 `0.65D`；同时判定并消弹 | ✅ 兼容 |
+| `TwoStageArc` | 2 | 1 | 每次 `0.80D`，两段合计 `1.60D` | ✅ 兼容 |
+| `TwoStageArc` + `TwinSlash` | 2 | 2 | 每次 `0.80 × 0.65D = 0.52D`，两段合计 `2.08D` | ✅ 兼容 |
+| `TwoStageArc` + `NullRing` | 2 | 1 | 每次 `0.80D`；两段均保留消弹 | ✅ 兼容 |
+| `TwoStageArc` + `TwinSlash` + `NullRing` | 2 | 2 | 每次 `0.52D`；两段均同时判定并消弹 | ✅ 兼容 |
+
+兼容边界和注意事项：
+
+- `TwoStageArc` 是 E 的形态字段；`TwinSlash`、`NullRing` 是可叠加 Modifier。新奖励流程应先应用 `TwoStageArc`，再通过 `ApplyModifier()` 添加其他 E Modifier；旧的 `ApplySkillForm(CircularSlash, TwinSlash/NullRing)` 兼容入口会改写旧形态字段，可能覆盖 `TwoStageArc`，不应用于新的叠加奖励。
+- `RadiusUp` 可以通过规则校验并保存到 E，但当前 `ResolveSkillSpec()` 在识别 `TwoStageArc` 后会把半径改为 `TwoStageArcRadius`，因此它对 TwoStageArc 的弧形判定半径暂时没有实际效果；这是当前唯一需要特别标记的 E 构筑参数语义边界。
+- `CooldownDown` 对所有 E 构筑有效，影响普通 E 冷却和二段释放/超时后的冷却；它不改变 `TwoStageArcStage2InputWindow`，也不会人为增加二段解锁延迟。
+- `TwinSlashDelay`、`TwinSlashSecondYawOffset`、`TwinSlashSecondForwardOffset` 仍保留为序列化/编辑器兼容字段；当前运行时 TwinSlash 使用每阶段两次同时判定，不再按旧字段延迟生成第二次判定。
+- VFX 方面，`TwoStageArc` 使用专用正向/镜像刀光；叠加 `TwinSlash` 时每阶段的第二个判定使用镜像刀光，形成 X 形叠加；`NullRing` 只改变消弹逻辑，不额外替换刀光资源。
 
 ## 已知技术债
 

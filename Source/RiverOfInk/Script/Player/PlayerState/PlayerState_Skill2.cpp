@@ -23,6 +23,7 @@ void UPlayerState_Skill2::OnEnter_Implementation()
 	{
 		Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Skill2::OnMoveX);
 		Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Skill2::OnMoveY);
+		Input->OnEDelegate.AddUObject(this, &UPlayerState_Skill2::OnE);
 	}
 
 	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
@@ -63,6 +64,7 @@ void UPlayerState_Skill2::OnExit_Implementation()
 	{
 		Input->OnMoveXDelegate.RemoveAll(this);
 		Input->OnMoveYDelegate.RemoveAll(this);
+		Input->OnEDelegate.RemoveAll(this);
 	}
 
 	if (GetWorld())
@@ -96,6 +98,14 @@ void UPlayerState_Skill2::OnMoveX(float Value)
 void UPlayerState_Skill2::OnMoveY(float Value)
 {
 	if (!FMath::IsNearlyZero(Value)) bHadMoveInput = true;
+}
+
+void UPlayerState_Skill2::OnE()
+{
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+	{
+		Player->RequestSkill2Input();
+	}
 }
 
 void UPlayerState_Skill2::OnSkillTimer()

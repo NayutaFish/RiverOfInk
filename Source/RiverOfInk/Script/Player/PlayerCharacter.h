@@ -85,6 +85,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Skill")
 	void TryCastSkillSlot3();
 
+	/** Route an E press through the TwoStageArc input-buffering rules. */
+	void RequestSkill2Input();
+
+	/** Consume a buffered stage-2 request at the earliest legal action point. */
+	void TryConsumeBufferedCircularSlashStage2Input();
+
 	UFUNCTION(BlueprintPure, Category = "State")
 	bool IsSprinting() const { return bIsSprinting; }
 

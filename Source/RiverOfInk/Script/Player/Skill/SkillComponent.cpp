@@ -102,6 +102,9 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 	MigrateLegacySkillForms();
 	NormalizeSkillModifiers();
 	LastCastTimes.Reset();
+	bCircularSlashStage1Active = false;
+	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
 
 	UE_LOG(LogSkill, Log,
 		TEXT("Skill runtime data applied: Owner=%s Slots=%d Upgrades=%d Modifiers(Q=%s E=%s)."),
@@ -125,15 +128,25 @@ void USkillComponent::TryCastSkill2()
 
 void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 {
-	if (!SkillSlots.IsValidIndex(SlotIndex) || !CanCastSkill())
+	TryCastSkillSlotInternal(SlotIndex, false);
+}
+
+bool USkillComponent::TryCastCircularSlashStage2Immediately()
+{
+	return TryCastSkillSlotInternal(1, true);
+}
+
+bool USkillComponent::TryCastSkillSlotInternal(int32 SlotIndex, bool bIgnoreActionState)
+{
+	if (!SkillSlots.IsValidIndex(SlotIndex))
 	{
-		return;
+		return false;
 	}
 
 	const EPlayerSkillID SkillID = SkillSlots[SlotIndex].SkillID;
 	if (SkillID == EPlayerSkillID::None)
 	{
-		return;
+		return false;
 	}
 
 	const bool bIsTwoStageCircularSlash = SkillID == EPlayerSkillID::CircularSlash
@@ -141,17 +154,28 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 	if (bIsTwoStageCircularSlash && bCircularSlashStage1Active)
 	{
 		UE_LOG(LogSkill, Display, TEXT("TwoStageArc stage 1 is still resolving; stage 2 remains locked."));
-		return;
+		return false;
 	}
 
 	if (bIsTwoStageCircularSlash && bCircularSlashStage2Ready)
 	{
+		if (!CanCastSkill(bIgnoreActionState))
+		{
+			return false;
+		}
+
 		if (CastCircularSlashStage2())
 		{
 			LastCastTimes.Add(SkillID, GetWorld()->GetTimeSeconds());
 			OnSkillStateChanged.Broadcast();
+			return true;
 		}
-		return;
+		return false;
+	}
+
+	if (!CanCastSkill())
+	{
+		return false;
 	}
 
 	const float Cooldown = SkillID == EPlayerSkillID::TripleProjectile
@@ -160,7 +184,7 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 	if (IsOnCooldown(SkillID, Cooldown))
 	{
 		UE_LOG(LogSkill, Display, TEXT("%s is on cooldown."), *UEnum::GetValueAsString(SkillID));
-		return;
+		return false;
 	}
 
 	const bool bCastSucceeded = SkillID == EPlayerSkillID::TripleProjectile
@@ -177,6 +201,8 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 		}
 		OnSkillStateChanged.Broadcast();
 	}
+
+	return bCastSucceeded;
 }
 
 bool USkillComponent::HasSkill(EPlayerSkillID SkillID) const
@@ -640,6 +666,29 @@ bool USkillComponent::IsCircularSlashStage2Ready() const
 	return bCircularSlashStage2Ready;
 }
 
+void USkillComponent::BufferCircularSlashStage2Input()
+{
+	if (GetSkillForm(EPlayerSkillID::CircularSlash) != EPlayerSkillForm::TwoStageArc
+		|| (!bCircularSlashStage1Active && !bCircularSlashStage2Ready))
+	{
+		return;
+	}
+
+	if (!bCircularSlashStage2InputBuffered)
+	{
+		bCircularSlashStage2InputBuffered = true;
+		UE_LOG(LogSkill, Display,
+			TEXT("TwoStageArc stage 2 input buffered: Stage1Active=%s Stage2Ready=%s."),
+			bCircularSlashStage1Active ? TEXT("true") : TEXT("false"),
+			bCircularSlashStage2Ready ? TEXT("true") : TEXT("false"));
+	}
+}
+
+bool USkillComponent::HasBufferedCircularSlashStage2Input() const
+{
+	return bCircularSlashStage2InputBuffered;
+}
+
 EPlayerSkillRuntimeState USkillComponent::GetSkillRuntimeState(EPlayerSkillID SkillID) const
 {
 	if (SkillID == EPlayerSkillID::CircularSlash
@@ -927,6 +976,7 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
 	}
+	bCircularSlashStage2InputBuffered = false;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -952,6 +1002,7 @@ bool USkillComponent::ApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm Ne
 		}
 		bCircularSlashStage1Active = false;
 		bCircularSlashStage2Ready = false;
+		bCircularSlashStage2InputBuffered = false;
 	}
 
 	// Keep old form callers source-compatible while immediately mirroring the
@@ -1005,11 +1056,11 @@ float USkillComponent::GetRemainingSkillCooldown(EPlayerSkillID SkillID) const
 	return FMath::Max(0.0f, Remaining);
 }
 
-bool USkillComponent::CanCastSkill() const
+bool USkillComponent::CanCastSkill(bool bIgnoreActionState) const
 {
 	return IsValid(OwnerCharacter)
 		&& !OwnerCharacter->IsDead()
-		&& OwnerCharacter->CanStartAction()
+		&& (bIgnoreActionState || OwnerCharacter->CanStartAction())
 		&& !OwnerCharacter->IsSprinting();
 }
 
@@ -1040,6 +1091,7 @@ bool USkillComponent::CastCircularSlash()
 	{
 		bCircularSlashStage1Active = true;
 		bCircularSlashStage2Ready = false;
+		bCircularSlashStage2InputBuffered = false;
 		LastCastTimes.Remove(EPlayerSkillID::CircularSlash);
 		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
 	}
@@ -1097,6 +1149,7 @@ bool USkillComponent::CastCircularSlashStage2()
 
 	bCircularSlashStage2Ready = false;
 	bCircularSlashStage1Active = false;
+	bCircularSlashStage2InputBuffered = false;
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
@@ -1334,6 +1387,11 @@ void USkillComponent::HandleCircularSlashStage1Hit(AActor* HitActor)
 		*GetNameSafe(HitActor),
 		GetTwoStageArcStage2InputWindow());
 	OnSkillStateChanged.Broadcast();
+
+	if (bCircularSlashStage2InputBuffered && OwnerCharacter)
+	{
+		OwnerCharacter->TryConsumeBufferedCircularSlashStage2Input();
+	}
 }
 
 
@@ -1346,6 +1404,7 @@ void USkillComponent::ResolveCircularSlashStage1Miss()
 
 	bCircularSlashStage1Active = false;
 	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
 	if (UWorld* World = GetWorld())
 	{
 		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
@@ -1362,6 +1421,7 @@ void USkillComponent::ResolveCircularSlashStage2Timeout()
 	}
 
 	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
 	if (UWorld* World = GetWorld())
 	{
 		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
