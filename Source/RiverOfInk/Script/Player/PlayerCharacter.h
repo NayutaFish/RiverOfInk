@@ -166,7 +166,7 @@ public:
 
 	// 普通移动速度
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float WalkSpeed = 600.0f;
+	float WalkSpeed = 900.0f;
 
 	// 疾跑速度
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")

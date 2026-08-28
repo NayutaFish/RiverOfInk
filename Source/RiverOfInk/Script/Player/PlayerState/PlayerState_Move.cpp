@@ -87,11 +87,9 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
-	// 疾跑：按 Shift 时加速
+	// 疾跑已取消：始终使用 WalkSpeed（默认即原疾跑速度 900）
 	float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-	bool bSprinting = (Now - LastShiftTime) < 0.15f;
-	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
-		bSprinting ? Player->SprintSpeed : Player->WalkSpeed);
+	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(Player->WalkSpeed);
 
 	// 无输入一段时间后切回 Idle
 	if ((Now - LastInputTime) > 0.15f)
