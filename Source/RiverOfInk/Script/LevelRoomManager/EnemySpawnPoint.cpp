@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LevelRoomManager/EnemySpawnPoint.h"
 
@@ -109,6 +109,20 @@ TargetFadeValue = FadeValue;
 
 UE_LOG(LogTemp, Log, TEXT("EnemySpawnPoint %s ink fade target: %.2f (%d/%d)."),
 *GetName(), FadeValue, SpawnedCount, TotalSpawnCount);
+}
+
+void AEnemySpawnPoint::CompleteInkFade()
+{
+	SpawnedCount = FMath::Max(SpawnedCount, TotalSpawnCount);
+	CurrentFadeValue = 1.0f;
+	TargetFadeValue = 1.0f;
+
+	if (FadeMaterialInstance)
+	{
+		FadeMaterialInstance->SetScalarParameterValue(FadeParameterName, 1.0f);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("EnemySpawnPoint %s ink fade completed (1.0)."), *GetName());
 }
 
 float AEnemySpawnPoint::GetFadeValue() const

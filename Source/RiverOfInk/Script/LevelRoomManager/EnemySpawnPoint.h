@@ -59,6 +59,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
 	void NotifyEnemySpawned();
 
+	/** 直接让墨水坑完全溶解（清场时调用）。 */
+	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
+	void CompleteInkFade();
+
 	/** 当前墨水坑溶解进度 0~1。 */
 	UFUNCTION(BlueprintPure, Category = "Spawn Point|Fade")
 	float GetFadeValue() const;

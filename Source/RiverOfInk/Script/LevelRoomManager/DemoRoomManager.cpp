@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LevelRoomManager/DemoRoomManager.h"
 
@@ -303,6 +303,15 @@ void ADemoRoomManager::CheckRoomClear()
 	}
 
 	bRoomCleared = true;
+
+	// 清场时让所有墨水坑直接完全溶解。
+	for (AEnemySpawnPoint* SpawnPoint : SpawnPoints)
+	{
+		if (IsValid(SpawnPoint))
+		{
+			SpawnPoint->CompleteInkFade();
+		}
+	}
 
 	// 停止刷新计时器
 	GetWorldTimerManager().ClearTimer(SpawnCheckTimerHandle);
