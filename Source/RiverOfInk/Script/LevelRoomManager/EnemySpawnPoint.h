@@ -49,7 +49,7 @@ public:
 
 	/** fadeValue 渐变速度（每秒变化量） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn Point|Fade", meta = (ClampMin = "0.01"))
-	float FadeInterpSpeed = 2.0f;
+	float FadeInterpSpeed = 0.05f;
 
 	/** 由 DemoRoomManager 分配该出生点本局应刷怪的总数。 */
 	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
