@@ -10,6 +10,8 @@
 class USphereComponent;
 class UStaticMeshComponent;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnPlayerSkillAreaHitConfirmed, AActor*);
+
 /** Short-lived, player-owned radial damage area for Circular Slash. */
 UCLASS(Blueprintable)
 class RIVEROFINK_API APlayerSkill_CircleDamageArea : public AActor
@@ -25,7 +27,16 @@ public:
 		float InDamage,
 		float InLifeTime,
 		AActor* InInstigator,
-		bool bInNullifyEnemyProjectiles = false);
+		bool bInNullifyEnemyProjectiles = false,
+		bool bInUseArcHitbox = false,
+		float InArcHalfAngle = 180.0f);
+
+	/** Keep the original Blueprint circular slash VFX for the normal E path. */
+	UFUNCTION(BlueprintCallable, Category = "SkillArea|Visual")
+	void SetUseLegacyCircularSlashVFX(bool bInUseLegacyCircularSlashVFX);
+
+	/** Native notification emitted once for each enemy damaged by this area. */
+	FOnPlayerSkillAreaHitConfirmed OnHitConfirmed;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea")
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -67,6 +78,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|NullRing")
 	bool bNullifyEnemyProjectiles = false;
 
+	/** True when enemy damage is restricted to the horizontal close-range arc. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Arc")
+	bool bUseArcHitbox = false;
+
+	/** Horizontal half-angle of the arc filter, in degrees. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Arc", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float ArcHalfAngle = 180.0f;
+
+	/** False only when a dedicated skill form supplies its own VFX. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Visual")
+	bool bUseLegacyCircularSlashVFX = true;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -81,6 +104,7 @@ protected:
 
 private:
 	void UpdateVisualPlaneScale();
+	void SuppressLegacyCircularSlashVFX();
 	void TryDamageActor(AActor* OtherActor);
 	void NullifyEnemyProjectilesInRange();
 

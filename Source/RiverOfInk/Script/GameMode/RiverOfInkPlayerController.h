@@ -40,6 +40,10 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugApplyHomingMark(float Duration = 4.0f);
 
+	/** Development-only PIE helper: place the nearest living enemy inside the E arc. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugPrepareTwoStageArc(float ForwardDistance = 140.0f);
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;

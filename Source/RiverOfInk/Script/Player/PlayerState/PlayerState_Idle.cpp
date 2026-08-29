@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Idle.h"
 #include "RiverOfInk.h"
@@ -79,7 +79,7 @@ void UPlayerState_Idle::OnLmb()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (Player && Player->bCanAttack1)
 	{
-		Player->SwitchState(UPlayerState_Attack1::StaticClass());
+		Player->RequestNormalAttack();
 	}
 }
 
@@ -108,8 +108,5 @@ void UPlayerState_Idle::OnE()
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player || !Player->SkillComponent) return;
 
-	if (!Player->SkillComponent->IsOnCooldown(EPlayerSkillID::CircularSlash, Player->SkillComponent->GetCircularSlashCooldown()))
-	{
-		Player->SwitchState(UPlayerState_Skill2::StaticClass());
-	}
+	Player->RequestSkill2Input();
 }

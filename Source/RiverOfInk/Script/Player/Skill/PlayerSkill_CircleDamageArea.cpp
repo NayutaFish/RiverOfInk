@@ -11,6 +11,7 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "NiagaraComponent.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -63,26 +64,62 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 		VisualPlane->SetVisibility(false, true);
 	}
 
+	if (!bUseLegacyCircularSlashVFX)
+	{
+		SuppressLegacyCircularSlashVFX();
+	}
+
 #if ENABLE_DRAW_DEBUG
 	if (bDrawDebugArea)
 	{
-		DrawDebugCircle(
-			GetWorld(),
-			GetActorLocation() + FVector(0.0f, 0.0f, 3.0f),
-			Radius,
-			32,
-			FColor::Blue,
-			false,
-			LifeTime,
-			0,
-			2.0f,
-			FVector::ForwardVector,
-			FVector::UpVector,
-			false);
+		if (bUseArcHitbox)
+		{
+			FVector Forward = GetActorForwardVector();
+			Forward.Z = 0.0f;
+			if (!Forward.Normalize())
+			{
+				Forward = FVector::ForwardVector;
+			}
+
+			DrawDebugCone(
+				GetWorld(),
+				GetActorLocation() + FVector(0.0f, 0.0f, 3.0f),
+				Forward,
+				Radius,
+				FMath::DegreesToRadians(ArcHalfAngle),
+				FMath::DegreesToRadians(ArcHalfAngle),
+				32,
+				FColor::Yellow,
+				false,
+				LifeTime,
+				0,
+				2.0f);
+		}
+		else
+		{
+			DrawDebugCircle(
+				GetWorld(),
+				GetActorLocation() + FVector(0.0f, 0.0f, 3.0f),
+				Radius,
+				32,
+				FColor::Blue,
+				false,
+				LifeTime,
+				0,
+				2.0f,
+				FVector::ForwardVector,
+				FVector::UpVector,
+				false);
+		}
 	}
 #endif
 
-	UE_LOG(LogSkill, Log, TEXT("CircularSlash blue plane visual ready: Radius=%.0f LifeTime=%.2f."), Radius, LifeTime);
+	UE_LOG(LogSkill, Log,
+		TEXT("CircularSlash damage area ready: Radius=%.0f LifeTime=%.2f Arc=%s HalfAngle=%.1f."),
+		Radius,
+		LifeTime,
+		bUseArcHitbox ? TEXT("true") : TEXT("false"),
+		ArcHalfAngle);
 
 	if (bNullifyEnemyProjectiles)
 	{
@@ -98,18 +135,34 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	}
 }
 
+void APlayerSkill_CircleDamageArea::SetUseLegacyCircularSlashVFX(bool bInUseLegacyCircularSlashVFX)
+{
+	bUseLegacyCircularSlashVFX = bInUseLegacyCircularSlashVFX;
+
+	// Deferred-spawn callers set this before FinishSpawningActor. Keep the
+	// setter safe for Blueprint/debug callers that invoke it afterwards.
+	if (!bUseLegacyCircularSlashVFX && HasActorBegunPlay())
+	{
+		SuppressLegacyCircularSlashVFX();
+	}
+}
+
 void APlayerSkill_CircleDamageArea::Initialize(
 	float InRadius,
 	float InDamage,
 	float InLifeTime,
 	AActor* InInstigator,
-	bool bInNullifyEnemyProjectiles)
+	bool bInNullifyEnemyProjectiles,
+	bool bInUseArcHitbox,
+	float InArcHalfAngle)
 {
 	Radius = FMath::Max(1.0f, InRadius);
 	Damage = FMath::Max(0.0f, InDamage);
 	LifeTime = FMath::Max(0.01f, InLifeTime);
 	DamageInstigator = InInstigator;
 	bNullifyEnemyProjectiles = bInNullifyEnemyProjectiles;
+	bUseArcHitbox = bInUseArcHitbox;
+	ArcHalfAngle = FMath::Clamp(InArcHalfAngle, 0.0f, 180.0f);
 	CollisionSphere->SetSphereRadius(Radius, HasActorBegunPlay());
 	UpdateVisualPlaneScale();
 
@@ -117,6 +170,30 @@ void APlayerSkill_CircleDamageArea::Initialize(
 	{
 		SetLifeSpan(LifeTime);
 	}
+}
+
+void APlayerSkill_CircleDamageArea::SuppressLegacyCircularSlashVFX()
+{
+	TArray<UNiagaraComponent*> NiagaraComponents;
+	GetComponents<UNiagaraComponent>(NiagaraComponents);
+
+	int32 SuppressedCount = 0;
+	for (UNiagaraComponent* NiagaraComponent : NiagaraComponents)
+	{
+		if (!IsValid(NiagaraComponent))
+		{
+			continue;
+		}
+
+		NiagaraComponent->DeactivateImmediate();
+		NiagaraComponent->SetVisibility(false, true);
+		++SuppressedCount;
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("CircularSlash legacy VFX suppressed: Count=%d Area=%s."),
+		SuppressedCount,
+		*GetNameSafe(this));
 }
 
 void APlayerSkill_CircleDamageArea::NullifyEnemyProjectilesInRange()
@@ -204,6 +281,29 @@ void APlayerSkill_CircleDamageArea::TryDamageActor(AActor* OtherActor)
 		return;
 	}
 
+	if (bUseArcHitbox)
+	{
+		FVector ToEnemy = Enemy->GetActorLocation() - GetActorLocation();
+		ToEnemy.Z = 0.0f;
+		FVector Forward = GetActorForwardVector();
+		Forward.Z = 0.0f;
+
+		const bool bAtOrigin = ToEnemy.IsNearlyZero();
+		if (!bAtOrigin && (!ToEnemy.Normalize() || !Forward.Normalize()))
+		{
+			return;
+		}
+
+		if (!bAtOrigin)
+		{
+			const float CosineThreshold = FMath::Cos(FMath::DegreesToRadians(ArcHalfAngle));
+			if (FVector::DotProduct(Forward, ToEnemy) < CosineThreshold)
+			{
+				return;
+			}
+		}
+	}
+
 	HitActors.Add(OtherActor);
 
 	FTakeDamageInfo DamageInfo;
@@ -215,5 +315,6 @@ void APlayerSkill_CircleDamageArea::TryDamageActor(AActor* OtherActor)
 	DamageInfo.bIgnoreInvincible = bIgnoreInvincible;
 
 	Enemy->TakeDamage(DamageInfo);
+	OnHitConfirmed.Broadcast(Enemy);
 	UE_LOG(LogSkill, Display, TEXT("Circular Slash Hit Enemy: %s"), *GetNameSafe(Enemy));
 }

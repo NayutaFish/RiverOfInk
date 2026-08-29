@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/Skill/SkillComponent.h"
 
@@ -7,11 +7,14 @@
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/ProjectileTargetingComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
 #include "Player/Skill/PlayerSkill_ThrownGrenade.h"
+#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogSkill);
 
@@ -21,6 +24,19 @@ USkillComponent::USkillComponent()
 	CircularSlashAreaClass = APlayerSkill_CircleDamageArea::StaticClass();
 	ProjectileAttackAreaClass = AAttackAreaBase::StaticClass();
 	ThrownGrenadeClass = APlayerSkill_ThrownGrenade::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TwoStageArcVFXAsset(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerTwoStageArc/NS/NS_TwoStageArc_Animated.NS_TwoStageArc_Animated"));
+	if (TwoStageArcVFXAsset.Succeeded())
+	{
+		TwoStageArcVFX = TwoStageArcVFXAsset.Object;
+	}
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TwoStageArcMirrorVFXAsset(
+		TEXT("/Game/RawContent/VFX/NiagaraSystem/NS/PlayerTwoStageArc/NS/NS_TwoStageArc_Animated_Mirror.NS_TwoStageArc_Animated_Mirror"));
+	if (TwoStageArcMirrorVFXAsset.Succeeded())
+	{
+		TwoStageArcMirrorVFX = TwoStageArcMirrorVFXAsset.Object;
+	}
 	InitializeSkillSlots();
 }
 
@@ -86,6 +102,9 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 	MigrateLegacySkillForms();
 	NormalizeSkillModifiers();
 	LastCastTimes.Reset();
+	bCircularSlashStage1Active = false;
+	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
 
 	UE_LOG(LogSkill, Log,
 		TEXT("Skill runtime data applied: Owner=%s Slots=%d Upgrades=%d Modifiers(Q=%s E=%s)."),
@@ -109,15 +128,54 @@ void USkillComponent::TryCastSkill2()
 
 void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 {
-	if (!SkillSlots.IsValidIndex(SlotIndex) || !CanCastSkill())
+	TryCastSkillSlotInternal(SlotIndex, false);
+}
+
+bool USkillComponent::TryCastCircularSlashStage2Immediately()
+{
+	return TryCastSkillSlotInternal(1, true);
+}
+
+bool USkillComponent::TryCastSkillSlotInternal(int32 SlotIndex, bool bIgnoreActionState)
+{
+	if (!SkillSlots.IsValidIndex(SlotIndex))
 	{
-		return;
+		return false;
 	}
 
 	const EPlayerSkillID SkillID = SkillSlots[SlotIndex].SkillID;
 	if (SkillID == EPlayerSkillID::None)
 	{
-		return;
+		return false;
+	}
+
+	const bool bIsTwoStageCircularSlash = SkillID == EPlayerSkillID::CircularSlash
+		&& GetSkillForm(SkillID) == EPlayerSkillForm::TwoStageArc;
+	if (bIsTwoStageCircularSlash && bCircularSlashStage1Active)
+	{
+		UE_LOG(LogSkill, Display, TEXT("TwoStageArc stage 1 is still resolving; stage 2 remains locked."));
+		return false;
+	}
+
+	if (bIsTwoStageCircularSlash && bCircularSlashStage2Ready)
+	{
+		if (!CanCastSkill(bIgnoreActionState))
+		{
+			return false;
+		}
+
+		if (CastCircularSlashStage2())
+		{
+			LastCastTimes.Add(SkillID, GetWorld()->GetTimeSeconds());
+			OnSkillStateChanged.Broadcast();
+			return true;
+		}
+		return false;
+	}
+
+	if (!CanCastSkill())
+	{
+		return false;
 	}
 
 	const float Cooldown = SkillID == EPlayerSkillID::TripleProjectile
@@ -126,7 +184,7 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 	if (IsOnCooldown(SkillID, Cooldown))
 	{
 		UE_LOG(LogSkill, Display, TEXT("%s is on cooldown."), *UEnum::GetValueAsString(SkillID));
-		return;
+		return false;
 	}
 
 	const bool bCastSucceeded = SkillID == EPlayerSkillID::TripleProjectile
@@ -134,9 +192,17 @@ void USkillComponent::TryCastSkillSlot(int32 SlotIndex)
 		: CastCircularSlash();
 	if (bCastSucceeded)
 	{
-		LastCastTimes.Add(SkillID, GetWorld()->GetTimeSeconds());
+		// TwoStageArc starts its cooldown only after stage 1 misses or stage 2 is
+		// released. The first cast itself must leave the slot in an actionable
+		// stage-1/stage-2 state instead of starting the normal cooldown.
+		if (!bIsTwoStageCircularSlash)
+		{
+			LastCastTimes.Add(SkillID, GetWorld()->GetTimeSeconds());
+		}
 		OnSkillStateChanged.Broadcast();
 	}
+
+	return bCastSucceeded;
 }
 
 bool USkillComponent::HasSkill(EPlayerSkillID SkillID) const
@@ -539,7 +605,11 @@ float USkillComponent::GetCircularSlashRadius() const
 {
 	const int32 UpgradeCount = GetSkillUpgradeState(EPlayerSkillID::CircularSlash).MechanicLevel;
 	const int32 ModifierCount = GetModifierStack(EPlayerSkillID::CircularSlash, ESkillModifierID::RadiusUp);
-	return FMath::Min(440.0f, CircularSlashRadius + (UpgradeCount + ModifierCount) * 60.0f);
+	const bool bTwoStageArc = GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::TwoStageArc;
+	const float BaseRadius = bTwoStageArc ? TwoStageArcRadius : CircularSlashRadius;
+	return FMath::Min(
+		440.0f,
+		FMath::Max(1.0f, BaseRadius) + (UpgradeCount + ModifierCount) * 60.0f);
 }
 
 float USkillComponent::GetCircularSlashCooldown() const
@@ -547,6 +617,11 @@ float USkillComponent::GetCircularSlashCooldown() const
 	const int32 UpgradeCount = GetSkillUpgradeState(EPlayerSkillID::CircularSlash).CooldownLevel;
 	const int32 ModifierCount = GetModifierStack(EPlayerSkillID::CircularSlash, ESkillModifierID::CooldownDown);
 	return FMath::Max(1.6f, CircularSlashCooldown - (UpgradeCount + ModifierCount) * 0.4f);
+}
+
+float USkillComponent::GetTwoStageArcStage2InputWindow() const
+{
+	return FMath::Clamp(TwoStageArcStage2InputWindow, 0.8f, 3.0f);
 }
 
 EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
@@ -566,6 +641,12 @@ EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
 	}
 	if (SkillID == EPlayerSkillID::CircularSlash)
 	{
+		// TwoStageArc is a true form and may coexist with additive modifiers such
+		// as TwinSlash. Preserve the form identity before legacy modifier fallbacks.
+		if (SkillSlots[SlotIndex].SkillForm == EPlayerSkillForm::TwoStageArc)
+		{
+			return EPlayerSkillForm::TwoStageArc;
+		}
 		if (GetModifierStack(SkillID, ESkillModifierID::TwinSlash) > 0)
 		{
 			return EPlayerSkillForm::TwinSlash;
@@ -577,6 +658,83 @@ EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
 	}
 
 	return SkillSlots[SlotIndex].SkillForm;
+}
+
+bool USkillComponent::IsCircularSlashStage1Active() const
+{
+	return bCircularSlashStage1Active;
+}
+
+bool USkillComponent::IsCircularSlashStage2Ready() const
+{
+	return bCircularSlashStage2Ready;
+}
+
+void USkillComponent::BufferCircularSlashStage2Input()
+{
+	if (GetSkillForm(EPlayerSkillID::CircularSlash) != EPlayerSkillForm::TwoStageArc
+		|| (!bCircularSlashStage1Active && !bCircularSlashStage2Ready))
+	{
+		return;
+	}
+
+	if (!bCircularSlashStage2InputBuffered)
+	{
+		bCircularSlashStage2InputBuffered = true;
+		UE_LOG(LogSkill, Display,
+			TEXT("TwoStageArc stage 2 input buffered: Stage1Active=%s Stage2Ready=%s."),
+			bCircularSlashStage1Active ? TEXT("true") : TEXT("false"),
+			bCircularSlashStage2Ready ? TEXT("true") : TEXT("false"));
+	}
+}
+
+bool USkillComponent::HasBufferedCircularSlashStage2Input() const
+{
+	return bCircularSlashStage2InputBuffered;
+}
+
+EPlayerSkillRuntimeState USkillComponent::GetSkillRuntimeState(EPlayerSkillID SkillID) const
+{
+	if (SkillID == EPlayerSkillID::CircularSlash
+		&& GetSkillForm(SkillID) == EPlayerSkillForm::TwoStageArc)
+	{
+		if (bCircularSlashStage1Active)
+		{
+			return EPlayerSkillRuntimeState::Stage1Active;
+		}
+
+		if (bCircularSlashStage2Ready)
+		{
+			return EPlayerSkillRuntimeState::Stage2Ready;
+		}
+	}
+
+	return IsOnCooldown(SkillID, GetSkillCooldown(SkillID))
+		? EPlayerSkillRuntimeState::Cooldown
+		: EPlayerSkillRuntimeState::Ready;
+}
+
+bool USkillComponent::CanTriggerCircularSlashInput() const
+{
+	if (GetSkillForm(EPlayerSkillID::CircularSlash) == EPlayerSkillForm::TwoStageArc)
+	{
+		// Do not enter UPlayerState_Skill2 for a second time while stage 1 is
+		// still resolving. That would replay the skill animation even though
+		// TryCastSkillSlot correctly rejects the cast.
+		if (bCircularSlashStage1Active)
+		{
+			return false;
+		}
+
+		// A confirmed stage-1 hit unlocks stage 2 immediately, without waiting
+		// for the normal E cooldown gate.
+		if (bCircularSlashStage2Ready)
+		{
+			return true;
+		}
+	}
+
+	return !IsOnCooldown(EPlayerSkillID::CircularSlash, GetCircularSlashCooldown());
 }
 
 FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) const
@@ -634,13 +792,32 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		const EPlayerSkillForm LegacyForm = GetSkillForm(SkillID);
 		const bool bHasTwinSlash = GetModifierStack(SkillID, ESkillModifierID::TwinSlash) > 0
 			|| LegacyForm == EPlayerSkillForm::TwinSlash;
-		Spec.HitCount = bHasTwinSlash ? 2 : 1;
+		const bool bTwoStageArc = LegacyForm == EPlayerSkillForm::TwoStageArc;
+		Spec.StageCount = bTwoStageArc ? 2 : 1;
+		Spec.JudgmentsPerStage = bHasTwinSlash ? 2 : 1;
+		Spec.bHasTwinSlash = bHasTwinSlash;
+		Spec.TwinSlashDamageMultiplier = bHasTwinSlash
+			? FMath::Max(0.0f, TwinSlashSecondDamageMultiplier)
+			: 1.0f;
+		Spec.HitCount = Spec.StageCount * Spec.JudgmentsPerStage;
 		Spec.Radius = GetCircularSlashRadius();
 		Spec.Damage = CircularSlashDamage;
+		Spec.StageDamageMultiplier = bTwoStageArc
+			? FMath::Max(0.0f, TwoStageArcStageDamageMultiplier)
+			: 1.0f;
+		Spec.Stage2InputWindow = bTwoStageArc
+			? GetTwoStageArcStage2InputWindow()
+			: 0.0f;
+		Spec.bUseArcHitbox = bTwoStageArc;
+		Spec.ArcHalfAngle = bTwoStageArc
+			? FMath::Clamp(TwoStageArcHalfAngle, 0.0f, 180.0f)
+			: 180.0f;
 		Spec.SecondHitDelay = TwinSlashDelay;
 		Spec.SecondHitAngle = TwinSlashSecondYawOffset;
 		Spec.SecondHitForwardOffset = TwinSlashSecondForwardOffset;
-		Spec.SecondHitDamageMultiplier = TwinSlashSecondDamageMultiplier;
+		// Keep the legacy field populated for serialized/editor callers. Runtime
+		// damage resolution uses the explicit per-judgment field above.
+		Spec.SecondHitDamageMultiplier = Spec.TwinSlashDamageMultiplier;
 		Spec.bNullifyEnemyProjectiles = GetModifierStack(SkillID, ESkillModifierID::NullRing) > 0
 			|| LegacyForm == EPlayerSkillForm::NullRing;
 		Spec.Cooldown = GetCircularSlashCooldown();
@@ -652,13 +829,21 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Radius=%.0f Cooldown=%.2f."),
+		TEXT("Skill spec resolved: Skill=%s Build=%s ProjectileCount=%d Payload=%s ExplosionCount=%d HitCount=%d Stages=%d JudgmentsPerStage=%d TwinSlash=%s TwinSlashMultiplier=%.2f StageDamageMultiplier=%.2f Stage2Window=%.2f Arc=%s HalfAngle=%.1f Radius=%.0f Cooldown=%.2f."),
 		*UEnum::GetValueAsString(SkillID),
 		*BuildModifierSummary(SkillID),
 		Spec.ProjectileCount,
 		*UEnum::GetValueAsString(Spec.PayloadType),
 		Spec.ExplosionCount,
 		Spec.HitCount,
+		Spec.StageCount,
+		Spec.JudgmentsPerStage,
+		Spec.bHasTwinSlash ? TEXT("true") : TEXT("false"),
+		Spec.TwinSlashDamageMultiplier,
+		Spec.StageDamageMultiplier,
+		Spec.Stage2InputWindow,
+		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"),
+		Spec.ArcHalfAngle,
 		Spec.Radius,
 		Spec.Cooldown);
 	return Spec;
@@ -711,6 +896,9 @@ FText USkillComponent::GetSkillBuildSummary(EPlayerSkillID SkillID) const
 	{
 		switch (GetSkillForm(SkillID))
 		{
+		case EPlayerSkillForm::TwoStageArc:
+			Parts.Add(TEXT("Form: Two Stage Arc"));
+			break;
 		case EPlayerSkillForm::TwinSlash:
 			Parts.Add(TEXT("Form: Twin Slash"));
 			break;
@@ -749,8 +937,9 @@ FText USkillComponent::GetResolvedSkillSummary(EPlayerSkillID SkillID) const
 	if (SkillID == EPlayerSkillID::CircularSlash)
 	{
 		return FText::FromString(FString::Printf(
-			TEXT("Effect: %d hit(s) · Radius %.0f · CD %.1fs%s"),
-			Spec.HitCount,
+			TEXT("Effect: %d stage(s) · %d judgment(s)/stage · Radius %.0f · CD %.1fs%s"),
+			Spec.StageCount,
+			Spec.JudgmentsPerStage,
 			Spec.Radius,
 			Spec.Cooldown,
 			Spec.bNullifyEnemyProjectiles ? TEXT(" · Null Ring") : TEXT("")));
@@ -774,7 +963,8 @@ bool USkillComponent::CanApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm
 	case EPlayerSkillID::CircularSlash:
 		return NewForm == EPlayerSkillForm::Default
 			|| NewForm == EPlayerSkillForm::NullRing
-			|| NewForm == EPlayerSkillForm::TwinSlash;
+			|| NewForm == EPlayerSkillForm::TwinSlash
+			|| NewForm == EPlayerSkillForm::TwoStageArc;
 	default:
 		return false;
 	}
@@ -784,8 +974,9 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(TwinSlashTimerHandle);
+		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
 	}
+	bCircularSlashStage2InputBuffered = false;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -801,6 +992,17 @@ bool USkillComponent::ApplySkillForm(EPlayerSkillID SkillID, EPlayerSkillForm Ne
 	if (!SkillSlots.IsValidIndex(SlotIndex))
 	{
 		return false;
+	}
+
+	if (SkillID == EPlayerSkillID::CircularSlash)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
+		}
+		bCircularSlashStage1Active = false;
+		bCircularSlashStage2Ready = false;
+		bCircularSlashStage2InputBuffered = false;
 	}
 
 	// Keep old form callers source-compatible while immediately mirroring the
@@ -854,11 +1056,11 @@ float USkillComponent::GetRemainingSkillCooldown(EPlayerSkillID SkillID) const
 	return FMath::Max(0.0f, Remaining);
 }
 
-bool USkillComponent::CanCastSkill() const
+bool USkillComponent::CanCastSkill(bool bIgnoreActionState) const
 {
 	return IsValid(OwnerCharacter)
 		&& !OwnerCharacter->IsDead()
-		&& OwnerCharacter->CanStartAction()
+		&& (bIgnoreActionState || OwnerCharacter->CanStartAction())
 		&& !OwnerCharacter->IsSprinting();
 }
 
@@ -884,44 +1086,160 @@ bool USkillComponent::CastCircularSlash()
 	}
 
 	const FResolvedSkillSpec Spec = ResolveSkillSpec(EPlayerSkillID::CircularSlash);
-	const FTransform SpawnTransform(OwnerCharacter->GetActorRotation(), OwnerCharacter->GetActorLocation());
-	if (!SpawnCircularSlash(SpawnTransform, Spec.Radius, Spec.Damage, Spec.bNullifyEnemyProjectiles))
+	const bool bIsTwoStage = Spec.StageCount > 1;
+	if (bIsTwoStage)
+	{
+		bCircularSlashStage1Active = true;
+		bCircularSlashStage2Ready = false;
+		bCircularSlashStage2InputBuffered = false;
+		LastCastTimes.Remove(EPlayerSkillID::CircularSlash);
+		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
+	}
+
+	if (!SpawnCircularSlashSet(Spec, 0, bIsTwoStage))
+	{
+		if (bIsTwoStage)
+		{
+			bCircularSlashStage1Active = false;
+			bCircularSlashStage2Ready = false;
+		}
+		return false;
+	}
+
+	if (bIsTwoStage && bCircularSlashStage1Active)
+	{
+		World->GetTimerManager().SetTimer(
+			CircularSlashStage1ResolutionTimerHandle,
+			this,
+			&USkillComponent::ResolveCircularSlashStage1Miss,
+			CircularSlashLifeTime,
+			false);
+		UE_LOG(LogSkill, Log,
+			TEXT("TwoStageArc stage 1 active: Hit any enemy within %.2fs to unlock stage 2."),
+			CircularSlashLifeTime);
+	}
+
+	UE_LOG(LogSkill, Display, TEXT("CircularSlash cast: Radius=%.0f NullRing=%s Stages=%d JudgmentsPerStage=%d Arc=%s."),
+		Spec.Radius,
+		Spec.bNullifyEnemyProjectiles ? TEXT("true") : TEXT("false"),
+		Spec.StageCount,
+		Spec.JudgmentsPerStage,
+		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"));
+	return true;
+}
+
+bool USkillComponent::CastCircularSlashStage2()
+{
+	if (!bCircularSlashStage2Ready)
 	{
 		return false;
 	}
 
-	if (Spec.HitCount > 1)
+	if (!ECastSoundName.IsEmpty())
 	{
-		PendingTwinSlashOrigin = SpawnTransform.GetLocation();
-		PendingTwinSlashRotation = SpawnTransform.Rotator();
-		PendingTwinSlashSpec = Spec;
-		World->GetTimerManager().ClearTimer(TwinSlashTimerHandle);
-		World->GetTimerManager().SetTimer(
-			TwinSlashTimerHandle,
-			this,
-			&USkillComponent::CastTwinSlashSecondHit,
-			Spec.SecondHitDelay,
-			false);
-		UE_LOG(LogSkill, Log,
-			TEXT("Twin Slash queued: Delay=%.2f Damage=%.1f Angle=%.1f Offset=%.0f."),
-			Spec.SecondHitDelay,
-			Spec.Damage * Spec.SecondHitDamageMultiplier,
-			Spec.SecondHitAngle,
-			Spec.SecondHitForwardOffset);
+		FAudioManager::Play(ECastSoundName, true);
 	}
 
-	UE_LOG(LogSkill, Display, TEXT("CircularSlash cast: Radius=%.0f NullRing=%s HitCount=%d."),
-		Spec.Radius,
-		Spec.bNullifyEnemyProjectiles ? TEXT("true") : TEXT("false"),
-		Spec.HitCount);
+	const FResolvedSkillSpec Spec = ResolveSkillSpec(EPlayerSkillID::CircularSlash);
+	if (Spec.StageCount < 2 || !SpawnCircularSlashSet(Spec, 1, false))
+	{
+		UE_LOG(LogSkill, Warning, TEXT("TwoStageArc stage 2 spawn failed; stage 2 remains available."));
+		return false;
+	}
+
+	bCircularSlashStage2Ready = false;
+	bCircularSlashStage1Active = false;
+	bCircularSlashStage2InputBuffered = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
+	}
+	UE_LOG(LogSkill, Display,
+		TEXT("TwoStageArc stage 2 released: DamageMultiplier=%.2f JudgmentsPerStage=%d."),
+		Spec.StageDamageMultiplier,
+		Spec.JudgmentsPerStage);
+	return true;
+}
+
+bool USkillComponent::SpawnCircularSlashSet(
+	const FResolvedSkillSpec& Spec,
+	int32 StageIndex,
+	bool bListenForStage1Hit)
+{
+	if (!OwnerCharacter || StageIndex < 0 || StageIndex >= Spec.StageCount)
+	{
+		return false;
+	}
+
+	const FVector Origin = OwnerCharacter->GetActorLocation();
+	const FRotator BaseRotation = OwnerCharacter->GetActorRotation();
+	const float TwinSlashMultiplier = Spec.bHasTwinSlash
+		? Spec.TwinSlashDamageMultiplier
+		: 1.0f;
+	const float JudgmentDamage = Spec.Damage * Spec.StageDamageMultiplier * TwinSlashMultiplier;
+
+	for (int32 JudgmentIndex = 0; JudgmentIndex < Spec.JudgmentsPerStage; ++JudgmentIndex)
+	{
+		FRotator JudgmentRotation = BaseRotation;
+		FVector JudgmentLocation = Origin;
+		if (JudgmentIndex > 0)
+		{
+			JudgmentRotation += FRotator(0.0f, Spec.SecondHitAngle, 0.0f);
+			FVector JudgmentDirection = JudgmentRotation.Vector();
+			JudgmentDirection.Z = 0.0f;
+			if (!JudgmentDirection.Normalize())
+			{
+				return false;
+			}
+			JudgmentLocation += JudgmentDirection * Spec.SecondHitForwardOffset;
+		}
+
+		const FTransform JudgmentTransform(JudgmentRotation, JudgmentLocation);
+		const FTransform VisualTransform =
+			Spec.bUseArcHitbox && Spec.bHasTwinSlash
+			? FTransform(BaseRotation, Origin)
+			: JudgmentTransform;
+		if (!SpawnCircularSlash(
+			JudgmentTransform,
+			VisualTransform,
+			Spec.Radius,
+			JudgmentDamage,
+			Spec.bNullifyEnemyProjectiles,
+			bListenForStage1Hit,
+			Spec.bUseArcHitbox,
+			Spec.ArcHalfAngle,
+			StageIndex,
+			JudgmentIndex,
+			Spec.bHasTwinSlash))
+		{
+			return false;
+		}
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("CircularSlash stage spawned: Stage=%d/%d Judgments=%d DamagePerJudgment=%.1f StageTotal=%.1f TwinSlash=%s Arc=%s."),
+		StageIndex + 1,
+		Spec.StageCount,
+		Spec.JudgmentsPerStage,
+		JudgmentDamage,
+		JudgmentDamage * static_cast<float>(Spec.JudgmentsPerStage),
+		Spec.bHasTwinSlash ? TEXT("true") : TEXT("false"),
+		Spec.bUseArcHitbox ? TEXT("true") : TEXT("false"));
 	return true;
 }
 
 bool USkillComponent::SpawnCircularSlash(
 	const FTransform& SpawnTransform,
+	const FTransform& VFXSpawnTransform,
 	float Radius,
 	float Damage,
-	bool bNullifyEnemyProjectiles)
+	bool bNullifyEnemyProjectiles,
+	bool bListenForStage1Hit,
+	bool bUseArcHitbox,
+	float ArcHalfAngle,
+	int32 StageIndex,
+	int32 JudgmentIndex,
+	bool bHasTwinSlash)
 {
 	UWorld* World = GetWorld();
 	if (!World || !CircularSlashAreaClass || !OwnerCharacter)
@@ -945,44 +1263,172 @@ bool USkillComponent::SpawnCircularSlash(
 		Damage,
 		CircularSlashLifeTime,
 		OwnerCharacter,
-		bNullifyEnemyProjectiles);
+		bNullifyEnemyProjectiles,
+		bUseArcHitbox,
+		ArcHalfAngle);
+	// The normal E keeps the original BP circular slash VFX. TwoStageArc owns
+	// its presentation and therefore hides only the legacy component on this
+	// arc damage area before the deferred actor begins play.
+	DamageArea->SetUseLegacyCircularSlashVFX(!bUseArcHitbox);
+	if (bListenForStage1Hit)
+	{
+		DamageArea->OnHitConfirmed.AddUObject(this, &USkillComponent::HandleCircularSlashStage1Hit);
+	}
+	if (bUseArcHitbox)
+	{
+		UE_LOG(LogSkill, Verbose,
+			TEXT("CircularSlash arc hitbox configured for %s: HalfAngle=%.1f Radius=%.0f."),
+			*GetNameSafe(DamageArea),
+			ArcHalfAngle,
+			Radius);
+	}
 	UGameplayStatics::FinishSpawningActor(DamageArea, SpawnTransform);
+	if (bUseArcHitbox)
+	{
+		SpawnTwoStageArcVFX(VFXSpawnTransform, StageIndex, JudgmentIndex, bHasTwinSlash);
+	}
 	return true;
 }
 
-void USkillComponent::CastTwinSlashSecondHit()
+void USkillComponent::SpawnTwoStageArcVFX(
+	const FTransform& SpawnTransform,
+	int32 StageIndex,
+	int32 JudgmentIndex,
+	bool bHasTwinSlash)
 {
 	UWorld* World = GetWorld();
-	if (!World || !IsValid(OwnerCharacter) || OwnerCharacter->IsDead())
+	const bool bMirrorVFX = bHasTwinSlash ? JudgmentIndex > 0 : StageIndex > 0;
+	UNiagaraSystem* SelectedVFX = bMirrorVFX && TwoStageArcMirrorVFX
+		? TwoStageArcMirrorVFX
+		: TwoStageArcVFX;
+	if (!World || !SelectedVFX || !OwnerCharacter)
+	{
+		UE_LOG(LogSkill, Warning,
+			TEXT("TwoStageArc VFX skipped: World=%s Asset=%s Mirror=%s Owner=%s."),
+			World ? TEXT("valid") : TEXT("invalid"),
+			*GetNameSafe(SelectedVFX),
+			bMirrorVFX ? TEXT("true") : TEXT("false"),
+			*GetNameSafe(OwnerCharacter));
+		return;
+	}
+
+	FRotator SpawnRotation = SpawnTransform.Rotator();
+	const float SweepYaw = (bMirrorVFX ? -1.0f : 1.0f)
+		* FMath::Clamp(TwoStageArcVFXYawOffset, -180.0f, 180.0f);
+	SpawnRotation.Yaw += SweepYaw;
+	const float GroundAngle = FMath::Clamp(TwoStageArcVFXGroundAngle, -90.0f, 90.0f);
+	SpawnRotation.Pitch += GroundAngle;
+
+	FVector Forward = OwnerCharacter->GetActorForwardVector();
+	Forward.Z = 0.0f;
+	if (!Forward.Normalize())
+	{
+		Forward = FVector::ForwardVector;
+	}
+
+	FVector Right = OwnerCharacter->GetActorRightVector();
+	Right.Z = 0.0f;
+	if (!Right.Normalize())
+	{
+		Right = FVector::RightVector;
+	}
+
+	const FVector SpawnLocation = SpawnTransform.GetLocation()
+		+ Forward * TwoStageArcVFXForwardOffset
+		+ Right * TwoStageArcVFXRightOffset
+		+ FVector::UpVector * TwoStageArcVFXHeightOffset;
+	const float Scale = FMath::Max(0.01f, TwoStageArcVFXScale);
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		SelectedVFX,
+		SpawnLocation,
+		SpawnRotation,
+		FVector(Scale));
+
+	UE_LOG(LogSkill, Log,
+		TEXT("TwoStageArc VFX spawned: Asset=%s Stage=%d Judgment=%d Twin=%s Mirror=%s Scale=%.2f Yaw=%.1f Pitch=%.1f Offset=(Forward=%.1f Right=%.1f Height=%.1f)."),
+		*GetNameSafe(SelectedVFX),
+		StageIndex + 1,
+		JudgmentIndex + 1,
+		bHasTwinSlash ? TEXT("true") : TEXT("false"),
+		bMirrorVFX ? TEXT("true") : TEXT("false"),
+		Scale,
+		SweepYaw,
+		GroundAngle,
+		TwoStageArcVFXForwardOffset,
+		TwoStageArcVFXRightOffset,
+		TwoStageArcVFXHeightOffset);
+}
+
+void USkillComponent::HandleCircularSlashStage1Hit(AActor* HitActor)
+{
+	if (!bCircularSlashStage1Active)
 	{
 		return;
 	}
 
-	const FRotator SecondRotation = PendingTwinSlashRotation + FRotator(0.0f, PendingTwinSlashSpec.SecondHitAngle, 0.0f);
-	FVector SecondDirection = SecondRotation.Vector();
-	SecondDirection.Z = 0.0f;
-	if (!SecondDirection.Normalize())
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CircularSlashStage1ResolutionTimerHandle);
+	}
+	bCircularSlashStage1Active = false;
+	bCircularSlashStage2Ready = true;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			CircularSlashStage1ResolutionTimerHandle,
+			this,
+			&USkillComponent::ResolveCircularSlashStage2Timeout,
+			GetTwoStageArcStage2InputWindow(),
+			false);
+	}
+	UE_LOG(LogSkill, Display,
+		TEXT("TwoStageArc stage 1 hit %s; stage 2 unlocked for %.2fs."),
+		*GetNameSafe(HitActor),
+		GetTwoStageArcStage2InputWindow());
+	OnSkillStateChanged.Broadcast();
+
+	if (bCircularSlashStage2InputBuffered && OwnerCharacter)
+	{
+		OwnerCharacter->TryConsumeBufferedCircularSlashStage2Input();
+	}
+}
+
+
+void USkillComponent::ResolveCircularSlashStage1Miss()
+{
+	if (!bCircularSlashStage1Active)
 	{
 		return;
 	}
 
-	const FVector SecondLocation = PendingTwinSlashOrigin + SecondDirection * PendingTwinSlashSpec.SecondHitForwardOffset;
-	const FTransform SecondTransform(SecondRotation, SecondLocation);
-	const float SecondDamage = PendingTwinSlashSpec.Damage * PendingTwinSlashSpec.SecondHitDamageMultiplier;
-	if (SpawnCircularSlash(
-		SecondTransform,
-		PendingTwinSlashSpec.Radius,
-		SecondDamage,
-		PendingTwinSlashSpec.bNullifyEnemyProjectiles))
+	bCircularSlashStage1Active = false;
+	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
+	if (UWorld* World = GetWorld())
 	{
-		UE_LOG(LogSkill, Log,
-			TEXT("Twin Slash second cast: Damage=%.1f Angle=%.1f Location=(%.0f, %.0f, %.0f)."),
-			SecondDamage,
-			PendingTwinSlashSpec.SecondHitAngle,
-			SecondLocation.X,
-			SecondLocation.Y,
-			SecondLocation.Z);
+		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
 	}
+	UE_LOG(LogSkill, Display, TEXT("TwoStageArc stage 1 missed; E cooldown started without stage 2."));
+	OnSkillStateChanged.Broadcast();
+}
+
+void USkillComponent::ResolveCircularSlashStage2Timeout()
+{
+	if (!bCircularSlashStage2Ready)
+	{
+		return;
+	}
+
+	bCircularSlashStage2Ready = false;
+	bCircularSlashStage2InputBuffered = false;
+	if (UWorld* World = GetWorld())
+	{
+		LastCastTimes.Add(EPlayerSkillID::CircularSlash, World->GetTimeSeconds());
+	}
+	UE_LOG(LogSkill, Display,
+		TEXT("TwoStageArc stage 2 input window expired; E cooldown started."));
+	OnSkillStateChanged.Broadcast();
 }
 
 bool USkillComponent::CastTripleProjectile()
@@ -1169,7 +1615,10 @@ bool USkillComponent::CastThrownGrenade(const FResolvedSkillSpec& Spec)
 			Spec.HomingMaxDistance,
 			Spec.HomingAcceptanceRadius,
 			Spec.GuidanceMode,
-			GuidanceTargetOffset);
+			GuidanceTargetOffset,
+			ThrownGrenadeNiagaraSystem,
+			ThrownGrenadeImpactNiagaraSystem,
+			bDrawThrownGrenadeDebugExplosion);
 		UGameplayStatics::FinishSpawningActor(Grenade, SpawnTransform);
 		++SpawnedCount;
 	}

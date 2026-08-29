@@ -56,7 +56,7 @@ void ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData);
 | `Source/RiverOfInk/Script/Player/PlayerState/PlayerState_Idle.cpp` | 空闲状态接收 Q/E，并切入技能状态 | ✅ 状态入口 |
 | `Source/RiverOfInk/Script/Player/PlayerState/PlayerState_Move.cpp` | 移动状态接收 Q/E，并切入技能状态 | ✅ 状态入口 |
 | `Source/RiverOfInk/Script/Player/PlayerState/PlayerState_Skill1.cpp` | Q 技能状态，调用 `TryCastSkillSlot(0)`，处理短暂滑行动画 | ✅ Q 状态包装 |
-| `Source/RiverOfInk/Script/Player/PlayerState/PlayerState_Skill2.cpp` | E 技能状态，调用 `TryCastSkillSlot(1)`，处理短暂滑行动画 | ✅ E 状态包装 |
+| `Source/RiverOfInk/Script/Player/PlayerState/PlayerState_Skill2.cpp` | E 技能状态；进入时调用 `TryCastSkillSlot(1)`，状态期间转发 E 到输入缓存/二段消费路径，并处理短暂滑行动画 | ✅ E 状态包装 |
 
 输入实际调用链：
 
@@ -65,10 +65,14 @@ Q/E InputAction (Started)
   → UPlayerInputComponent::OnQ / OnE
   → OnQDelegate / OnEDelegate
   → PlayerState_Idle 或 PlayerState_Move::OnQ / OnE
-  → PlayerState_Skill1 / PlayerState_Skill2::OnEnter
-  → APlayerCharacter::TryCastSkillSlot1 / 2
-  → USkillComponent::TryCastSkillSlot(0 / 1)
+  → Q: PlayerState_Skill1::OnEnter → APlayerCharacter::TryCastSkillSlot1 → TryCastSkillSlot(0)
+  → E: APlayerCharacter::RequestSkill2Input()
+       ├─ TwoStageArc 首段进行中：缓存一次第二段 E
+       ├─ TwoStageArc 二段已解锁：立即消费；动作态阻塞时由 EndAttack() 重试
+       └─ 其他情况：SwitchState(Skill2) → OnEnter → TryCastSkillSlot(1)
 ```
+
+TwoStageArc 的 E 输入缓存是一次性请求，不延长二段输入窗口，也不修改伤害、冷却或 VFX；首段未命中、二段超时、形态切换、RuntimeData 应用、二段成功释放和结束游戏时都会清除缓存。`PlayerState_Skill2` 订阅 `OnEDelegate`，因此连续按 E 时不会因当前仍处于 Skill2 状态而丢失输入。
 
 ### 2.3 技能 Actor 与伤害区域
 
@@ -81,10 +85,11 @@ Q/E InputAction (Started)
 `USkillComponent::ResolveSkillSpec()` 先输出不可变的本次施放参数，再由施放函数选择 Actor：
 
 ```text
-TripleProjectile + NormalProjectile → AAttackAreaBase
-TripleProjectile + InkGrenade       → APlayerSkill_ThrownGrenade
-CircularSlash                       → APlayerSkill_CircleDamageArea
-TwinSlash                           → 延迟再次生成 CircleDamageArea
+  TripleProjectile + NormalProjectile → AAttackAreaBase
+  TripleProjectile + InkGrenade       → APlayerSkill_ThrownGrenade
+  CircularSlash                       → APlayerSkill_CircleDamageArea
+  CircularSlash + TwinSlash            → 每个阶段扩展为两次同时判定
+  CircularSlash + TwoStageArc          → 两阶段弧形判定与专用刀光
 ```
 
 ### 2.4 奖励与 UI
@@ -140,12 +145,16 @@ APlayerCharacter::CaptureRuntimeData()
 | Q | `InkGrenade` | 普通 Q Payload 转为投掷手雷 | 最大 1 层 |
 | Q | `ExtraExplosion` | 每枚手雷额外爆炸一次 | 最大 1 层；必须先有 `InkGrenade` |
 | Q | `CooldownDown` | 冷却 `-0.5s` | 最大 4 层；最低 2.0s |
-| E | `TwinSlash` | 延迟二段攻击，二段伤害为 80% | 最大 1 层；与 `NullRing` 可共存 |
+| E | `TwinSlash` | 每阶段增加一次同时判定；每次判定伤害乘以 `0.65` | 最大 1 层；与 `NullRing`、`TwoStageArc` 可共存 |
 | E | `NullRing` | E 范围内消除标记敌方投射物 | 最大 1 层；与 `TwinSlash` 可共存 |
 | E | `RadiusUp` | 半径 `+60` | 最大 3 层；最高 440 |
 | E | `CooldownDown` | 冷却 `-0.4s` | 最大 3 层；最低 1.6s |
 
-E 二段当前配置来自 `USkillComponent`：延迟 `0.18s`、Yaw 偏移 `35°`、前向偏移 `110`、伤害倍率 `0.8`。Resolver 将 `TwinSlash + NullRing` 合并成同一份 Spec，二段沿用消弹参数。
+E 二段当前配置来自 `USkillComponent`：`TwoStageArcStageDamageMultiplier = 0.8`、`TwoStageArcRadius = 200cm`、`TwoStageArcHalfAngle = 65°`、二段输入窗口 `2.0s`。Resolver 将 `TwoStageArc` 形态与 `TwinSlash + NullRing` Modifier 合并到同一份 Spec：两段形态为 `StageCount = 2`，TwinSlash 为每阶段 `JudgmentsPerStage = 2`，NullRing 让两段都保留消弹逻辑。
+
+`TwinSlashDelay = 0.18s`、`TwinSlashSecondYawOffset = 35°`、`TwinSlashSecondForwardOffset = 110cm` 仍保留用于序列化/编辑器兼容，但当前 TwinSlash 运行时是每阶段同时生成的第二个判定，不再使用这些旧字段制造延迟。
+
+代码层兼容统计：普通 E、普通 E + TwinSlash、普通 E + NullRing、普通 E + TwinSlash + NullRing，以及对应的四种 TwoStageArc 组合共 `8/8` 可解析。`RadiusUp` 现在以 `TwoStageArcRadius` 为基础生效，沿用每层 `+60cm` 和 `440cm` 上限；`CooldownDown` 则对所有 E 构筑有效。
 
 ## 4. 旧版兼容边界
 
@@ -154,6 +163,7 @@ E 二段当前配置来自 `USkillComponent`：延迟 `0.18s`、Yaw 偏移 `35°
 - `EPlayerSkillForm` 和 `FPlayerSkillSlot::SkillForm`：旧 RuntimeData 快照兼容字段。
 - `USkillComponent::CanApplySkillForm()` / `ApplySkillForm()`：旧 Blueprint/旧奖励数据的兼容入口。
 - `USkillComponent::MigrateLegacySkillForms()`：映射 `ThrownGrenade → InkGrenade`、`TwinSlash → TwinSlash Modifier`、`NullRing → NullRing Modifier`。
+- `TwoStageArc` 应作为形态保留，`TwinSlash` / `NullRing` / `RadiusUp` / `CooldownDown` 应通过 Modifier 入口叠加；旧 `ApplySkillForm()` 仅用于兼容旧 Blueprint/快照，不应作为新的组合奖励入口。
 
 新代码不要：
 
@@ -180,8 +190,10 @@ E 二段当前配置来自 `USkillComponent`：延迟 `0.18s`、Yaw 偏移 `35°
 - [x] Q 普通投射物、Q `InkGrenade`、E `TwinSlash`、E `NullRing` 共享 `ResolveSkillSpec()`。
 - [x] `CaptureRuntimeData / ApplyRuntimeData` 保留 Modifier 和升级状态。
 - [x] HUD 通过 `OnSkillStateChanged` 更新构筑摘要，不复制技能计算。
+- [x] TwoStageArc 第二段 E 支持一次性输入缓存；首段命中后消费缓存，动作态阻塞时由 `EndAttack()` 重试。
+- [x] TwoStageArc 与 TwinSlash、NullRing 的 8 个核心组合均可由 `ResolveSkillSpec()` 解析；`RadiusUp` 的两段半径覆盖边界已记录。
 - [x] 冷编译和准备房间 PIE 启动已有记录；构建过程未出现 dotnet 弹窗。
 - [ ] 在 Combat Room 逐项完成奖励点击、Modifier 组合、达到上限后的候选过滤验证。
-- [ ] 完成 `TwinSlash + NullRing` 两段攻击的重复命中与消弹行为矩阵。
+- [ ] 在 PIE 中逐项记录 `TwinSlash + NullRing` 两段攻击的重复命中与消弹行为矩阵；本轮用户已完成 PIE，但未在本文提供逐组合的实测明细。
 
 队友接入新奖励时，优先检查本清单第 2、3、4 节，再修改 `RoguelikeRewardManager` 和 `SkillComponent`；不要以 `damage-model-slice1.md` 的旧 `SkillForm` 流程作为实现依据。

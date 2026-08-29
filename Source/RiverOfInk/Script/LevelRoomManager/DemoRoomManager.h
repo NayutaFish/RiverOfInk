@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -106,7 +106,7 @@ private:
 	void CheckAndSpawn();
 
 	/** 在指定位置生成敌人（含计数与日志） */
-	void SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform);
+	bool SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform);
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Room")

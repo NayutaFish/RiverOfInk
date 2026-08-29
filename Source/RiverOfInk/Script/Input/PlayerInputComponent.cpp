@@ -126,7 +126,6 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 	EnhancedInput->BindAction(MoveXAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnMoveX);
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnMoveY);
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnMoveY);
-	EnhancedInput->BindAction(ShiftAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnShift);
 
 	// 动作（Started = 按下的瞬间触发一次）
 	EnhancedInput->BindAction(LmbAction, ETriggerEvent::Started, this, &UPlayerInputComponent::OnLmb);

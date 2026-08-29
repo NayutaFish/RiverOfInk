@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LevelRoomManager/DemoRoomManager.h"
 
@@ -140,6 +140,26 @@ void ADemoRoomManager::StartRoom()
 		return;
 	}
 
+	// 给每个出生点分配本局刷怪数，保证清完后墨水坑刚好溶解完。
+	{
+		const int32 BaseCount = MaxEnemySpawnCount / SpawnPoints.Num();
+		int32 Remainder = MaxEnemySpawnCount % SpawnPoints.Num();
+		for (AEnemySpawnPoint* SpawnPoint : SpawnPoints)
+		{
+			if (!IsValid(SpawnPoint))
+			{
+				continue;
+			}
+
+			const int32 Count = BaseCount + (Remainder > 0 ? 1 : 0);
+			if (Remainder > 0)
+			{
+				--Remainder;
+			}
+			SpawnPoint->AssignSpawnCount(Count);
+		}
+	}
+
 	bRoomStarted = true;
 	bRoomCleared = false;
 
@@ -195,39 +215,47 @@ void ADemoRoomManager::CheckAndSpawn()
 		FTimerHandle SpawnDelayTimerHandle;
 		GetWorldTimerManager().SetTimer(
 			SpawnDelayTimerHandle,
-			FTimerDelegate::CreateWeakLambda(this, [this, ClassToSpawn, SpawnTransform]()
-			{
-				SpawnEnemy(ClassToSpawn, SpawnTransform);
-			}),
+                  FTimerDelegate::CreateWeakLambda(this, [this, ClassToSpawn, SpawnTransform, SpawnPoint]()
+                  {
+                          if (SpawnEnemy(ClassToSpawn, SpawnTransform))
+                          {
+                                  SpawnPoint->NotifyEnemySpawned();
+                          }
+                  }),
 			SpawnVFXDelaySeconds,
 			false);
 	}
 }
 
-void ADemoRoomManager::SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform)
+bool ADemoRoomManager::SpawnEnemy(TSubclassOf<AEnemyBase> ClassToSpawn, const FTransform& SpawnTransform)
 {
-	if (bRoomCleared || SpawnQuota <= 0 || !ClassToSpawn)
-	{
-		return;
-	}
+if (bRoomCleared || SpawnQuota <= 0 || !ClassToSpawn)
+{
+return false;
+}
 
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
+UWorld* World = GetWorld();
+if (!World)
+{
+return false;
+}
 
-	AEnemyBase* SpawnedEnemy = World->SpawnActor<AEnemyBase>(ClassToSpawn, SpawnTransform);
-	if (!IsValid(SpawnedEnemy)) return;
+AEnemyBase* SpawnedEnemy = World->SpawnActor<AEnemyBase>(ClassToSpawn, SpawnTransform);
+if (!IsValid(SpawnedEnemy))
+{
+return false;
+}
 
-	SpawnedEnemy->OnEnemyDeath.AddDynamic(this, &ADemoRoomManager::HandleEnemyDeath);
+SpawnedEnemy->OnEnemyDeath.AddDynamic(this, &ADemoRoomManager::HandleEnemyDeath);
 
-	ActiveEnemyList.Add(SpawnedEnemy);
-	++AliveEnemyCount;
-	--SpawnQuota;
+ActiveEnemyList.Add(SpawnedEnemy);
+++AliveEnemyCount;
+--SpawnQuota;
 
-	UE_LOG(LogRiverOfInk, Log, TEXT("Spawned enemy: %s (alive=%d, quota=%d)"),
-		*SpawnedEnemy->GetName(), AliveEnemyCount, SpawnQuota);
+UE_LOG(LogRiverOfInk, Log, TEXT("Spawned enemy: %s (alive=%d, quota=%d)"),
+*SpawnedEnemy->GetName(), AliveEnemyCount, SpawnQuota);
+
+return true;
 }
 
 void ADemoRoomManager::HandleEnemyDeath(AActor* DeadEnemy)
@@ -275,6 +303,15 @@ void ADemoRoomManager::CheckRoomClear()
 	}
 
 	bRoomCleared = true;
+
+	// 清场时让所有墨水坑直接完全溶解。
+	for (AEnemySpawnPoint* SpawnPoint : SpawnPoints)
+	{
+		if (IsValid(SpawnPoint))
+		{
+			SpawnPoint->CompleteInkFade();
+		}
+	}
 
 	// 停止刷新计时器
 	GetWorldTimerManager().ClearTimer(SpawnCheckTimerHandle);
