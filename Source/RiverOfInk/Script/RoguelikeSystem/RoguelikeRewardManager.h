@@ -37,13 +37,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	void SelectReward(int32 OptionIndex);
 
-	/** Development-only helper that displays one legal reward selected by identifier. */
+	/**
+	 * Development-only helper that displays one legal reward selected by identifier.
+	 * StackCount is the number of modifier stacks applied by this debug reward; form rewards require 1.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
-	bool DebugShowSpecificReward(const FString& RewardIdentifier);
+	bool DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount = 1);
 
-	/** Development-only helper that displays and immediately selects one legal reward. */
+	/**
+	 * Development-only helper that displays and immediately selects one legal reward.
+	 * StackCount is the number of modifier stacks applied by this debug reward; form rewards require 1.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Reward|Debug")
-	bool DebugSelectSpecificReward(const FString& RewardIdentifier);
+	bool DebugSelectSpecificReward(const FString& RewardIdentifier, int32 StackCount = 1);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|UI")
 	TSubclassOf<URoguelikeRewardWidget> RewardWidgetClass;
@@ -103,7 +109,11 @@ private:
 		const FText& Description) const;
 	bool TryBuildDebugRewardOption(
 		const FString& RewardIdentifier,
+		int32 StackDelta,
 		FRoguelikeRewardOption& OutOption) const;
+	bool RejectDuplicateSkillFormSelection(
+		const FRoguelikeRewardOption& Option,
+		const TCHAR* DebugCommandName) const;
 	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
 	void PopulateRewardPresentation(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;

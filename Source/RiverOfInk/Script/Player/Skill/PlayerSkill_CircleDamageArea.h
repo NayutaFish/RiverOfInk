@@ -104,6 +104,8 @@ protected:
 
 private:
 	void UpdateVisualPlaneScale();
+	/** Draw the horizontal arc outline used by the arc-hitbox debug view. */
+	void DrawDebugFanHitbox() const;
 	void SuppressLegacyCircularSlashVFX();
 	void TryDamageActor(AActor* OtherActor);
 	void NullifyEnemyProjectilesInRange();

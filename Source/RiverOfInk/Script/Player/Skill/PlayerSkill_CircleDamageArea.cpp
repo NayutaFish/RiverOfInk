@@ -74,26 +74,7 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	{
 		if (bUseArcHitbox)
 		{
-			FVector Forward = GetActorForwardVector();
-			Forward.Z = 0.0f;
-			if (!Forward.Normalize())
-			{
-				Forward = FVector::ForwardVector;
-			}
-
-			DrawDebugCone(
-				GetWorld(),
-				GetActorLocation() + FVector(0.0f, 0.0f, 3.0f),
-				Forward,
-				Radius,
-				FMath::DegreesToRadians(ArcHalfAngle),
-				FMath::DegreesToRadians(ArcHalfAngle),
-				32,
-				FColor::Yellow,
-				false,
-				LifeTime,
-				0,
-				2.0f);
+			DrawDebugFanHitbox();
 		}
 		else
 		{
@@ -133,6 +114,44 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	{
 		TryDamageActor(OverlappingActor);
 	}
+}
+
+void APlayerSkill_CircleDamageArea::DrawDebugFanHitbox() const
+{
+#if ENABLE_DRAW_DEBUG
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const int32 SegmentCount = 32;
+	const float HalfAngleRadians = FMath::DegreesToRadians(FMath::Clamp(ArcHalfAngle, 0.0f, 180.0f));
+	const float ForwardYaw = FMath::Atan2(GetActorForwardVector().Y, GetActorForwardVector().X);
+	const float StartAngle = ForwardYaw - HalfAngleRadians;
+	const float AngleStep = (HalfAngleRadians * 2.0f) / static_cast<float>(SegmentCount);
+	const FVector Origin = GetActorLocation() + FVector(0.0f, 0.0f, 3.0f);
+	const FColor DebugColor = FColor::Yellow;
+	const float LineThickness = 2.0f;
+
+	auto PointOnArc = [this, &Origin](float Angle)
+	{
+		return Origin + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f) * Radius;
+	};
+
+	const FVector LeftEdge = PointOnArc(StartAngle);
+	FVector PreviousPoint = LeftEdge;
+	for (int32 SegmentIndex = 1; SegmentIndex <= SegmentCount; ++SegmentIndex)
+	{
+		const FVector CurrentPoint = PointOnArc(StartAngle + AngleStep * static_cast<float>(SegmentIndex));
+		DrawDebugLine(World, PreviousPoint, CurrentPoint, DebugColor, false, LifeTime, 0, LineThickness);
+		PreviousPoint = CurrentPoint;
+	}
+
+	const FVector RightEdge = PreviousPoint;
+	DrawDebugLine(World, Origin, LeftEdge, DebugColor, false, LifeTime, 0, LineThickness);
+	DrawDebugLine(World, Origin, RightEdge, DebugColor, false, LifeTime, 0, LineThickness);
+#endif
 }
 
 void APlayerSkill_CircleDamageArea::SetUseLegacyCircularSlashVFX(bool bInUseLegacyCircularSlashVFX)
