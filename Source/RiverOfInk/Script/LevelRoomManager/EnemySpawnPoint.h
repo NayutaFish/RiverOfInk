@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -11,6 +11,7 @@ class UBillboardComponent;
 class USceneComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
+class UNiagaraComponent;
 
 /**
  * Enemy spawn point.
@@ -49,7 +50,11 @@ public:
 
 	/** fadeValue 渐变速度（每秒变化量） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn Point|Fade", meta = (ClampMin = "0.01"))
-	float FadeInterpSpeed = 0.05f;
+	float FadeInterpSpeed = 0.2f;
+
+	/** 漂浮墨球 Niagara 的 spawnRate 用户参数名 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn Point|Niagara")
+	FName SpawnRateParameterName = TEXT("User.spawnRate");
 
 	/** 由 DemoRoomManager 分配该出生点本局应刷怪的总数。 */
 	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
@@ -63,6 +68,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
 	void CompleteInkFade();
 
+	/** 根据房间整体歼敌进度设置溶解目标值（0~1）。 */
+	UFUNCTION(BlueprintCallable, Category = "Spawn Point|Fade")
+	void SetInkFadeProgress(float InProgress);
+
 	/** 当前墨水坑溶解进度 0~1。 */
 	UFUNCTION(BlueprintPure, Category = "Spawn Point|Fade")
 	float GetFadeValue() const;
@@ -73,10 +82,17 @@ protected:
 
 private:
 	void SetupInkMaterial();
+	void SetupFloatingInkBall();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> InkMesh;
 
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> FloatingInkNiagara;
+
+	float InitialSpawnRate = 0.0f;
+	bool bHasSpawnRateParameter = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> FadeMaterialInstance;
 

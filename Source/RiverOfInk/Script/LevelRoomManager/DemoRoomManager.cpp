@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LevelRoomManager/DemoRoomManager.h"
 
@@ -215,13 +215,10 @@ void ADemoRoomManager::CheckAndSpawn()
 		FTimerHandle SpawnDelayTimerHandle;
 		GetWorldTimerManager().SetTimer(
 			SpawnDelayTimerHandle,
-                  FTimerDelegate::CreateWeakLambda(this, [this, ClassToSpawn, SpawnTransform, SpawnPoint]()
-                  {
-                          if (SpawnEnemy(ClassToSpawn, SpawnTransform))
-                          {
-                                  SpawnPoint->NotifyEnemySpawned();
-                          }
-                  }),
+FTimerDelegate::CreateWeakLambda(this, [this, ClassToSpawn, SpawnTransform]()
+{
+SpawnEnemy(ClassToSpawn, SpawnTransform);
+}),
 			SpawnVFXDelaySeconds,
 			false);
 	}
@@ -269,6 +266,19 @@ void ADemoRoomManager::HandleEnemyDeath(AActor* DeadEnemy)
 	AliveEnemyCount = FMath::Max(0, AliveEnemyCount - RemovedCount);
 	++EliminatedEnemyCount;
 	UE_LOG(LogRoguelike, Log, TEXT("Enemy eliminated: Count=%d Target=%d."), EliminatedEnemyCount, TargetEliminateCount);
+
+	// 根据整体歼敌进度推进墨水坑溶解，让玩家接近目标时墨水坑也接近溶解完毕。
+	if (TargetEliminateCount > 0)
+	{
+		const float Progress = static_cast<float>(EliminatedEnemyCount) / static_cast<float>(TargetEliminateCount);
+		for (AEnemySpawnPoint* SpawnPoint : SpawnPoints)
+		{
+			if (IsValid(SpawnPoint))
+			{
+				SpawnPoint->SetInkFadeProgress(Progress);
+			}
+		}
+	}
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("Enemy died. alive=%d, eliminated=%d, target=%d"),
 		AliveEnemyCount, EliminatedEnemyCount, TargetEliminateCount);
