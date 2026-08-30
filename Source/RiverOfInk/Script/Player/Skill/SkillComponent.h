@@ -108,6 +108,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
 	float GetTwoStageArcStage2InputWindow() const;
 
+	/** Niagara particle size selected from the RadiusUp stack lookup table. */
+	UFUNCTION(BlueprintPure, Category = "Skill|Parameters")
+	float GetTwoStageArcVFXParticleSize() const;
+
 	UFUNCTION(BlueprintPure, Category = "Skill|Form")
 	EPlayerSkillForm GetSkillForm(EPlayerSkillID SkillID) const;
 
@@ -178,9 +182,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX")
 	TObjectPtr<UNiagaraSystem> TwoStageArcMirrorVFX;
 
-	/** Uniform scale for the authored TwoStageArc crescent sprite. */
+	/** Legacy fallback particle size used when the RadiusUp lookup has no matching entry. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (ClampMin = "0.01"))
 	float TwoStageArcVFXScale = 0.9f;
+
+	/**
+	 * Niagara User.Scale_All values indexed by RadiusUp stacks.
+	 * Index 0 means no RadiusUp; indices 1-3 mean one to three stacks.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (ClampMin = "0.01"))
+	TArray<float> TwoStageArcVFXParticleSizeByRadiusUp = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	/** Vertical lift that keeps the translucent crescent above the floor. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|TwoStageArc|VFX", meta = (Units = "cm"))

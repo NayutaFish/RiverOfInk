@@ -28,13 +28,19 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugSelectFirstReward();
 
-	/** Development-only PIE helper: show one legal reward by title or modifier identifier. */
+	/**
+	 * Development-only PIE helper: show one legal reward by title or modifier identifier.
+	 * StackCount applies that many modifier stacks in one debug reward; form rewards require 1.
+	 */
 	UFUNCTION(exec, Category = "Debug")
-	void DebugShowSpecificReward(const FString& RewardIdentifier);
+	void DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount = 1);
 
-	/** Development-only PIE helper: show and immediately select one legal reward. */
+	/**
+	 * Development-only PIE helper: show and immediately select one legal reward.
+	 * StackCount applies that many modifier stacks in one debug reward; form rewards require 1.
+	 */
 	UFUNCTION(exec, Category = "Debug")
-	void DebugSelectSpecificReward(const FString& RewardIdentifier);
+	void DebugSelectSpecificReward(const FString& RewardIdentifier, int32 StackCount = 1);
 
 	/** Development-only PIE helper: apply the current homing build to the nearest living enemy. */
 	UFUNCTION(exec, Category = "Debug")

@@ -168,7 +168,8 @@ SkillComponent 暴露以下可替换接口：
 - `CircularSlashVFXColorParameter`：默认 `User.Color`；运行时同时尝试 `User.Color`、`User.BaseColor`、`User.InkColor`，专用资源可统一保留其中一个参数；
 - `CircularSlashVFXForwardOffset`、`CircularSlashVFXScale`：控制占位 VFX 的生成偏移与缩放；
 - `TwoStageArcVFX`、`TwoStageArcMirrorVFX`：TwoStageArc 的正向与镜像专用刀光；
-- `TwoStageArcVFXScale`、`TwoStageArcVFXHeightOffset`、`TwoStageArcVFXForwardOffset`、`TwoStageArcVFXRightOffset`：控制专用刀光的缩放和相对玩家位置；
+- `TwoStageArcVFXParticleSizeByRadiusUp`：按 `RadiusUp` 层数索引（0～3）选择 Niagara `User.Scale_All`，直接驱动粒子尺寸，不按最终半径线性缩放；`TwoStageArcVFXScale` 仅作为缺少索引时的兼容回退值；
+- `TwoStageArcVFXHeightOffset`、`TwoStageArcVFXForwardOffset`、`TwoStageArcVFXRightOffset`：控制专用刀光相对玩家的位置；
 - `TwoStageArcVFXYawOffset`、`TwoStageArcVFXGroundAngle`：控制沿玩家朝向的镜像夹角和刀光平面与地面的夹角，均支持负角度；
 - `TwoStageArcRadius`、`TwoStageArcHalfAngle`：控制近距离弧形判定尺寸；
 - `TwoStageArcStageDamageMultiplier`：控制两段基础伤害倍率。
@@ -211,6 +212,19 @@ DebugSelectSpecificReward TwoStageArc
 DebugSelectSpecificReward TwinSlash
 DebugPrepareTwoStageArc 100
 ```
+
+Debug 奖励指令现在支持可选的强化层数参数。该参数表示本次指令一次性增加的 Modifier 层数，仍会经过最大层数和前置条件校验；形态构筑不接受批量层数，必须使用 `1`：
+
+```text
+DebugSelectSpecificReward RadiusUp 3
+DebugSelectSpecificReward CooldownDown 3       // 裸名称默认指 E；也可使用 E.CooldownDown
+DebugSelectSpecificReward Q.CooldownDown 4
+DebugShowSpecificReward RadiusUp 2             // 只展示指定层数的奖励卡，不立即应用
+```
+
+其中 `DebugSelectSpecificReward <Identifier> [StackCount]` 会展示并立即选择奖励，`DebugShowSpecificReward <Identifier> [StackCount]` 只展示奖励卡。`RadiusUp`、`CooldownDown` 的层数会直接进入对应 Modifier 的 `StackDelta`，因此可在一次 PIE 调试指令中验证指定索引/冷却层数。
+
+重复选择已经生效的形态（例如再次执行 `DebugSelectSpecificReward TwoStageArc`）会输出 `rejected duplicate form selection` 日志并直接返回，不会调用 `ShowRewardAfterRoomClear()`，因此不会弹出 Reward HUD。生产奖励池和最终 `ApplyReward` 也保留同一层 `CanApplySkillForm` 安全校验。
 
 Slice 7 验收结果：
 
@@ -255,7 +269,7 @@ Slice 7 验收结果：
 兼容边界和注意事项：
 
 - `TwoStageArc` 是 E 的形态字段；`TwinSlash`、`NullRing` 是可叠加 Modifier。新奖励流程应先应用 `TwoStageArc`，再通过 `ApplyModifier()` 添加其他 E Modifier；旧的 `ApplySkillForm(CircularSlash, TwinSlash/NullRing)` 兼容入口会改写旧形态字段，可能覆盖 `TwoStageArc`，不应用于新的叠加奖励。
-- `RadiusUp` 对 TwoStageArc 生效：以 `TwoStageArcRadius` 为基础，沿用 E 的 Mechanic 等级和 `RadiusUp` 层数，每级增加 `60cm`，最终沿用 `440cm` 上限。它只扩大判定距离，不改变 `TwoStageArcHalfAngle`。
+- `RadiusUp` 对 TwoStageArc 生效：以 `TwoStageArcRadius` 为基础，沿用 E 的 Mechanic 等级和 `RadiusUp` 层数，每级增加 `60cm`，最终沿用 `440cm` 上限；VFX 粒子尺寸另按 `TwoStageArcVFXParticleSizeByRadiusUp` 索引选择，不改变 `TwoStageArcHalfAngle`。
 - `CooldownDown` 对所有 E 构筑有效，影响普通 E 冷却和二段释放/超时后的冷却；它不改变 `TwoStageArcStage2InputWindow`，也不会人为增加二段解锁延迟。
 - `TwinSlashDelay`、`TwinSlashSecondYawOffset`、`TwinSlashSecondForwardOffset` 仍保留为序列化/编辑器兼容字段；当前运行时 TwinSlash 使用每阶段两次同时判定，不再按旧字段延迟生成第二次判定。
 - VFX 方面，`TwoStageArc` 使用专用正向/镜像刀光；叠加 `TwinSlash` 时每阶段的第二个判定使用镜像刀光，形成 X 形叠加；`NullRing` 只改变消弹逻辑，不额外替换刀光资源。

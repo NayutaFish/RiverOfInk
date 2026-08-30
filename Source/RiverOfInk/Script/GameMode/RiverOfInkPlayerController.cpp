@@ -105,7 +105,7 @@ void ARiverOfInkPlayerController::DebugSelectFirstReward()
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectFirstReward found no RoguelikeRewardManager."));
 }
 
-void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardIdentifier)
+void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount)
 {
 	if (!GetWorld())
 	{
@@ -116,11 +116,12 @@ void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardI
 	{
 		if (ARoguelikeRewardManager* RewardManager = *It)
 		{
-			const bool bShown = RewardManager->DebugShowSpecificReward(RewardIdentifier);
+			const bool bShown = RewardManager->DebugShowSpecificReward(RewardIdentifier, StackCount);
 			UE_LOG(LogRoguelike, Log,
-				TEXT("DebugShowSpecificReward %s identifier '%s'."),
+				TEXT("DebugShowSpecificReward %s identifier '%s' stackCount=%d."),
 				bShown ? TEXT("shown") : TEXT("failed to show"),
-				*RewardIdentifier);
+				*RewardIdentifier,
+				StackCount);
 			return;
 		}
 	}
@@ -128,7 +129,7 @@ void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardI
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugShowSpecificReward found no RoguelikeRewardManager."));
 }
 
-void ARiverOfInkPlayerController::DebugSelectSpecificReward(const FString& RewardIdentifier)
+void ARiverOfInkPlayerController::DebugSelectSpecificReward(const FString& RewardIdentifier, int32 StackCount)
 {
 	if (!GetWorld())
 	{
@@ -139,11 +140,12 @@ void ARiverOfInkPlayerController::DebugSelectSpecificReward(const FString& Rewar
 	{
 		if (ARoguelikeRewardManager* RewardManager = *It)
 		{
-			if (RewardManager->DebugSelectSpecificReward(RewardIdentifier))
+			if (RewardManager->DebugSelectSpecificReward(RewardIdentifier, StackCount))
 			{
 				UE_LOG(LogRoguelike, Log,
-					TEXT("DebugSelectSpecificReward selected identifier '%s'."),
-					*RewardIdentifier);
+					TEXT("DebugSelectSpecificReward selected identifier '%s' stackCount=%d."),
+					*RewardIdentifier,
+					StackCount);
 			}
 			return;
 		}
