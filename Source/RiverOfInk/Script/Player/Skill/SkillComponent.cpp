@@ -123,6 +123,11 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 		BuildHistory.Num(),
 		*BuildModifierSummary(EPlayerSkillID::TripleProjectile),
 		*BuildModifierSummary(EPlayerSkillID::CircularSlash));
+	// Runtime restoration can happen after the HUD has already subscribed
+	// (for example during a level transition or Pawn reconstruction). Broadcast
+	// the history replacement explicitly so display-only consumers refresh from
+	// the restored snapshot instead of waiting for a future reward or cast.
+	OnBuildHistoryChanged.Broadcast();
 	OnSkillStateChanged.Broadcast();
 }
 
