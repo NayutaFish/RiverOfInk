@@ -65,20 +65,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	TObjectPtr<UTexture2D> PreviousInkTexture;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "320.0", ClampMax = "720.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "360.0", ClampMax = "720.0"))
 	float PanelWidth = 500.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "96.0", ClampMax = "240.0"))
-	float PanelHeight = 142.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "180.0", ClampMax = "420.0"))
+	float PanelHeight = 250.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor PanelFallbackColor = FLinearColor(0.045f, 0.042f, 0.038f, 0.88f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	FLinearColor RecentFallbackColor = FLinearColor(0.10f, 0.22f, 0.30f, 0.80f);
+	FLinearColor RecentFallbackColor = FLinearColor::Transparent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	FLinearColor PreviousFallbackColor = FLinearColor(0.20f, 0.19f, 0.17f, 0.70f);
+	FLinearColor PreviousFallbackColor = FLinearColor::Transparent;
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -180,6 +180,18 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DetailsPromptText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> DetailsPromptRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DetailsKeyCapBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> DetailsKeyCapBorder;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> DetailsKeyText;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> DetailsOverlay;

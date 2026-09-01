@@ -11,6 +11,7 @@
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
@@ -24,7 +25,6 @@ namespace
 	static const TCHAR* BuildHudFlyWhitePath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_FlyWhite.T_UI_BuildHUD_FlyWhite");
 	static const TCHAR* BuildHudRecentInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentInk.T_UI_BuildHUD_RecentInk");
 	static const TCHAR* BuildHudPreviousInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_PreviousInk.T_UI_BuildHUD_PreviousInk");
-	static const TCHAR* BuildHudTwoStageArcIconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwoStageArc_Redrawn.T_UI_Build_TwoStageArc_Redrawn");
 
 	constexpr float LatestFeedbackDuration = 0.22f;
 	constexpr float LatestFeedbackStartScale = 0.78f;
@@ -133,7 +133,11 @@ void UCombatBuildHudWidget::SetDetailsKeyLabel(const FText& InKeyLabel)
 	DetailsKeyLabel = InKeyLabel.IsEmpty() ? FText::FromString(TEXT("B")) : InKeyLabel;
 	if (DetailsPromptText)
 	{
-		DetailsPromptText->SetText(FText::Format(FText::FromString(TEXT("{0}  查看构筑")), DetailsKeyLabel));
+		DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
+	}
+	if (DetailsKeyText)
+	{
+		DetailsKeyText->SetText(DetailsKeyLabel);
 	}
 	if (DetailsHintText)
 	{
@@ -207,7 +211,11 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 	}
 	if (DetailsPromptText)
 	{
-		DetailsPromptText->SetText(FText::Format(FText::FromString(TEXT("{0}  查看构筑")), DetailsKeyLabel));
+		DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
+	}
+	if (DetailsKeyText)
+	{
+		DetailsKeyText->SetText(DetailsKeyLabel);
 	}
 	UpdateDetailsVisibility();
 }
@@ -241,13 +249,13 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		RootSlot->SetAnchors(FAnchors(1.0f, 1.0f));
 		RootSlot->SetAlignment(FVector2D(1.0f, 1.0f));
-		RootSlot->SetPosition(FVector2D(-36.0f, -32.0f));
+		RootSlot->SetPosition(FVector2D(-32.0f, -28.0f));
 		RootSlot->SetAutoSize(true);
 	}
 
 	PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CombatBuildHudPanel"));
 	PanelBorder->SetBrushColor(PanelFallbackColor);
-	PanelBorder->SetPadding(FMargin(10.0f, 8.0f));
+	PanelBorder->SetPadding(FMargin(0.0f));
 	RootSizeBox->AddChild(PanelBorder);
 
 	PanelOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CombatBuildHudOverlay"));
@@ -262,9 +270,13 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		PanelImage->SetBrushFromTexture(PanelTexture, true);
 	}
+	PanelBorder->SetBrushColor(PanelTexture ? FLinearColor::Transparent : PanelFallbackColor);
 	PanelImage->SetColorAndOpacity(FLinearColor::White);
 	PanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* PanelSlot = PanelOverlay->AddChildToOverlay(PanelImage))
+	UScaleBox* PanelFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("CombatBuildHudPanelFit"));
+	PanelFit->SetStretch(EStretch::ScaleToFit);
+	PanelFit->SetContent(PanelImage);
+	if (UOverlaySlot* PanelSlot = PanelOverlay->AddChildToOverlay(PanelFit))
 	{
 		PanelSlot->SetHorizontalAlignment(HAlign_Fill);
 		PanelSlot->SetVerticalAlignment(VAlign_Fill);
@@ -275,19 +287,19 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
 		ContentSlot->SetVerticalAlignment(VAlign_Fill);
-		ContentSlot->SetPadding(FMargin(4.0f, 0.0f, 4.0f, 12.0f));
+		ContentSlot->SetPadding(FMargin(30.0f, 22.0f, 30.0f, 38.0f));
 	}
 
 	RecentSlotBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildSlotSize"));
-	RecentSlotBox->SetWidthOverride(244.0f);
-	RecentSlotBox->SetHeightOverride(110.0f);
+	RecentSlotBox->SetWidthOverride(276.0f);
+	RecentSlotBox->SetHeightOverride(184.0f);
 	RecentSlotRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RecentBuildSlot"));
 	RecentSlotBox->SetContent(RecentSlotRoot);
 	if (UHorizontalBoxSlot* RecentRowSlot = ContentRow->AddChildToHorizontalBox(RecentSlotBox))
 	{
 		RecentRowSlot->SetHorizontalAlignment(HAlign_Fill);
-		RecentRowSlot->SetVerticalAlignment(VAlign_Fill);
-		RecentRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		RecentRowSlot->SetVerticalAlignment(VAlign_Center);
+		RecentRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 	}
 
 	UBorder* RecentFallback = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("RecentBuildFallback"));
@@ -297,6 +309,20 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 		FallbackSlot->SetHorizontalAlignment(HAlign_Fill);
 		FallbackSlot->SetVerticalAlignment(VAlign_Fill);
 	}
+	auto AddFittedLayer = [this](UOverlay* Parent, UImage* Image, const TCHAR* WidgetName, const FMargin& LayerPadding)
+	{
+		UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), WidgetName);
+		Fit->SetStretch(EStretch::ScaleToFit);
+		Fit->SetContent(Image);
+		Fit->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UOverlaySlot* FitSlot = Parent->AddChildToOverlay(Fit))
+		{
+			FitSlot->SetHorizontalAlignment(HAlign_Fill);
+			FitSlot->SetVerticalAlignment(VAlign_Fill);
+			FitSlot->SetPadding(LayerPadding);
+		}
+		return Fit;
+	};
 	RecentFlyWhiteImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildFlyWhite"));
 	if (!FlyWhiteTexture)
 	{
@@ -308,12 +334,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	RecentFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.82f));
 	RecentFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* FlyWhiteSlot = RecentSlotRoot->AddChildToOverlay(RecentFlyWhiteImage))
-	{
-		FlyWhiteSlot->SetHorizontalAlignment(HAlign_Fill);
-		FlyWhiteSlot->SetVerticalAlignment(VAlign_Fill);
-		FlyWhiteSlot->SetPadding(FMargin(8.0f, 15.0f, 8.0f, 15.0f));
-	}
+	AddFittedLayer(RecentSlotRoot, RecentFlyWhiteImage, TEXT("RecentBuildFlyWhiteFit"), FMargin(8.0f, 15.0f, 8.0f, 15.0f));
 	RecentInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildInk"));
 	if (!RecentInkTexture)
 	{
@@ -325,15 +346,14 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	RecentInkImage->SetColorAndOpacity(FLinearColor::White);
 	RecentInkImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* InkSlot = RecentSlotRoot->AddChildToOverlay(RecentInkImage))
-	{
-		InkSlot->SetHorizontalAlignment(HAlign_Fill);
-		InkSlot->SetVerticalAlignment(VAlign_Fill);
-	}
+	AddFittedLayer(RecentSlotRoot, RecentInkImage, TEXT("RecentBuildInkFit"), FMargin(0.0f));
 	RecentIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildIcon"));
 	RecentIconImage->SetColorAndOpacity(FLinearColor::White);
 	RecentIconImage->SetDesiredSizeOverride(FVector2D(62.0f, 62.0f));
-	if (UOverlaySlot* IconSlot = RecentSlotRoot->AddChildToOverlay(RecentIconImage))
+	UScaleBox* RecentIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("RecentBuildIconFit"));
+	RecentIconFit->SetStretch(EStretch::ScaleToFit);
+	RecentIconFit->SetContent(RecentIconImage);
+	if (UOverlaySlot* IconSlot = RecentSlotRoot->AddChildToOverlay(RecentIconFit))
 	{
 		IconSlot->SetHorizontalAlignment(HAlign_Center);
 		IconSlot->SetVerticalAlignment(VAlign_Center);
@@ -341,42 +361,43 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	RecentCaptionText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildCaption"));
 	RecentCaptionText->SetText(FText::FromString(TEXT("最近构筑")));
-	SetTextStyle(RecentCaptionText, 13, FLinearColor(0.92f, 0.93f, 0.90f, 0.88f));
+	SetTextStyle(RecentCaptionText, 11, FLinearColor(0.08f, 0.07f, 0.06f, 0.86f));
 	if (UOverlaySlot* CaptionSlot = RecentSlotRoot->AddChildToOverlay(RecentCaptionText))
 	{
 		CaptionSlot->SetHorizontalAlignment(HAlign_Left);
 		CaptionSlot->SetVerticalAlignment(VAlign_Top);
-		CaptionSlot->SetPadding(FMargin(10.0f, 5.0f, 0.0f, 0.0f));
+		CaptionSlot->SetPadding(FMargin(14.0f, 12.0f, 0.0f, 0.0f));
 	}
 	RecentTitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildTitle"));
-	SetTextStyle(RecentTitleText, 20, FLinearColor::White);
+	SetTextStyle(RecentTitleText, 16, FLinearColor(0.04f, 0.035f, 0.03f, 0.94f));
 	RecentTitleText->SetJustification(ETextJustify::Center);
 	if (UOverlaySlot* TitleSlot = RecentSlotRoot->AddChildToOverlay(RecentTitleText))
 	{
 		TitleSlot->SetHorizontalAlignment(HAlign_Center);
 		TitleSlot->SetVerticalAlignment(VAlign_Bottom);
-		TitleSlot->SetPadding(FMargin(4.0f, 0.0f, 4.0f, 6.0f));
+		TitleSlot->SetPadding(FMargin(16.0f, 0.0f, 16.0f, 19.0f));
 	}
 	RecentMetaText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildMeta"));
-	SetTextStyle(RecentMetaText, 13, FLinearColor(0.90f, 0.92f, 0.92f, 0.82f));
+	SetTextStyle(RecentMetaText, 11, FLinearColor(0.10f, 0.09f, 0.08f, 0.78f));
 	RecentMetaText->SetJustification(ETextJustify::Right);
 	if (UOverlaySlot* MetaSlot = RecentSlotRoot->AddChildToOverlay(RecentMetaText))
 	{
 		MetaSlot->SetHorizontalAlignment(HAlign_Right);
 		MetaSlot->SetVerticalAlignment(VAlign_Top);
-		MetaSlot->SetPadding(FMargin(0.0f, 5.0f, 10.0f, 0.0f));
+		MetaSlot->SetPadding(FMargin(0.0f, 12.0f, 14.0f, 0.0f));
 	}
 
 	PreviousSlotBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviousBuildSlotSize"));
-	PreviousSlotBox->SetWidthOverride(170.0f);
-	PreviousSlotBox->SetHeightOverride(100.0f);
+	PreviousSlotBox->SetWidthOverride(156.0f);
+	PreviousSlotBox->SetHeightOverride(166.0f);
 	PreviousSlotRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("PreviousBuildSlot"));
 	PreviousSlotBox->SetContent(PreviousSlotRoot);
 	if (UHorizontalBoxSlot* PreviousRowSlot = ContentRow->AddChildToHorizontalBox(PreviousSlotBox))
 	{
-		PreviousRowSlot->SetHorizontalAlignment(HAlign_Fill);
-		PreviousRowSlot->SetVerticalAlignment(VAlign_Fill);
-		PreviousRowSlot->SetPadding(FMargin(8.0f, 5.0f, 0.0f, 0.0f));
+		PreviousRowSlot->SetHorizontalAlignment(HAlign_Left);
+		PreviousRowSlot->SetVerticalAlignment(VAlign_Center);
+		PreviousRowSlot->SetPadding(FMargin(10.0f, 8.0f, 0.0f, 0.0f));
+		PreviousRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 	}
 
 	UBorder* PreviousFallback = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PreviousBuildFallback"));
@@ -393,12 +414,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	PreviousFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.68f));
 	PreviousFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* FlyWhiteSlot = PreviousSlotRoot->AddChildToOverlay(PreviousFlyWhiteImage))
-	{
-		FlyWhiteSlot->SetHorizontalAlignment(HAlign_Fill);
-		FlyWhiteSlot->SetVerticalAlignment(VAlign_Fill);
-		FlyWhiteSlot->SetPadding(FMargin(7.0f, 14.0f, 7.0f, 14.0f));
-	}
+	AddFittedLayer(PreviousSlotRoot, PreviousFlyWhiteImage, TEXT("PreviousBuildFlyWhiteFit"), FMargin(7.0f, 14.0f, 7.0f, 14.0f));
 	PreviousInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildInk"));
 	if (!PreviousInkTexture)
 	{
@@ -410,15 +426,14 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	PreviousInkImage->SetColorAndOpacity(FLinearColor::White);
 	PreviousInkImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* InkSlot = PreviousSlotRoot->AddChildToOverlay(PreviousInkImage))
-	{
-		InkSlot->SetHorizontalAlignment(HAlign_Fill);
-		InkSlot->SetVerticalAlignment(VAlign_Fill);
-	}
+	AddFittedLayer(PreviousSlotRoot, PreviousInkImage, TEXT("PreviousBuildInkFit"), FMargin(0.0f));
 	PreviousIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildIcon"));
 	PreviousIconImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
 	PreviousIconImage->SetDesiredSizeOverride(FVector2D(46.0f, 46.0f));
-	if (UOverlaySlot* IconSlot = PreviousSlotRoot->AddChildToOverlay(PreviousIconImage))
+	UScaleBox* PreviousIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("PreviousBuildIconFit"));
+	PreviousIconFit->SetStretch(EStretch::ScaleToFit);
+	PreviousIconFit->SetContent(PreviousIconImage);
+	if (UOverlaySlot* IconSlot = PreviousSlotRoot->AddChildToOverlay(PreviousIconFit))
 	{
 		IconSlot->SetHorizontalAlignment(HAlign_Center);
 		IconSlot->SetVerticalAlignment(VAlign_Center);
@@ -426,41 +441,64 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	PreviousCaptionText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildCaption"));
 	PreviousCaptionText->SetText(FText::FromString(TEXT("上一构筑")));
-	SetTextStyle(PreviousCaptionText, 12, FLinearColor(0.80f, 0.80f, 0.76f, 0.76f));
+	SetTextStyle(PreviousCaptionText, 10, FLinearColor(0.16f, 0.15f, 0.13f, 0.70f));
 	if (UOverlaySlot* CaptionSlot = PreviousSlotRoot->AddChildToOverlay(PreviousCaptionText))
 	{
 		CaptionSlot->SetHorizontalAlignment(HAlign_Left);
 		CaptionSlot->SetVerticalAlignment(VAlign_Top);
-		CaptionSlot->SetPadding(FMargin(8.0f, 4.0f, 0.0f, 0.0f));
+		CaptionSlot->SetPadding(FMargin(9.0f, 10.0f, 0.0f, 0.0f));
 	}
 	PreviousTitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildTitle"));
-	SetTextStyle(PreviousTitleText, 16, FLinearColor(0.92f, 0.92f, 0.88f, 0.82f));
+	SetTextStyle(PreviousTitleText, 13, FLinearColor(0.16f, 0.15f, 0.13f, 0.78f));
 	PreviousTitleText->SetJustification(ETextJustify::Center);
 	if (UOverlaySlot* TitleSlot = PreviousSlotRoot->AddChildToOverlay(PreviousTitleText))
 	{
 		TitleSlot->SetHorizontalAlignment(HAlign_Center);
 		TitleSlot->SetVerticalAlignment(VAlign_Bottom);
-		TitleSlot->SetPadding(FMargin(4.0f, 0.0f, 4.0f, 5.0f));
+		TitleSlot->SetPadding(FMargin(8.0f, 0.0f, 8.0f, 15.0f));
 	}
 	PreviousMetaText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildMeta"));
-	SetTextStyle(PreviousMetaText, 11, FLinearColor(0.84f, 0.84f, 0.80f, 0.70f));
+	SetTextStyle(PreviousMetaText, 10, FLinearColor(0.22f, 0.21f, 0.19f, 0.62f));
 	PreviousMetaText->SetJustification(ETextJustify::Right);
 	if (UOverlaySlot* MetaSlot = PreviousSlotRoot->AddChildToOverlay(PreviousMetaText))
 	{
 		MetaSlot->SetHorizontalAlignment(HAlign_Right);
 		MetaSlot->SetVerticalAlignment(VAlign_Top);
-		MetaSlot->SetPadding(FMargin(0.0f, 4.0f, 8.0f, 0.0f));
+		MetaSlot->SetPadding(FMargin(0.0f, 10.0f, 9.0f, 0.0f));
 	}
 
-	DetailsPromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsPrompt"));
-	SetTextStyle(DetailsPromptText, 12, FLinearColor(0.88f, 0.88f, 0.84f, 0.68f));
-	DetailsPromptText->SetJustification(ETextJustify::Right);
-	SetDetailsKeyLabel(DetailsKeyLabel);
-	if (UOverlaySlot* PromptSlot = PanelOverlay->AddChildToOverlay(DetailsPromptText))
+	DetailsPromptRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("BuildDetailsPromptRow"));
+	if (UOverlaySlot* PromptSlot = PanelOverlay->AddChildToOverlay(DetailsPromptRow))
 	{
-		PromptSlot->SetHorizontalAlignment(HAlign_Right);
+		PromptSlot->SetHorizontalAlignment(HAlign_Center);
 		PromptSlot->SetVerticalAlignment(VAlign_Bottom);
-		PromptSlot->SetPadding(FMargin(0.0f, 0.0f, 10.0f, 1.0f));
+		PromptSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 11.0f));
+	}
+	DetailsKeyCapBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("BuildDetailsKeyCapSize"));
+	DetailsKeyCapBox->SetWidthOverride(36.0f);
+	DetailsKeyCapBox->SetHeightOverride(36.0f);
+	DetailsKeyCapBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("BuildDetailsKeyCap"));
+	DetailsKeyCapBorder->SetBrushColor(FLinearColor(0.08f, 0.075f, 0.065f, 0.88f));
+	DetailsKeyCapBorder->SetPadding(FMargin(2.0f));
+	DetailsKeyCapBox->SetContent(DetailsKeyCapBorder);
+	DetailsKeyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsKeyText"));
+	SetTextStyle(DetailsKeyText, 19, FLinearColor(0.96f, 0.94f, 0.88f, 0.96f));
+	DetailsKeyText->SetJustification(ETextJustify::Center);
+	DetailsKeyText->SetText(DetailsKeyLabel);
+	DetailsKeyCapBorder->SetContent(DetailsKeyText);
+	if (UHorizontalBoxSlot* KeySlot = DetailsPromptRow->AddChildToHorizontalBox(DetailsKeyCapBox))
+	{
+		KeySlot->SetHorizontalAlignment(HAlign_Center);
+		KeySlot->SetVerticalAlignment(VAlign_Center);
+		KeySlot->SetPadding(FMargin(0.0f, 0.0f, 7.0f, 0.0f));
+	}
+	DetailsPromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsPrompt"));
+	SetTextStyle(DetailsPromptText, 11, FLinearColor(0.10f, 0.09f, 0.08f, 0.82f));
+	DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
+	if (UHorizontalBoxSlot* LabelSlot = DetailsPromptRow->AddChildToHorizontalBox(DetailsPromptText))
+	{
+		LabelSlot->SetHorizontalAlignment(HAlign_Center);
+		LabelSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
 	DetailsOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("BuildDetailsOverlay"));
@@ -565,7 +603,7 @@ void UCombatBuildHudWidget::SetBuildEntry(const FBuildHistoryEntry* Entry, bool 
 
 void UCombatBuildHudWidget::UpdateDetailsVisibility()
 {
-	if (!DetailsOverlay || !ContentRow || !DetailsPromptText)
+	if (!DetailsOverlay || !ContentRow || !DetailsPromptRow)
 	{
 		return;
 	}
@@ -578,7 +616,7 @@ void UCombatBuildHudWidget::UpdateDetailsVisibility()
 	ContentRow->SetVisibility(bHasHistory && !bDetailsOpen
 		? ESlateVisibility::HitTestInvisible
 		: ESlateVisibility::Collapsed);
-	DetailsPromptText->SetVisibility(bHasHistory && !bDetailsOpen
+	DetailsPromptRow->SetVisibility(bHasHistory && !bDetailsOpen
 		? ESlateVisibility::HitTestInvisible
 		: ESlateVisibility::Collapsed);
 	if (DetailsHintText)
@@ -677,7 +715,14 @@ UTexture2D* UCombatBuildHudWidget::LoadOptionalTexture(FName CacheKey, const TCH
 	}
 
 	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, AssetPath);
-	BuildIconCache.Add(CacheKey, Texture);
+	if (Texture)
+	{
+		BuildIconCache.Add(CacheKey, Texture);
+	}
+	else
+	{
+		UE_LOG(LogSkill, Verbose, TEXT("Combat build HUD asset unavailable: %s"), AssetPath);
+	}
 	return Texture;
 }
 
