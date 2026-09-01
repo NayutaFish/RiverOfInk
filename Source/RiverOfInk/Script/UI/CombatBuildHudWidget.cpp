@@ -21,6 +21,7 @@
 namespace
 {
 	static const TCHAR* BuildHudPanelPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_Panel.T_UI_BuildHUD_Panel");
+	static const TCHAR* BuildHudFlyWhitePath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_FlyWhite.T_UI_BuildHUD_FlyWhite");
 	static const TCHAR* BuildHudRecentInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentInk.T_UI_BuildHUD_RecentInk");
 	static const TCHAR* BuildHudPreviousInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_PreviousInk.T_UI_BuildHUD_PreviousInk");
 	static const TCHAR* BuildHudTwoStageArcIconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwoStageArc_Redrawn.T_UI_Build_TwoStageArc_Redrawn");
@@ -296,6 +297,23 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 		FallbackSlot->SetHorizontalAlignment(HAlign_Fill);
 		FallbackSlot->SetVerticalAlignment(VAlign_Fill);
 	}
+	RecentFlyWhiteImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildFlyWhite"));
+	if (!FlyWhiteTexture)
+	{
+		FlyWhiteTexture = LoadObject<UTexture2D>(nullptr, BuildHudFlyWhitePath);
+	}
+	if (FlyWhiteTexture)
+	{
+		RecentFlyWhiteImage->SetBrushFromTexture(FlyWhiteTexture, true);
+	}
+	RecentFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.82f));
+	RecentFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* FlyWhiteSlot = RecentSlotRoot->AddChildToOverlay(RecentFlyWhiteImage))
+	{
+		FlyWhiteSlot->SetHorizontalAlignment(HAlign_Fill);
+		FlyWhiteSlot->SetVerticalAlignment(VAlign_Fill);
+		FlyWhiteSlot->SetPadding(FMargin(8.0f, 15.0f, 8.0f, 15.0f));
+	}
 	RecentInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildInk"));
 	if (!RecentInkTexture)
 	{
@@ -367,6 +385,19 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		FallbackSlot->SetHorizontalAlignment(HAlign_Fill);
 		FallbackSlot->SetVerticalAlignment(VAlign_Fill);
+	}
+	PreviousFlyWhiteImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildFlyWhite"));
+	if (FlyWhiteTexture)
+	{
+		PreviousFlyWhiteImage->SetBrushFromTexture(FlyWhiteTexture, true);
+	}
+	PreviousFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.68f));
+	PreviousFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* FlyWhiteSlot = PreviousSlotRoot->AddChildToOverlay(PreviousFlyWhiteImage))
+	{
+		FlyWhiteSlot->SetHorizontalAlignment(HAlign_Fill);
+		FlyWhiteSlot->SetVerticalAlignment(VAlign_Fill);
+		FlyWhiteSlot->SetPadding(FMargin(7.0f, 14.0f, 7.0f, 14.0f));
 	}
 	PreviousInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildInk"));
 	if (!PreviousInkTexture)

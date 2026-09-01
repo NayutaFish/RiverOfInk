@@ -57,6 +57,9 @@ public:
 	TObjectPtr<UTexture2D> PanelTexture;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	TObjectPtr<UTexture2D> FlyWhiteTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	TObjectPtr<UTexture2D> RecentInkTexture;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
@@ -134,6 +137,9 @@ private:
 	TObjectPtr<UOverlay> RecentSlotRoot;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UImage> RecentFlyWhiteImage;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> RecentInkImage;
 
 	UPROPERTY(Transient)
@@ -153,6 +159,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> PreviousSlotRoot;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> PreviousFlyWhiteImage;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> PreviousInkImage;
