@@ -226,8 +226,12 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	if (UCanvasPanelSlot* RootSlot = RootCanvas->AddChildToCanvas(RootSizeBox))
 	{
 		RootSlot->SetAnchors(FAnchors(1.0f, 1.0f));
-		RootSlot->SetAlignment(FVector2D(1.0f, 1.0f));
-		RootSlot->SetPosition(FVector2D(-32.0f, -28.0f));
+		// Keep the pivot at the slot's top-left and include the panel dimensions
+		// in the anchored offset. This is stable in both standalone PIE and an
+		// editor-embedded viewport, where the alignment pivot can otherwise be
+		// ignored until a later layout pass and push the panel below the clip.
+		RootSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+		RootSlot->SetPosition(FVector2D(-PanelWidth - 32.0f, -PanelHeight - 28.0f));
 		// Keep the canvas slot explicitly sized. Auto-size can collapse a
 		// runtime-created SizeBox before its overridden dimensions participate in
 		// the first layout pass, which makes the HUD appear to be missing in PIE.
