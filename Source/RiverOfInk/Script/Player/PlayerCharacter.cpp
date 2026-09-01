@@ -507,6 +507,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	CreateHealthWidget();
 	CreateSkillWidget();
+	// BeginPlay can run before the local controller is ready. Retry through the
+	// same idempotent creation path once input setup has established ownership.
+	CreateCombatBuildHudWidget();
 
 	// 通知 PlayerInputComponent 注册子系统和绑定回调（此时 Controller 和 InputComponent 均已就绪）
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent))
