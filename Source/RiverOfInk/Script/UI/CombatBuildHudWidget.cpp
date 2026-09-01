@@ -499,16 +499,24 @@ void UCombatBuildHudWidget::StartLatestBuildFeedback()
 	StopLatestBuildFeedback(false);
 	SetWidgetScale(RecentSlotRoot, LatestFeedbackStartScale);
 	RecentSlotRoot->SetRenderOpacity(0.0f);
-	if (UWorld* World = GetWorld())
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		LatestFeedbackStartTime = World->GetTimeSeconds();
-		World->GetTimerManager().SetTimer(
-			LatestFeedbackTimer,
-			this,
-			&UCombatBuildHudWidget::UpdateLatestBuildFeedback,
-			1.0f / 60.0f,
-			true);
+		// A widget can be constructed before it is attached to a world. Do not
+		// leave the primary slot in its temporary animation state when there is
+		// no timer source available yet.
+		SetWidgetScale(RecentSlotRoot, 1.0f);
+		RecentSlotRoot->SetRenderOpacity(1.0f);
+		return;
 	}
+
+	LatestFeedbackStartTime = World->GetTimeSeconds();
+	World->GetTimerManager().SetTimer(
+		LatestFeedbackTimer,
+		this,
+		&UCombatBuildHudWidget::UpdateLatestBuildFeedback,
+		1.0f / 60.0f,
+		true);
 }
 
 void UCombatBuildHudWidget::UpdateLatestBuildFeedback()
