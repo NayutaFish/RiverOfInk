@@ -269,6 +269,46 @@ struct FSkillUpgradeState
 	int32 DamageLevel = 0;
 };
 
+/**
+ * One successful build acquisition in the current run.
+ *
+ * This is deliberately value-only data so it can travel with
+ * FPlayerRuntimeData. Presentation text and icon assets are resolved by the
+ * HUD from these stable identifiers instead of being serialized as widget
+ * state.
+ */
+USTRUCT(BlueprintType)
+struct FBuildHistoryEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History")
+	ERoguelikeRewardType RewardType = ERoguelikeRewardType::Modifier;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History")
+	EPlayerSkillID SkillID = EPlayerSkillID::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History")
+	ESkillUpgradeType UpgradeType = ESkillUpgradeType::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History|Form")
+	EPlayerSkillForm PreviousSkillForm = EPlayerSkillForm::Default;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History|Form")
+	EPlayerSkillForm NewSkillForm = EPlayerSkillForm::Default;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History|Modifier")
+	ESkillModifierID ModifierID = ESkillModifierID::None;
+
+	/** Number of stacks granted by this acquisition. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History|Modifier", meta = (ClampMin = "0"))
+	int32 StackDelta = 0;
+
+	/** Total modifier stack after this acquisition, when applicable. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build History|Modifier", meta = (ClampMin = "0"))
+	int32 ResultingStackCount = 0;
+};
+
 USTRUCT(BlueprintType)
 struct FRoguelikeRewardOption
 {

@@ -33,6 +33,7 @@
 #include "Player/PlayerState/PlayerState_Skill2.h"
 #include "UI/PlayerHealthWidget.h"
 #include "UI/PlayerSkillWidget.h"
+#include "UI/CombatBuildHudWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -61,6 +62,7 @@ APlayerCharacter::APlayerCharacter()
 	ProjectileTargetingComponent = CreateDefaultSubobject<UProjectileTargetingComponent>(TEXT("ProjectileTargetingComponent"));
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
+	CombatBuildHudWidgetClass = UCombatBuildHudWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(
 		TEXT("/Game/Blueprint/GameSystem/UI/Skill/WBP_SkillHUD"));
 	if (SkillWidgetBlueprint.Succeeded())
@@ -68,6 +70,7 @@ APlayerCharacter::APlayerCharacter()
 		SkillWidgetClass = SkillWidgetBlueprint.Class;
 	}
 	ShopInteractionKey = EKeys::J;
+	BuildDetailsKey = EKeys::B;
 
 	// ── 状态机与输入组件：纯 C++ 自建，无需蓝图挂载 ──
 	CreateDefaultSubobject<UPlayerInputComponent>(TEXT("PlayerInputComponent"));
@@ -237,6 +240,7 @@ void APlayerCharacter::BeginPlay()
 
 	CreateHealthWidget();
 	CreateSkillWidget();
+	CreateCombatBuildHudWidget();
 
 	// ── 玩家生成完毕 ──
 	FEventBus::Publish<FPlayerSpawnedEvent>(FPlayerSpawnedEvent(this));
@@ -271,6 +275,16 @@ void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
         HealthWidget->RemoveFromParent();
         HealthWidget = nullptr;
     }
+	if (SkillWidget)
+	{
+		SkillWidget->RemoveFromParent();
+		SkillWidget = nullptr;
+	}
+	if (CombatBuildHudWidget)
+	{
+		CombatBuildHudWidget->RemoveFromParent();
+		CombatBuildHudWidget = nullptr;
+	}
 
     Super::EndPlay(EndPlayReason);
 }
@@ -282,6 +296,7 @@ void APlayerCharacter::PossessedBy(AController* NewController)
 	{
 		CreateHealthWidget();
 		CreateSkillWidget();
+		CreateCombatBuildHudWidget();
 	}
 }
 
@@ -377,6 +392,54 @@ void APlayerCharacter::CreateSkillWidget()
 		static_cast<int32>(SkillWidget->GetVisibility()));
 }
 
+void APlayerCharacter::CreateCombatBuildHudWidget()
+{
+	if (CombatBuildHudWidget)
+	{
+		return;
+	}
+
+	if (!IsLocallyControlled())
+	{
+		UE_LOG(LogSkill, Verbose, TEXT("Combat build HUD skipped: %s is not locally controlled yet."), *GetName());
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+	if (!PlayerController)
+	{
+		UE_LOG(LogSkill, Warning, TEXT("Combat build HUD skipped: no local PlayerController for %s."), *GetName());
+		return;
+	}
+
+	TSubclassOf<UCombatBuildHudWidget> WidgetClass = CombatBuildHudWidgetClass;
+	if (!WidgetClass)
+	{
+		WidgetClass = UCombatBuildHudWidget::StaticClass();
+	}
+
+	CombatBuildHudWidget = CreateWidget<UCombatBuildHudWidget>(PlayerController, WidgetClass);
+	if (!CombatBuildHudWidget)
+	{
+		UE_LOG(LogSkill, Error, TEXT("Combat build HUD creation failed for %s."), *GetName());
+		return;
+	}
+
+	CombatBuildHudWidget->SetDetailsKeyLabel(BuildDetailsKey.IsValid()
+		? BuildDetailsKey.GetDisplayName()
+		: FText::FromString(TEXT("B")));
+	CombatBuildHudWidget->SetVisibility(ESlateVisibility::Visible);
+	CombatBuildHudWidget->SetRenderOpacity(1.0f);
+	CombatBuildHudWidget->AddToViewport(30);
+	CombatBuildHudWidget->InitializeForPlayer(this);
+	UE_LOG(LogSkill, Log, TEXT("Combat build HUD created for %s. InViewport=%s."),
+		*GetName(), CombatBuildHudWidget->IsInViewport() ? TEXT("true") : TEXT("false"));
+}
+
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -390,6 +453,18 @@ void APlayerCharacter::Tick(float DeltaTime)
 bool APlayerCharacter::IsDead() const
 {
 	return HealthComponent ? HealthComponent->IsDead() : bIsDead;
+}
+
+void APlayerCharacter::ToggleCombatBuildDetails()
+{
+	if (!CombatBuildHudWidget)
+	{
+		CreateCombatBuildHudWidget();
+	}
+	if (CombatBuildHudWidget)
+	{
+		CombatBuildHudWidget->ToggleBuildDetails();
+	}
 }
 
 void APlayerCharacter::HandleHealthChanged(float InCurrentHealth, float InMaxHealth)
@@ -457,6 +532,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 			IE_Pressed,
 			this,
 			&APlayerCharacter::TryInteractWithShop);
+	}
+	if (PlayerInputComponent && BuildDetailsKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(
+			BuildDetailsKey,
+			IE_Pressed,
+			this,
+			&APlayerCharacter::ToggleCombatBuildDetails);
 	}
 }
 

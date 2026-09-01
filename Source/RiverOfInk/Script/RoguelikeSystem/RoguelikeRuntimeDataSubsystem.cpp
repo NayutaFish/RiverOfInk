@@ -68,7 +68,7 @@ bool URoguelikeRuntimeDataSubsystem::RegisterPlayerRuntimeData(const FPlayerRunt
 	bHasPlayerRuntimeData = true;
 
 	UE_LOG(LogRoguelikeRuntimeData, Log,
-		TEXT("Player runtime data registered: HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
+		TEXT("Player runtime data registered: HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Builds=%d Buffs=%d."),
 		PlayerRuntimeData.Stats.CurrentHealth,
 		PlayerRuntimeData.Stats.MaxHealth,
 		PlayerRuntimeData.Stats.Defense,
@@ -76,6 +76,7 @@ bool URoguelikeRuntimeDataSubsystem::RegisterPlayerRuntimeData(const FPlayerRunt
 		PlayerRuntimeData.Stats.SprintSpeed,
 		PlayerRuntimeData.SkillSlots.Num(),
 		PlayerRuntimeData.SkillUpgradeStates.Num(),
+		PlayerRuntimeData.BuildHistory.Num(),
 		PlayerRuntimeData.RunBuffs.Num());
 
 	return true;
@@ -106,7 +107,7 @@ bool URoguelikeRuntimeDataSubsystem::ApplyRegisteredPlayerRuntimeData(APlayerCha
 	}
 
 	UE_LOG(LogRoguelikeRuntimeData, Log,
-		TEXT("Player runtime data applied: Player=%s HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Buffs=%d."),
+		TEXT("Player runtime data applied: Player=%s HP=%.0f/%.0f Defense=%d WalkSpeed=%.0f SprintSpeed=%.0f Skills=%d Upgrades=%d Builds=%d Buffs=%d."),
 		*Player->GetName(),
 		Player->GetHealthComponent()->GetCurrentHealth(),
 		Player->GetHealthComponent()->GetMaxHealth(),
@@ -115,6 +116,7 @@ bool URoguelikeRuntimeDataSubsystem::ApplyRegisteredPlayerRuntimeData(APlayerCha
 		Player->SprintSpeed,
 		PlayerRuntimeData.SkillSlots.Num(),
 		PlayerRuntimeData.SkillUpgradeStates.Num(),
+		PlayerRuntimeData.BuildHistory.Num(),
 		PlayerRuntimeData.RunBuffs.Num());
 
 	return true;

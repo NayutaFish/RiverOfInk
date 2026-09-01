@@ -72,12 +72,14 @@ void USkillComponent::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) con
 {
 	OutRuntimeData.SkillSlots = SkillSlots;
 	OutRuntimeData.SkillUpgradeStates = SkillUpgradeStates;
+	OutRuntimeData.BuildHistory = BuildHistory;
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill runtime data captured: Owner=%s Slots=%d Upgrades=%d Modifiers(Q=%s E=%s)."),
+		TEXT("Skill runtime data captured: Owner=%s Slots=%d Upgrades=%d Builds=%d Modifiers(Q=%s E=%s)."),
 		*GetNameSafe(GetOwner()),
 		OutRuntimeData.SkillSlots.Num(),
 		OutRuntimeData.SkillUpgradeStates.Num(),
+		OutRuntimeData.BuildHistory.Num(),
 		*BuildModifierSummary(EPlayerSkillID::TripleProjectile),
 		*BuildModifierSummary(EPlayerSkillID::CircularSlash));
 }
@@ -86,6 +88,12 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 {
 	SkillSlots = InRuntimeData.SkillSlots;
 	SkillUpgradeStates = InRuntimeData.SkillUpgradeStates;
+	BuildHistory = InRuntimeData.BuildHistory;
+	static constexpr int32 MaxBuildHistoryEntries = 64;
+	if (BuildHistory.Num() > MaxBuildHistoryEntries)
+	{
+		BuildHistory.RemoveAt(0, BuildHistory.Num() - MaxBuildHistoryEntries, EAllowShrinking::No);
+	}
 
 	// Older snapshots may contain an empty third slot or no CircularSlash slot.
 	// Normalize them to the current fixed two-skill contract before gameplay uses
@@ -108,10 +116,11 @@ void USkillComponent::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 	bCircularSlashStage2InputBuffered = false;
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Skill runtime data applied: Owner=%s Slots=%d Upgrades=%d Modifiers(Q=%s E=%s)."),
+		TEXT("Skill runtime data applied: Owner=%s Slots=%d Upgrades=%d Builds=%d Modifiers(Q=%s E=%s)."),
 		*GetNameSafe(GetOwner()),
 		SkillSlots.Num(),
 		SkillUpgradeStates.Num(),
+		BuildHistory.Num(),
 		*BuildModifierSummary(EPlayerSkillID::TripleProjectile),
 		*BuildModifierSummary(EPlayerSkillID::CircularSlash));
 	OnSkillStateChanged.Broadcast();
@@ -430,6 +439,46 @@ bool USkillComponent::ApplyModifier(
 		*BuildModifierSummary(SkillID));
 	OnSkillStateChanged.Broadcast();
 	return true;
+}
+
+void USkillComponent::RecordBuildAcquisition(const FRoguelikeRewardOption& Reward)
+{
+	if (Reward.RewardType != ERoguelikeRewardType::GainSkill
+		&& Reward.RewardType != ERoguelikeRewardType::UpgradeSkill
+		&& Reward.RewardType != ERoguelikeRewardType::Modifier
+		&& Reward.RewardType != ERoguelikeRewardType::ChangeSkillForm)
+	{
+		return;
+	}
+
+	FBuildHistoryEntry Entry;
+	Entry.RewardType = Reward.RewardType;
+	Entry.SkillID = Reward.SkillID;
+	Entry.UpgradeType = Reward.UpgradeType;
+	Entry.PreviousSkillForm = Reward.CurrentSkillForm;
+	Entry.NewSkillForm = Reward.TargetSkillForm;
+	Entry.ModifierID = Reward.ModifierID;
+	Entry.StackDelta = FMath::Max(0, Reward.StackDelta);
+	Entry.ResultingStackCount = Entry.ModifierID != ESkillModifierID::None
+		? GetModifierStack(Entry.SkillID, Entry.ModifierID)
+		: 0;
+
+	static constexpr int32 MaxBuildHistoryEntries = 64;
+	BuildHistory.Add(Entry);
+	if (BuildHistory.Num() > MaxBuildHistoryEntries)
+	{
+		BuildHistory.RemoveAt(0, BuildHistory.Num() - MaxBuildHistoryEntries, EAllowShrinking::No);
+	}
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Build history appended: Type=%s Skill=%s Modifier=%s Delta=%d Total=%d History=%d."),
+		*UEnum::GetValueAsString(Entry.RewardType),
+		*UEnum::GetValueAsString(Entry.SkillID),
+		*UEnum::GetValueAsString(Entry.ModifierID),
+		Entry.StackDelta,
+		Entry.ResultingStackCount,
+		BuildHistory.Num());
+	OnBuildHistoryChanged.Broadcast();
 }
 
 void USkillComponent::AddModifierIfMissing(

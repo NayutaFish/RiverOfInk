@@ -667,6 +667,7 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 			return false;
 		}
 
+		CachedSkillComponent->RecordBuildAcquisition(Reward);
 		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: GainSkill Skill=%d."), static_cast<int32>(Reward.SkillID));
 		return true;
 	}
@@ -678,6 +679,7 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 		}
 
 		CachedSkillComponent->ApplySkillUpgrade(Reward.SkillID, Reward.UpgradeType);
+		CachedSkillComponent->RecordBuildAcquisition(Reward);
 		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: Upgrade Skill=%d Type=%d."),
 			static_cast<int32>(Reward.SkillID), static_cast<int32>(Reward.UpgradeType));
 		return true;
@@ -706,6 +708,7 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 
 		const int32 AfterStack = CachedSkillComponent->GetModifierStack(Reward.SkillID, Reward.ModifierID);
 		const FResolvedSkillSpec ResolvedSpec = CachedSkillComponent->ResolveSkillSpec(Reward.SkillID);
+		CachedSkillComponent->RecordBuildAcquisition(Reward);
 		UE_LOG(LogRoguelike, Log,
 			TEXT("Reward applied: Modifier Skill=%d Modifier=%d Stack=%d->%d Resolved(Projectiles=%d Explosions=%d Hits=%d Radius=%.0f Cooldown=%.2f)."),
 			static_cast<int32>(Reward.SkillID),
@@ -736,6 +739,7 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 			return false;
 		}
 
+		CachedSkillComponent->RecordBuildAcquisition(Reward);
 		UE_LOG(LogRoguelike, Log, TEXT("Reward applied: ChangeSkillForm Skill=%d From=%d To=%d."),
 			static_cast<int32>(Reward.SkillID),
 			static_cast<int32>(Reward.CurrentSkillForm),

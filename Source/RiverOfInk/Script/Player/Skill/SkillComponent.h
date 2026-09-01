@@ -18,6 +18,7 @@ class UNiagaraSystem;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSkill, Log, All);
 DECLARE_MULTICAST_DELEGATE(FOnSkillStateChanged);
+DECLARE_MULTICAST_DELEGATE(FOnBuildHistoryChanged);
 
 /**
  * Owns the first-pass active skill cooldowns and spawning logic.
@@ -81,6 +82,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Skill|Build")
 	bool ApplyModifier(EPlayerSkillID SkillID, ESkillModifierID ModifierID, int32 StackDelta = 1);
+
+	/** Record one reward that has already been applied successfully. */
+	void RecordBuildAcquisition(const FRoguelikeRewardOption& Reward);
+
+	/** Chronological build acquisitions for HUDs and other runtime observers. */
+	/** Native read-only view; the public BuildHistory property is the Blueprint view. */
+	const TArray<FBuildHistoryEntry>& GetBuildHistory() const { return BuildHistory; }
 
 	/** Copy skill slots, modifiers, and upgrade levels into the aggregate run snapshot. */
 	void CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) const;
@@ -165,11 +173,17 @@ public:
 	/** Native notification for HUDs and other runtime observers. */
 	FOnSkillStateChanged OnSkillStateChanged;
 
+	/** Native notification after a successful build-history entry is appended. */
+	FOnBuildHistoryChanged OnBuildHistoryChanged;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Slots")
 	TArray<FPlayerSkillSlot> SkillSlots;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Upgrade")
 	TMap<EPlayerSkillID, FSkillUpgradeState> SkillUpgradeStates;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Build")
+	TArray<FBuildHistoryEntry> BuildHistory;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash")
 	TSubclassOf<APlayerSkill_CircleDamageArea> CircularSlashAreaClass;
