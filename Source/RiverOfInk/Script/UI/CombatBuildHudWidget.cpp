@@ -409,7 +409,9 @@ void UCombatBuildHudWidget::ApplyViewportLayout()
 	// desired size and place that size as a single bottom-right viewport slot;
 	// this remains correct when the editor embeds PIE in a non-fullscreen pane.
 	SetDesiredSizeInViewport(FVector2D(PanelWidth, PanelHeight));
-	SetPositionInViewport(FVector2D(-32.0f, -28.0f));
+	// The editor-embedded PIE host includes the surrounding editor chrome in
+	// its viewport slot. Keep the compact panel inside the visible game pane.
+	SetPositionInViewport(FVector2D(-150.0f, -300.0f));
 	SetAlignmentInViewport(FVector2D(1.0f, 1.0f));
 	// SetPositionInViewport intentionally resets the viewport anchors to the
 	// origin in UE. Apply the bottom-right anchor last so the explicit offset
