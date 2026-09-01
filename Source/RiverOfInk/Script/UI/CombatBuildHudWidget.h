@@ -88,6 +88,7 @@ protected:
 
 private:
 	void BuildDefaultWidgetTree();
+	void ApplyViewportLayout();
 	void BindSkillEvents();
 	void UnbindSkillEvents();
 	void HandleBuildHistoryChanged();

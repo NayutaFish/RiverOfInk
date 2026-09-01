@@ -117,6 +117,7 @@ void UCombatBuildHudWidget::InitializeForPlayer(APlayerCharacter* InPlayer)
 	UnbindSkillEvents();
 	ObservedPlayer = InPlayer;
 	ObservedSkillComponent = IsValid(ObservedPlayer) ? ObservedPlayer->SkillComponent : nullptr;
+	ApplyViewportLayout();
 	BindSkillEvents();
 	RefreshBuildHistory();
 
@@ -225,16 +226,12 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	RootSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 	if (UCanvasPanelSlot* RootSlot = RootCanvas->AddChildToCanvas(RootSizeBox))
 	{
-		RootSlot->SetAnchors(FAnchors(1.0f, 1.0f));
-		// Keep the pivot at the slot's top-left and include the panel dimensions
-		// in the anchored offset. This is stable in both standalone PIE and an
-		// editor-embedded viewport, where the alignment pivot can otherwise be
-		// ignored until a later layout pass and push the panel below the clip.
+		// The outer UUserWidget owns the bottom-right viewport placement. Keep
+		// this inner panel at the widget origin so the two layout systems cannot
+		// apply the bottom-right offset twice in an editor-embedded viewport.
+		RootSlot->SetAnchors(FAnchors(0.0f, 0.0f));
 		RootSlot->SetAlignment(FVector2D(0.0f, 0.0f));
-		RootSlot->SetPosition(FVector2D(-PanelWidth - 32.0f, -PanelHeight - 28.0f));
-		// Keep the canvas slot explicitly sized. Auto-size can collapse a
-		// runtime-created SizeBox before its overridden dimensions participate in
-		// the first layout pass, which makes the HUD appear to be missing in PIE.
+		RootSlot->SetPosition(FVector2D::ZeroVector);
 		RootSlot->SetSize(FVector2D(PanelWidth, PanelHeight));
 		RootSlot->SetAutoSize(false);
 		RootSlot->SetZOrder(30);
@@ -404,6 +401,17 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 		KeySlot->SetHorizontalAlignment(HAlign_Center);
 		KeySlot->SetVerticalAlignment(VAlign_Center);
 	}
+}
+
+void UCombatBuildHudWidget::ApplyViewportLayout()
+{
+	// AddToViewport fills the widget by default. Give the widget an explicit
+	// desired size and place that size as a single bottom-right viewport slot;
+	// this remains correct when the editor embeds PIE in a non-fullscreen pane.
+	SetDesiredSizeInViewport(FVector2D(PanelWidth, PanelHeight));
+	SetAnchorsInViewport(FAnchors(1.0f, 1.0f));
+	SetAlignmentInViewport(FVector2D(1.0f, 1.0f));
+	SetPositionInViewport(FVector2D(-32.0f, -28.0f));
 }
 
 void UCombatBuildHudWidget::BindSkillEvents()
