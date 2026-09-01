@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Player/Skill/PlayerSkillTypes.h"
+#include "UI/CombatBuildIconPlaceholderWidget.h"
 #include "CombatBuildHudWidget.generated.h"
 
 class APlayerCharacter;
@@ -20,12 +21,12 @@ class UTexture2D;
 class UWidget;
 
 /**
- * Combat-only recent-build HUD.
+ * Display-only combat build HUD.
  *
- * The widget reads the chronological build history owned by USkillComponent.
- * It does not infer history from the current modifier totals, so repeated
- * acquisitions remain visible in their real order after a level transition
- * or a UI reconstruction.
+ * The widget owns only the two-entry visible window of the chronological
+ * build history: the newest entry is the primary slot and the previous entry
+ * is the secondary slot. Detailed build information is intentionally not part
+ * of this widget.
  */
 UCLASS(Blueprintable)
 class RIVEROFINK_API UCombatBuildHudWidget : public UUserWidget
@@ -41,29 +42,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void RefreshBuildHistory();
 
-	/** Toggle the optional detail view. No-op while the history is empty. */
+	/** Compatibility boundary for the future detail HUD; intentionally deferred. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void ToggleBuildDetails();
 
-	/** Apply the player-configured key label to the optional prompt. */
+	/** Apply the player-configured key label to the compact prompt. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void SetDetailsKeyLabel(const FText& InKeyLabel);
 
+	/** Always false until the separate detail HUD is implemented. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Build")
-	bool IsBuildDetailsOpen() const { return bDetailsOpen; }
+	bool IsBuildDetailsOpen() const { return false; }
 
-	/** Panel and layer assets are optional; native color fallbacks keep the HUD readable before art import. */
+	/** Optional panel texture. A native border fallback is used when absent. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	TObjectPtr<UTexture2D> PanelTexture;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	TObjectPtr<UTexture2D> FlyWhiteTexture;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	TObjectPtr<UTexture2D> RecentInkTexture;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-	TObjectPtr<UTexture2D> PreviousInkTexture;
+	/**
+	 * Optional imported/configured icon overrides keyed by the stable build key
+	 * (for example TwoStageArc, TwinSlash, or Cooldown). This is the first
+	 * resolution tier; path-based redrawn and legacy fallbacks follow it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Build Icons")
+	TMap<FName, TObjectPtr<UTexture2D>> ConfiguredBuildIcons;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "360.0", ClampMax = "720.0"))
 	float PanelWidth = 500.0f;
@@ -89,21 +90,17 @@ private:
 	void BuildDefaultWidgetTree();
 	void BindSkillEvents();
 	void UnbindSkillEvents();
-	void HandleSkillStateChanged();
 	void HandleBuildHistoryChanged();
 	void SetBuildEntry(const FBuildHistoryEntry* Entry, bool bRecent);
-	void UpdateDetailsVisibility();
 	void StartLatestBuildFeedback();
 	void UpdateLatestBuildFeedback();
 	void StopLatestBuildFeedback(bool bRestoreFinalState);
 	void SetWidgetScale(UWidget* Widget, float Scale) const;
 	void SetTextStyle(UTextBlock* TextBlock, int32 FontSize, const FLinearColor& Color) const;
+	FName ResolveBuildIconKey(const FBuildHistoryEntry& Entry) const;
+	ECombatBuildIconPlaceholderKind ResolvePlaceholderKind(FName BuildIconKey) const;
 	UTexture2D* LoadBuildIcon(const FBuildHistoryEntry& Entry);
 	UTexture2D* LoadOptionalTexture(FName CacheKey, const TCHAR* AssetPath);
-	FText GetBuildTitle(const FBuildHistoryEntry& Entry) const;
-	FText GetBuildMeta(const FBuildHistoryEntry& Entry) const;
-	FText GetSkillLabel(EPlayerSkillID SkillID) const;
-	FText GetBuildDetailLine(const FBuildHistoryEntry& Entry) const;
 	bool IsSameEntry(const FBuildHistoryEntry& A, const FBuildHistoryEntry& B) const;
 
 	UPROPERTY(Transient)
@@ -137,22 +134,10 @@ private:
 	TObjectPtr<UOverlay> RecentSlotRoot;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UImage> RecentFlyWhiteImage;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> RecentInkImage;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UImage> RecentIconImage;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> RecentCaptionText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> RecentTitleText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> RecentMetaText;
+	TObjectPtr<UCombatBuildIconPlaceholderWidget> RecentIconPlaceholder;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> PreviousSlotBox;
@@ -161,25 +146,10 @@ private:
 	TObjectPtr<UOverlay> PreviousSlotRoot;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UImage> PreviousFlyWhiteImage;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> PreviousInkImage;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UImage> PreviousIconImage;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> PreviousCaptionText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> PreviousTitleText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> PreviousMetaText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> DetailsPromptText;
+	TObjectPtr<UCombatBuildIconPlaceholderWidget> PreviousIconPlaceholder;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> DetailsPromptRow;
@@ -194,21 +164,6 @@ private:
 	TObjectPtr<UTextBlock> DetailsKeyText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UOverlay> DetailsOverlay;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> DetailsTitleText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> DetailsLatestText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> DetailsPreviousText;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> DetailsHintText;
-
-	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UTexture2D>> BuildIconCache;
 
 	FText DetailsKeyLabel = FText::FromString(TEXT("B"));
@@ -216,7 +171,6 @@ private:
 	int32 LastDisplayedHistoryCount = 0;
 	bool bHasDisplayedLatest = false;
 	bool bSkillEventsSubscribed = false;
-	bool bDetailsOpen = false;
 	float LatestFeedbackStartTime = 0.0f;
 	FTimerHandle LatestFeedbackTimer;
 };

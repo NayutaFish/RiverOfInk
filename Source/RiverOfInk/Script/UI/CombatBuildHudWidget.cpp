@@ -22,27 +22,24 @@
 namespace
 {
 	static const TCHAR* BuildHudPanelPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_Panel.T_UI_BuildHUD_Panel");
-	static const TCHAR* BuildHudFlyWhitePath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_FlyWhite.T_UI_BuildHUD_FlyWhite");
-	static const TCHAR* BuildHudRecentInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentInk.T_UI_BuildHUD_RecentInk");
-	static const TCHAR* BuildHudPreviousInkPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_PreviousInk.T_UI_BuildHUD_PreviousInk");
 
 	constexpr float LatestFeedbackDuration = 0.22f;
 	constexpr float LatestFeedbackStartScale = 0.78f;
 
-	FString MakeBuildAssetStem(const FBuildHistoryEntry& Entry)
+	FName MakeBuildIconKey(const FBuildHistoryEntry& Entry)
 	{
 		if (Entry.RewardType == ERoguelikeRewardType::ChangeSkillForm)
 		{
 			return Entry.NewSkillForm == EPlayerSkillForm::TwoStageArc
-				? TEXT("TwoStageArc")
-				: TEXT("SkillForm");
+				? FName(TEXT("TwoStageArc"))
+				: FName(TEXT("SkillForm"));
 		}
 
 		if (Entry.RewardType == ERoguelikeRewardType::GainSkill)
 		{
 			return Entry.SkillID == EPlayerSkillID::CircularSlash
-				? TEXT("CircularSlash")
-				: TEXT("TripleProjectile");
+				? FName(TEXT("CircularSlash"))
+				: FName(TEXT("TripleProjectile"));
 		}
 
 		if (Entry.RewardType == ERoguelikeRewardType::UpgradeSkill)
@@ -50,35 +47,35 @@ namespace
 			switch (Entry.UpgradeType)
 			{
 			case ESkillUpgradeType::Cooldown:
-				return TEXT("Cooldown");
+				return FName(TEXT("Cooldown"));
 			case ESkillUpgradeType::Damage:
-				return TEXT("Damage");
+				return FName(TEXT("Damage"));
 			case ESkillUpgradeType::Mechanic:
 			default:
-				return TEXT("ProjectileCount");
+				return FName(TEXT("ProjectileCount"));
 			}
 		}
 
 		switch (Entry.ModifierID)
 		{
 		case ESkillModifierID::AddProjectile:
-			return TEXT("ProjectileCount");
+			return FName(TEXT("ProjectileCount"));
 		case ESkillModifierID::InkGrenade:
-			return TEXT("InkGrenade");
+			return FName(TEXT("InkGrenade"));
 		case ESkillModifierID::ExtraExplosion:
-			return TEXT("ExtraExplosion");
+			return FName(TEXT("ExtraExplosion"));
 		case ESkillModifierID::TwinSlash:
-			return TEXT("TwinSlash");
+			return FName(TEXT("TwinSlash"));
 		case ESkillModifierID::NullRing:
-			return TEXT("ProjectileErase");
+			return FName(TEXT("ProjectileErase"));
 		case ESkillModifierID::RadiusUp:
-			return TEXT("Radius");
+			return FName(TEXT("Radius"));
 		case ESkillModifierID::CooldownDown:
-			return TEXT("Cooldown");
+			return FName(TEXT("Cooldown"));
 		case ESkillModifierID::ProjectileHoming:
-			return TEXT("ProjectileHoming");
+			return FName(TEXT("ProjectileHoming"));
 		default:
-			return TEXT("ProjectileCount");
+			return FName(TEXT("ProjectileCount"));
 		}
 	}
 
@@ -131,17 +128,9 @@ void UCombatBuildHudWidget::InitializeForPlayer(APlayerCharacter* InPlayer)
 void UCombatBuildHudWidget::SetDetailsKeyLabel(const FText& InKeyLabel)
 {
 	DetailsKeyLabel = InKeyLabel.IsEmpty() ? FText::FromString(TEXT("B")) : InKeyLabel;
-	if (DetailsPromptText)
-	{
-		DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
-	}
 	if (DetailsKeyText)
 	{
 		DetailsKeyText->SetText(DetailsKeyLabel);
-	}
-	if (DetailsHintText)
-	{
-		DetailsHintText->SetText(FText::Format(FText::FromString(TEXT("{0}  返回战斗")), DetailsKeyLabel));
 	}
 }
 
@@ -161,7 +150,6 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 	if (History.IsEmpty())
 	{
 		StopLatestBuildFeedback(false);
-		bDetailsOpen = false;
 		LastDisplayedHistoryCount = 0;
 		bHasDisplayedLatest = false;
 		if (RootSizeBox)
@@ -183,8 +171,8 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 	const bool bIsNewLatest = bHasDisplayedLatest
 		&& (History.Num() != LastDisplayedHistoryCount || !IsSameEntry(LastDisplayedLatest, Latest));
 
-	// Update the data and brushes before starting feedback. This keeps the
-	// animation interruptible without ever showing stale build information.
+	// Resolve the visible window before starting feedback so an interrupted
+	// animation can never show a stale primary slot.
 	SetBuildEntry(&Latest, true);
 	SetBuildEntry(Previous, false);
 	LastDisplayedLatest = Latest;
@@ -199,37 +187,25 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 	}
 	bHasDisplayedLatest = true;
 
-	if (DetailsLatestText)
-	{
-		DetailsLatestText->SetText(GetBuildDetailLine(Latest));
-	}
-	if (DetailsPreviousText)
-	{
-		DetailsPreviousText->SetText(Previous
-			? GetBuildDetailLine(*Previous)
-			: FText::FromString(TEXT("上一构筑：暂无记录")));
-	}
-	if (DetailsPromptText)
-	{
-		DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
-	}
-	if (DetailsKeyText)
-	{
-		DetailsKeyText->SetText(DetailsKeyLabel);
-	}
-	UpdateDetailsVisibility();
+	UE_LOG(LogSkill, Verbose,
+		TEXT("Combat build HUD history refreshed: Count=%d HasPrevious=%s."),
+		History.Num(),
+		Previous ? TEXT("true") : TEXT("false"));
 }
 
 void UCombatBuildHudWidget::ToggleBuildDetails()
 {
 	if (!IsValid(ObservedSkillComponent) || ObservedSkillComponent->GetBuildHistory().IsEmpty())
 	{
-		UE_LOG(LogSkill, Verbose, TEXT("Combat build detail toggle ignored: build history is empty."));
+		UE_LOG(LogSkill, Verbose, TEXT("Combat build detail request ignored: build history is empty."));
 		return;
 	}
 
-	bDetailsOpen = !bDetailsOpen;
-	UpdateDetailsVisibility();
+	// The detail panel, pause, focus, and UIOnly input belong to a later
+	// feature slice. Keep this method as a compatibility boundary for the
+	// existing B binding without embedding that feature in the combat HUD.
+	UE_LOG(LogSkill, Verbose,
+		TEXT("Combat build detail request deferred: detail HUD is outside the current slice."));
 }
 
 void UCombatBuildHudWidget::BuildDefaultWidgetTree()
@@ -241,16 +217,23 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 
 	RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("CombatBuildHudCanvas"));
 	WidgetTree->RootWidget = RootCanvas;
+	RootCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CombatBuildHudSize"));
 	RootSizeBox->SetWidthOverride(PanelWidth);
 	RootSizeBox->SetHeightOverride(PanelHeight);
+	RootSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 	if (UCanvasPanelSlot* RootSlot = RootCanvas->AddChildToCanvas(RootSizeBox))
 	{
 		RootSlot->SetAnchors(FAnchors(1.0f, 1.0f));
 		RootSlot->SetAlignment(FVector2D(1.0f, 1.0f));
 		RootSlot->SetPosition(FVector2D(-32.0f, -28.0f));
-		RootSlot->SetAutoSize(true);
+		// Keep the canvas slot explicitly sized. Auto-size can collapse a
+		// runtime-created SizeBox before its overridden dimensions participate in
+		// the first layout pass, which makes the HUD appear to be missing in PIE.
+		RootSlot->SetSize(FVector2D(PanelWidth, PanelHeight));
+		RootSlot->SetAutoSize(false);
+		RootSlot->SetZOrder(30);
 	}
 
 	PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CombatBuildHudPanel"));
@@ -269,14 +252,17 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	if (PanelTexture)
 	{
 		PanelImage->SetBrushFromTexture(PanelTexture, true);
+		PanelBorder->SetBrushColor(FLinearColor::Transparent);
+		PanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
-	PanelBorder->SetBrushColor(PanelTexture ? FLinearColor::Transparent : PanelFallbackColor);
+	else
+	{
+		// Slice 2 intentionally uses the plain border as a whitebox panel when
+		// no final panel texture has been imported yet.
+		PanelImage->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	PanelImage->SetColorAndOpacity(FLinearColor::White);
-	PanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	UScaleBox* PanelFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("CombatBuildHudPanelFit"));
-	PanelFit->SetStretch(EStretch::ScaleToFit);
-	PanelFit->SetContent(PanelImage);
-	if (UOverlaySlot* PanelSlot = PanelOverlay->AddChildToOverlay(PanelFit))
+	if (UOverlaySlot* PanelSlot = PanelOverlay->AddChildToOverlay(PanelImage))
 	{
 		PanelSlot->SetHorizontalAlignment(HAlign_Fill);
 		PanelSlot->SetVerticalAlignment(VAlign_Fill);
@@ -287,184 +273,106 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
 		ContentSlot->SetVerticalAlignment(VAlign_Fill);
-		ContentSlot->SetPadding(FMargin(30.0f, 22.0f, 30.0f, 38.0f));
+		ContentSlot->SetPadding(FMargin(28.0f, 18.0f, 28.0f, 44.0f));
 	}
 
 	RecentSlotBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildSlotSize"));
-	RecentSlotBox->SetWidthOverride(276.0f);
-	RecentSlotBox->SetHeightOverride(184.0f);
+	RecentSlotBox->SetWidthOverride(300.0f);
+	RecentSlotBox->SetHeightOverride(178.0f);
 	RecentSlotRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RecentBuildSlot"));
 	RecentSlotBox->SetContent(RecentSlotRoot);
 	if (UHorizontalBoxSlot* RecentRowSlot = ContentRow->AddChildToHorizontalBox(RecentSlotBox))
 	{
 		RecentRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		RecentRowSlot->SetVerticalAlignment(VAlign_Center);
-		RecentRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		FSlateChildSize RecentSize(ESlateSizeRule::Fill);
+		RecentSize.Value = 1.65f;
+		RecentRowSlot->SetSize(RecentSize);
 	}
 
 	UBorder* RecentFallback = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("RecentBuildFallback"));
 	RecentFallback->SetBrushColor(RecentFallbackColor);
-	if (UOverlaySlot* FallbackSlot = RecentSlotRoot->AddChildToOverlay(RecentFallback))
+	RecentFallback->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* RecentFallbackSlot = RecentSlotRoot->AddChildToOverlay(RecentFallback))
 	{
-		FallbackSlot->SetHorizontalAlignment(HAlign_Fill);
-		FallbackSlot->SetVerticalAlignment(VAlign_Fill);
+		RecentFallbackSlot->SetHorizontalAlignment(HAlign_Fill);
+		RecentFallbackSlot->SetVerticalAlignment(VAlign_Fill);
+		RecentFallbackSlot->SetPadding(FMargin(8.0f));
 	}
-	auto AddFittedLayer = [this](UOverlay* Parent, UImage* Image, const TCHAR* WidgetName, const FMargin& LayerPadding)
-	{
-		UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), WidgetName);
-		Fit->SetStretch(EStretch::ScaleToFit);
-		Fit->SetContent(Image);
-		Fit->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (UOverlaySlot* FitSlot = Parent->AddChildToOverlay(Fit))
-		{
-			FitSlot->SetHorizontalAlignment(HAlign_Fill);
-			FitSlot->SetVerticalAlignment(VAlign_Fill);
-			FitSlot->SetPadding(LayerPadding);
-		}
-		return Fit;
-	};
-	RecentFlyWhiteImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildFlyWhite"));
-	if (!FlyWhiteTexture)
-	{
-		FlyWhiteTexture = LoadObject<UTexture2D>(nullptr, BuildHudFlyWhitePath);
-	}
-	if (FlyWhiteTexture)
-	{
-		RecentFlyWhiteImage->SetBrushFromTexture(FlyWhiteTexture, true);
-	}
-	RecentFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.82f));
-	RecentFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddFittedLayer(RecentSlotRoot, RecentFlyWhiteImage, TEXT("RecentBuildFlyWhiteFit"), FMargin(8.0f, 15.0f, 8.0f, 15.0f));
-	RecentInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildInk"));
-	if (!RecentInkTexture)
-	{
-		RecentInkTexture = LoadObject<UTexture2D>(nullptr, BuildHudRecentInkPath);
-	}
-	if (RecentInkTexture)
-	{
-		RecentInkImage->SetBrushFromTexture(RecentInkTexture, true);
-	}
-	RecentInkImage->SetColorAndOpacity(FLinearColor::White);
-	RecentInkImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddFittedLayer(RecentSlotRoot, RecentInkImage, TEXT("RecentBuildInkFit"), FMargin(0.0f));
+
 	RecentIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildIcon"));
 	RecentIconImage->SetColorAndOpacity(FLinearColor::White);
-	RecentIconImage->SetDesiredSizeOverride(FVector2D(62.0f, 62.0f));
+	RecentIconImage->SetDesiredSizeOverride(FVector2D(126.0f, 126.0f));
+	RecentIconImage->SetVisibility(ESlateVisibility::Collapsed);
 	UScaleBox* RecentIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("RecentBuildIconFit"));
 	RecentIconFit->SetStretch(EStretch::ScaleToFit);
 	RecentIconFit->SetContent(RecentIconImage);
-	if (UOverlaySlot* IconSlot = RecentSlotRoot->AddChildToOverlay(RecentIconFit))
+	if (UOverlaySlot* RecentIconSlot = RecentSlotRoot->AddChildToOverlay(RecentIconFit))
 	{
-		IconSlot->SetHorizontalAlignment(HAlign_Center);
-		IconSlot->SetVerticalAlignment(VAlign_Center);
-		IconSlot->SetPadding(FMargin(0.0f, -10.0f, 0.0f, 0.0f));
+		RecentIconSlot->SetHorizontalAlignment(HAlign_Center);
+		RecentIconSlot->SetVerticalAlignment(VAlign_Center);
+		RecentIconSlot->SetPadding(FMargin(10.0f, 0.0f, 10.0f, 0.0f));
 	}
-	RecentCaptionText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildCaption"));
-	RecentCaptionText->SetText(FText::FromString(TEXT("最近构筑")));
-	SetTextStyle(RecentCaptionText, 11, FLinearColor(0.08f, 0.07f, 0.06f, 0.86f));
-	if (UOverlaySlot* CaptionSlot = RecentSlotRoot->AddChildToOverlay(RecentCaptionText))
+
+	RecentIconPlaceholder = WidgetTree->ConstructWidget<UCombatBuildIconPlaceholderWidget>(
+		UCombatBuildIconPlaceholderWidget::StaticClass(),
+		TEXT("RecentBuildIconPlaceholder"));
+	RecentIconPlaceholder->SetVisibility(ESlateVisibility::Collapsed);
+	if (UOverlaySlot* RecentPlaceholderSlot = RecentSlotRoot->AddChildToOverlay(RecentIconPlaceholder))
 	{
-		CaptionSlot->SetHorizontalAlignment(HAlign_Left);
-		CaptionSlot->SetVerticalAlignment(VAlign_Top);
-		CaptionSlot->SetPadding(FMargin(14.0f, 12.0f, 0.0f, 0.0f));
-	}
-	RecentTitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildTitle"));
-	SetTextStyle(RecentTitleText, 16, FLinearColor(0.04f, 0.035f, 0.03f, 0.94f));
-	RecentTitleText->SetJustification(ETextJustify::Center);
-	if (UOverlaySlot* TitleSlot = RecentSlotRoot->AddChildToOverlay(RecentTitleText))
-	{
-		TitleSlot->SetHorizontalAlignment(HAlign_Center);
-		TitleSlot->SetVerticalAlignment(VAlign_Bottom);
-		TitleSlot->SetPadding(FMargin(16.0f, 0.0f, 16.0f, 19.0f));
-	}
-	RecentMetaText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RecentBuildMeta"));
-	SetTextStyle(RecentMetaText, 11, FLinearColor(0.10f, 0.09f, 0.08f, 0.78f));
-	RecentMetaText->SetJustification(ETextJustify::Right);
-	if (UOverlaySlot* MetaSlot = RecentSlotRoot->AddChildToOverlay(RecentMetaText))
-	{
-		MetaSlot->SetHorizontalAlignment(HAlign_Right);
-		MetaSlot->SetVerticalAlignment(VAlign_Top);
-		MetaSlot->SetPadding(FMargin(0.0f, 12.0f, 14.0f, 0.0f));
+		RecentPlaceholderSlot->SetHorizontalAlignment(HAlign_Fill);
+		RecentPlaceholderSlot->SetVerticalAlignment(VAlign_Fill);
+		RecentPlaceholderSlot->SetPadding(FMargin(18.0f, 12.0f, 18.0f, 12.0f));
 	}
 
 	PreviousSlotBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviousBuildSlotSize"));
-	PreviousSlotBox->SetWidthOverride(156.0f);
-	PreviousSlotBox->SetHeightOverride(166.0f);
+	PreviousSlotBox->SetWidthOverride(142.0f);
+	PreviousSlotBox->SetHeightOverride(154.0f);
 	PreviousSlotRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("PreviousBuildSlot"));
 	PreviousSlotBox->SetContent(PreviousSlotRoot);
 	if (UHorizontalBoxSlot* PreviousRowSlot = ContentRow->AddChildToHorizontalBox(PreviousSlotBox))
 	{
-		PreviousRowSlot->SetHorizontalAlignment(HAlign_Left);
+		PreviousRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		PreviousRowSlot->SetVerticalAlignment(VAlign_Center);
-		PreviousRowSlot->SetPadding(FMargin(10.0f, 8.0f, 0.0f, 0.0f));
-		PreviousRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		PreviousRowSlot->SetPadding(FMargin(12.0f, 0.0f, 0.0f, 0.0f));
+		FSlateChildSize PreviousSize(ESlateSizeRule::Fill);
+		PreviousSize.Value = 0.85f;
+		PreviousRowSlot->SetSize(PreviousSize);
 	}
 
 	UBorder* PreviousFallback = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PreviousBuildFallback"));
 	PreviousFallback->SetBrushColor(PreviousFallbackColor);
-	if (UOverlaySlot* FallbackSlot = PreviousSlotRoot->AddChildToOverlay(PreviousFallback))
+	PreviousFallback->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* PreviousFallbackSlot = PreviousSlotRoot->AddChildToOverlay(PreviousFallback))
 	{
-		FallbackSlot->SetHorizontalAlignment(HAlign_Fill);
-		FallbackSlot->SetVerticalAlignment(VAlign_Fill);
+		PreviousFallbackSlot->SetHorizontalAlignment(HAlign_Fill);
+		PreviousFallbackSlot->SetVerticalAlignment(VAlign_Fill);
+		PreviousFallbackSlot->SetPadding(FMargin(6.0f));
 	}
-	PreviousFlyWhiteImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildFlyWhite"));
-	if (FlyWhiteTexture)
-	{
-		PreviousFlyWhiteImage->SetBrushFromTexture(FlyWhiteTexture, true);
-	}
-	PreviousFlyWhiteImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.68f));
-	PreviousFlyWhiteImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddFittedLayer(PreviousSlotRoot, PreviousFlyWhiteImage, TEXT("PreviousBuildFlyWhiteFit"), FMargin(7.0f, 14.0f, 7.0f, 14.0f));
-	PreviousInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildInk"));
-	if (!PreviousInkTexture)
-	{
-		PreviousInkTexture = LoadObject<UTexture2D>(nullptr, BuildHudPreviousInkPath);
-	}
-	if (PreviousInkTexture)
-	{
-		PreviousInkImage->SetBrushFromTexture(PreviousInkTexture, true);
-	}
-	PreviousInkImage->SetColorAndOpacity(FLinearColor::White);
-	PreviousInkImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddFittedLayer(PreviousSlotRoot, PreviousInkImage, TEXT("PreviousBuildInkFit"), FMargin(0.0f));
+
 	PreviousIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildIcon"));
 	PreviousIconImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
-	PreviousIconImage->SetDesiredSizeOverride(FVector2D(46.0f, 46.0f));
+	PreviousIconImage->SetDesiredSizeOverride(FVector2D(78.0f, 78.0f));
+	PreviousIconImage->SetVisibility(ESlateVisibility::Collapsed);
 	UScaleBox* PreviousIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("PreviousBuildIconFit"));
 	PreviousIconFit->SetStretch(EStretch::ScaleToFit);
 	PreviousIconFit->SetContent(PreviousIconImage);
-	if (UOverlaySlot* IconSlot = PreviousSlotRoot->AddChildToOverlay(PreviousIconFit))
+	if (UOverlaySlot* PreviousIconSlot = PreviousSlotRoot->AddChildToOverlay(PreviousIconFit))
 	{
-		IconSlot->SetHorizontalAlignment(HAlign_Center);
-		IconSlot->SetVerticalAlignment(VAlign_Center);
-		IconSlot->SetPadding(FMargin(0.0f, -8.0f, 0.0f, 0.0f));
+		PreviousIconSlot->SetHorizontalAlignment(HAlign_Center);
+		PreviousIconSlot->SetVerticalAlignment(VAlign_Center);
+		PreviousIconSlot->SetPadding(FMargin(8.0f));
 	}
-	PreviousCaptionText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildCaption"));
-	PreviousCaptionText->SetText(FText::FromString(TEXT("上一构筑")));
-	SetTextStyle(PreviousCaptionText, 10, FLinearColor(0.16f, 0.15f, 0.13f, 0.70f));
-	if (UOverlaySlot* CaptionSlot = PreviousSlotRoot->AddChildToOverlay(PreviousCaptionText))
+
+	PreviousIconPlaceholder = WidgetTree->ConstructWidget<UCombatBuildIconPlaceholderWidget>(
+		UCombatBuildIconPlaceholderWidget::StaticClass(),
+		TEXT("PreviousBuildIconPlaceholder"));
+	PreviousIconPlaceholder->SetVisibility(ESlateVisibility::Collapsed);
+	if (UOverlaySlot* PreviousPlaceholderSlot = PreviousSlotRoot->AddChildToOverlay(PreviousIconPlaceholder))
 	{
-		CaptionSlot->SetHorizontalAlignment(HAlign_Left);
-		CaptionSlot->SetVerticalAlignment(VAlign_Top);
-		CaptionSlot->SetPadding(FMargin(9.0f, 10.0f, 0.0f, 0.0f));
-	}
-	PreviousTitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildTitle"));
-	SetTextStyle(PreviousTitleText, 13, FLinearColor(0.16f, 0.15f, 0.13f, 0.78f));
-	PreviousTitleText->SetJustification(ETextJustify::Center);
-	if (UOverlaySlot* TitleSlot = PreviousSlotRoot->AddChildToOverlay(PreviousTitleText))
-	{
-		TitleSlot->SetHorizontalAlignment(HAlign_Center);
-		TitleSlot->SetVerticalAlignment(VAlign_Bottom);
-		TitleSlot->SetPadding(FMargin(8.0f, 0.0f, 8.0f, 15.0f));
-	}
-	PreviousMetaText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PreviousBuildMeta"));
-	SetTextStyle(PreviousMetaText, 10, FLinearColor(0.22f, 0.21f, 0.19f, 0.62f));
-	PreviousMetaText->SetJustification(ETextJustify::Right);
-	if (UOverlaySlot* MetaSlot = PreviousSlotRoot->AddChildToOverlay(PreviousMetaText))
-	{
-		MetaSlot->SetHorizontalAlignment(HAlign_Right);
-		MetaSlot->SetVerticalAlignment(VAlign_Top);
-		MetaSlot->SetPadding(FMargin(0.0f, 10.0f, 9.0f, 0.0f));
+		PreviousPlaceholderSlot->SetHorizontalAlignment(HAlign_Fill);
+		PreviousPlaceholderSlot->SetVerticalAlignment(VAlign_Fill);
+		PreviousPlaceholderSlot->SetPadding(FMargin(12.0f));
 	}
 
 	DetailsPromptRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("BuildDetailsPromptRow"));
@@ -472,8 +380,9 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		PromptSlot->SetHorizontalAlignment(HAlign_Center);
 		PromptSlot->SetVerticalAlignment(VAlign_Bottom);
-		PromptSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 11.0f));
+		PromptSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
 	}
+
 	DetailsKeyCapBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("BuildDetailsKeyCapSize"));
 	DetailsKeyCapBox->SetWidthOverride(36.0f);
 	DetailsKeyCapBox->SetHeightOverride(36.0f);
@@ -490,59 +399,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	{
 		KeySlot->SetHorizontalAlignment(HAlign_Center);
 		KeySlot->SetVerticalAlignment(VAlign_Center);
-		KeySlot->SetPadding(FMargin(0.0f, 0.0f, 7.0f, 0.0f));
 	}
-	DetailsPromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsPrompt"));
-	SetTextStyle(DetailsPromptText, 11, FLinearColor(0.10f, 0.09f, 0.08f, 0.82f));
-	DetailsPromptText->SetText(FText::FromString(TEXT("查看构筑")));
-	if (UHorizontalBoxSlot* LabelSlot = DetailsPromptRow->AddChildToHorizontalBox(DetailsPromptText))
-	{
-		LabelSlot->SetHorizontalAlignment(HAlign_Center);
-		LabelSlot->SetVerticalAlignment(VAlign_Center);
-	}
-
-	DetailsOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("BuildDetailsOverlay"));
-	if (UOverlaySlot* DetailSlot = PanelOverlay->AddChildToOverlay(DetailsOverlay))
-	{
-		DetailSlot->SetHorizontalAlignment(HAlign_Fill);
-		DetailSlot->SetVerticalAlignment(VAlign_Fill);
-		DetailSlot->SetPadding(FMargin(12.0f, 8.0f, 12.0f, 8.0f));
-	}
-	DetailsTitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsTitle"));
-	DetailsTitleText->SetText(FText::FromString(TEXT("战斗内构筑")));
-	SetTextStyle(DetailsTitleText, 17, FLinearColor::White);
-	if (UOverlaySlot* TitleSlot = DetailsOverlay->AddChildToOverlay(DetailsTitleText))
-	{
-		TitleSlot->SetHorizontalAlignment(HAlign_Left);
-		TitleSlot->SetVerticalAlignment(VAlign_Top);
-	}
-	DetailsLatestText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsLatest"));
-	SetTextStyle(DetailsLatestText, 14, FLinearColor(0.90f, 0.94f, 0.95f, 0.92f));
-	if (UOverlaySlot* LatestSlot = DetailsOverlay->AddChildToOverlay(DetailsLatestText))
-	{
-		LatestSlot->SetHorizontalAlignment(HAlign_Left);
-		LatestSlot->SetVerticalAlignment(VAlign_Top);
-		LatestSlot->SetPadding(FMargin(0.0f, 31.0f, 0.0f, 0.0f));
-	}
-	DetailsPreviousText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsPrevious"));
-	SetTextStyle(DetailsPreviousText, 13, FLinearColor(0.80f, 0.81f, 0.80f, 0.78f));
-	if (UOverlaySlot* PreviousDetailSlot = DetailsOverlay->AddChildToOverlay(DetailsPreviousText))
-	{
-		PreviousDetailSlot->SetHorizontalAlignment(HAlign_Left);
-		PreviousDetailSlot->SetVerticalAlignment(VAlign_Top);
-		PreviousDetailSlot->SetPadding(FMargin(0.0f, 57.0f, 0.0f, 0.0f));
-	}
-	DetailsHintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsHint"));
-	SetTextStyle(DetailsHintText, 12, FLinearColor(0.82f, 0.82f, 0.78f, 0.64f));
-	DetailsHintText->SetJustification(ETextJustify::Right);
-	SetDetailsKeyLabel(DetailsKeyLabel);
-	if (UOverlaySlot* HintSlot = DetailsOverlay->AddChildToOverlay(DetailsHintText))
-	{
-		HintSlot->SetHorizontalAlignment(HAlign_Right);
-		HintSlot->SetVerticalAlignment(VAlign_Bottom);
-	}
-
-	UpdateDetailsVisibility();
 }
 
 void UCombatBuildHudWidget::BindSkillEvents()
@@ -552,28 +409,29 @@ void UCombatBuildHudWidget::BindSkillEvents()
 		return;
 	}
 
-	ObservedSkillComponent->OnSkillStateChanged.AddUObject(this, &UCombatBuildHudWidget::HandleSkillStateChanged);
 	ObservedSkillComponent->OnBuildHistoryChanged.AddUObject(this, &UCombatBuildHudWidget::HandleBuildHistoryChanged);
 	bSkillEventsSubscribed = true;
+	UE_LOG(LogSkill, Log,
+		TEXT("Combat build HUD subscribed to build-history changes: Component=%s Owner=%s."),
+		*GetNameSafe(ObservedSkillComponent),
+		*GetNameSafe(ObservedSkillComponent->GetOwner()));
 }
 
 void UCombatBuildHudWidget::UnbindSkillEvents()
 {
 	if (bSkillEventsSubscribed && IsValid(ObservedSkillComponent))
 	{
-		ObservedSkillComponent->OnSkillStateChanged.RemoveAll(this);
 		ObservedSkillComponent->OnBuildHistoryChanged.RemoveAll(this);
 	}
 	bSkillEventsSubscribed = false;
 }
 
-void UCombatBuildHudWidget::HandleSkillStateChanged()
-{
-	RefreshBuildHistory();
-}
-
 void UCombatBuildHudWidget::HandleBuildHistoryChanged()
 {
+	UE_LOG(LogSkill, Log,
+		TEXT("Combat build HUD received build-history change: Component=%s Owner=%s."),
+		*GetNameSafe(ObservedSkillComponent),
+		ObservedSkillComponent ? *GetNameSafe(ObservedSkillComponent->GetOwner()) : TEXT("None"));
 	RefreshBuildHistory();
 }
 
@@ -581,9 +439,8 @@ void UCombatBuildHudWidget::SetBuildEntry(const FBuildHistoryEntry* Entry, bool 
 {
 	USizeBox* SlotBox = bRecent ? RecentSlotBox : PreviousSlotBox;
 	UImage* IconImage = bRecent ? RecentIconImage : PreviousIconImage;
-	UTextBlock* TitleText = bRecent ? RecentTitleText : PreviousTitleText;
-	UTextBlock* MetaText = bRecent ? RecentMetaText : PreviousMetaText;
-	if (!SlotBox || !IconImage || !TitleText || !MetaText)
+	UCombatBuildIconPlaceholderWidget* IconPlaceholder = bRecent ? RecentIconPlaceholder : PreviousIconPlaceholder;
+	if (!SlotBox || !IconImage)
 	{
 		return;
 	}
@@ -591,38 +448,45 @@ void UCombatBuildHudWidget::SetBuildEntry(const FBuildHistoryEntry* Entry, bool 
 	if (!Entry)
 	{
 		SlotBox->SetVisibility(ESlateVisibility::Collapsed);
+		IconImage->SetVisibility(ESlateVisibility::Collapsed);
+		if (IconPlaceholder)
+		{
+			IconPlaceholder->SetVisibility(ESlateVisibility::Collapsed);
+		}
 		return;
 	}
 
 	SlotBox->SetVisibility(ESlateVisibility::HitTestInvisible);
-	IconImage->SetBrushFromTexture(LoadBuildIcon(*Entry), true);
-	IconImage->SetColorAndOpacity(bRecent ? FLinearColor::White : FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
-	TitleText->SetText(GetBuildTitle(*Entry));
-	MetaText->SetText(GetBuildMeta(*Entry));
-}
-
-void UCombatBuildHudWidget::UpdateDetailsVisibility()
-{
-	if (!DetailsOverlay || !ContentRow || !DetailsPromptRow)
+	const FName BuildIconKey = ResolveBuildIconKey(*Entry);
+	UTexture2D* IconTexture = LoadBuildIcon(*Entry);
+	if (!IconTexture)
 	{
+		IconImage->SetVisibility(ESlateVisibility::Collapsed);
+		IconImage->SetBrush(FSlateBrush());
+		if (IconPlaceholder)
+		{
+			IconPlaceholder->SetPlaceholderKind(ResolvePlaceholderKind(BuildIconKey));
+			IconPlaceholder->SetLineColor(bRecent
+				? FLinearColor(0.035f, 0.03f, 0.025f, 0.94f)
+				: FLinearColor(0.035f, 0.03f, 0.025f, 0.70f));
+			IconPlaceholder->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		UE_LOG(LogSkill, Log,
+			TEXT("Combat build HUD using geometry placeholder: BuildIconKey=%s Recent=%s."),
+			*BuildIconKey.ToString(),
+			bRecent ? TEXT("true") : TEXT("false"));
 		return;
 	}
 
-	const bool bHasHistory = IsValid(ObservedSkillComponent)
-		&& !ObservedSkillComponent->GetBuildHistory().IsEmpty();
-	DetailsOverlay->SetVisibility(bHasHistory && bDetailsOpen
-		? ESlateVisibility::HitTestInvisible
-		: ESlateVisibility::Collapsed);
-	ContentRow->SetVisibility(bHasHistory && !bDetailsOpen
-		? ESlateVisibility::HitTestInvisible
-		: ESlateVisibility::Collapsed);
-	DetailsPromptRow->SetVisibility(bHasHistory && !bDetailsOpen
-		? ESlateVisibility::HitTestInvisible
-		: ESlateVisibility::Collapsed);
-	if (DetailsHintText)
+	if (IconPlaceholder)
 	{
-		DetailsHintText->SetText(FText::Format(FText::FromString(TEXT("{0}  返回战斗")), DetailsKeyLabel));
+		IconPlaceholder->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	IconImage->SetBrushFromTexture(IconTexture, true);
+	IconImage->SetColorAndOpacity(bRecent
+		? FLinearColor::White
+		: FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
+	IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void UCombatBuildHudWidget::StartLatestBuildFeedback()
@@ -728,7 +592,16 @@ UTexture2D* UCombatBuildHudWidget::LoadOptionalTexture(FName CacheKey, const TCH
 
 UTexture2D* UCombatBuildHudWidget::LoadBuildIcon(const FBuildHistoryEntry& Entry)
 {
-	const FString Stem = MakeBuildAssetStem(Entry);
+	const FName BuildIconKey = ResolveBuildIconKey(Entry);
+	const FString Stem = BuildIconKey.ToString();
+	if (const TObjectPtr<UTexture2D>* ConfiguredTexturePtr = ConfiguredBuildIcons.Find(BuildIconKey))
+	{
+		if (UTexture2D* ConfiguredTexture = ConfiguredTexturePtr->Get())
+		{
+			return ConfiguredTexture;
+		}
+	}
+
 	const FString BuildCacheKey = MakeBuildCacheKey(Entry);
 	const FName RedrawnCacheKey(*FString::Printf(TEXT("Redrawn_%s"), *BuildCacheKey));
 	const FName FallbackCacheKey(*FString::Printf(TEXT("Fallback_%s"), *BuildCacheKey));
@@ -752,31 +625,31 @@ UTexture2D* UCombatBuildHudWidget::LoadBuildIcon(const FBuildHistoryEntry& Entry
 			? TEXT("/Game/RawContent/UI/Texture/Icon_CircularSlash.Icon_CircularSlash")
 			: TEXT("/Game/RawContent/UI/Texture/Icon_TripleProjectile.Icon_TripleProjectile");
 	}
-	else if (Stem == TEXT("ProjectileCount"))
+	else if (BuildIconKey == FName(TEXT("ProjectileCount")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
 	}
-	else if (Stem == TEXT("InkGrenade"))
+	else if (BuildIconKey == FName(TEXT("InkGrenade")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_InkGrenade.T_UI_Build_InkGrenade");
 	}
-	else if (Stem == TEXT("ExtraExplosion"))
+	else if (BuildIconKey == FName(TEXT("ExtraExplosion")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion.T_UI_Build_ExtraExplosion");
 	}
-	else if (Stem == TEXT("TwinSlash"))
+	else if (BuildIconKey == FName(TEXT("TwinSlash")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash");
 	}
-	else if (Stem == TEXT("ProjectileErase"))
+	else if (BuildIconKey == FName(TEXT("ProjectileErase")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileErase.T_UI_Build_ProjectileErase");
 	}
-	else if (Stem == TEXT("Radius"))
+	else if (BuildIconKey == FName(TEXT("Radius")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Radius.T_UI_Build_Radius");
 	}
-	else if (Stem == TEXT("Cooldown"))
+	else if (BuildIconKey == FName(TEXT("Cooldown")))
 	{
 		FallbackPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown.T_UI_Build_Cooldown");
 	}
@@ -784,85 +657,29 @@ UTexture2D* UCombatBuildHudWidget::LoadBuildIcon(const FBuildHistoryEntry& Entry
 	return LoadOptionalTexture(FallbackCacheKey, FallbackPath);
 }
 
-FText UCombatBuildHudWidget::GetBuildTitle(const FBuildHistoryEntry& Entry) const
+FName UCombatBuildHudWidget::ResolveBuildIconKey(const FBuildHistoryEntry& Entry) const
 {
-	if (Entry.RewardType == ERoguelikeRewardType::ChangeSkillForm)
-	{
-		return Entry.NewSkillForm == EPlayerSkillForm::TwoStageArc
-			? FText::FromString(TEXT("两段弧斩"))
-			: FText::FromString(TEXT("形态变化"));
-	}
-	if (Entry.RewardType == ERoguelikeRewardType::GainSkill)
-	{
-		return FText::FromString(TEXT("获得技能"));
-	}
-	if (Entry.RewardType == ERoguelikeRewardType::UpgradeSkill)
-	{
-		return FText::FromString(TEXT("技能升级"));
-	}
-
-	switch (Entry.ModifierID)
-	{
-	case ESkillModifierID::AddProjectile:
-		return FText::FromString(TEXT("投射物增幅"));
-	case ESkillModifierID::InkGrenade:
-		return FText::FromString(TEXT("墨雷形态"));
-	case ESkillModifierID::ExtraExplosion:
-		return FText::FromString(TEXT("余烬连爆"));
-	case ESkillModifierID::TwinSlash:
-		return FText::FromString(TEXT("双重环斩"));
-	case ESkillModifierID::NullRing:
-		return FText::FromString(TEXT("净墨环"));
-	case ESkillModifierID::RadiusUp:
-		return FText::FromString(TEXT("扩展环斩"));
-	case ESkillModifierID::CooldownDown:
-		return FText::FromString(TEXT("冷却缩减"));
-	case ESkillModifierID::ProjectileHoming:
-		return FText::FromString(TEXT("引墨"));
-	default:
-		return FText::FromString(TEXT("构筑"));
-	}
+	// Build history is value data; the stable enum identifiers are the only
+	// source for icon resolution. Display text is never parsed here.
+	return MakeBuildIconKey(Entry);
 }
 
-FText UCombatBuildHudWidget::GetBuildMeta(const FBuildHistoryEntry& Entry) const
+ECombatBuildIconPlaceholderKind UCombatBuildHudWidget::ResolvePlaceholderKind(FName BuildIconKey) const
 {
-	const FString SkillText = GetSkillLabel(Entry.SkillID).ToString();
-	if (Entry.RewardType == ERoguelikeRewardType::Modifier && Entry.ResultingStackCount > 0)
+	if (BuildIconKey == FName(TEXT("TwoStageArc")))
 	{
-		return FText::FromString(FString::Printf(TEXT("%s  x%d"), *SkillText, Entry.ResultingStackCount));
+		return ECombatBuildIconPlaceholderKind::TwoStageArc;
 	}
-	if (Entry.RewardType == ERoguelikeRewardType::ChangeSkillForm)
+	if (BuildIconKey == FName(TEXT("TwinSlash")))
 	{
-		return FText::FromString(FString::Printf(TEXT("%s  形态"), *SkillText));
+		return ECombatBuildIconPlaceholderKind::TwinSlash;
 	}
-	if (Entry.RewardType == ERoguelikeRewardType::UpgradeSkill)
+	if (BuildIconKey == FName(TEXT("Cooldown")))
 	{
-		return FText::FromString(FString::Printf(TEXT("%s  升级"), *SkillText));
+		return ECombatBuildIconPlaceholderKind::Cooldown;
 	}
-	return FText::FromString(SkillText);
-}
 
-FText UCombatBuildHudWidget::GetSkillLabel(EPlayerSkillID SkillID) const
-{
-	return SkillID == EPlayerSkillID::CircularSlash
-		? FText::FromString(TEXT("E"))
-		: FText::FromString(TEXT("Q"));
-}
-
-FText UCombatBuildHudWidget::GetBuildDetailLine(const FBuildHistoryEntry& Entry) const
-{
-	const FString SkillText = GetSkillLabel(Entry.SkillID).ToString();
-	const FString TitleText = GetBuildTitle(Entry).ToString();
-	if (Entry.RewardType == ERoguelikeRewardType::Modifier && Entry.ResultingStackCount > 0)
-	{
-		return FText::FromString(FString::Printf(
-			TEXT("%s：%s（本次 +%d，当前 x%d）"),
-			*SkillText,
-			*TitleText,
-			Entry.StackDelta,
-			Entry.ResultingStackCount));
-	}
-	return FText::FromString(FString::Printf(TEXT("%s：%s"), *SkillText, *TitleText));
+	return ECombatBuildIconPlaceholderKind::Generic;
 }
 
 bool UCombatBuildHudWidget::IsSameEntry(const FBuildHistoryEntry& A, const FBuildHistoryEntry& B) const
