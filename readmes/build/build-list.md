@@ -8,6 +8,8 @@
 >
 > 最近构筑衬托视觉修订提交：`bf73bf6`（圆形墨印与飞白层）
 >
+> 最近构筑背景分层修订提交：`68ade93`（蓝墨与飞白独立，背景层无黑色）
+>
 > 统计范围：`RoguelikeRewardManager::GenerateRewardOptions()` 当前奖励池中的技能构筑候选，不代表某个具体存档已经拥有的构筑。
 
 ## 统计结论
@@ -98,14 +100,15 @@
 | --- | --- | ---: | --- | --- |
 | HUD 纸张面板 | `T_UI_BuildHUD_Panel.png` / `.uasset` | `2048 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_Panel` | ✅ 已生成、已导入；横向撕纸/宣纸底，外部透明 |
 | B 键帽底图 | `T_UI_BuildHUD_KeyCap.png` / `.uasset` | `256 × 256` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_KeyCap` | ✅ 已生成、已导入；无 `B` 字符及其他文字 |
-| 最近构筑墨蓝衬托 | `T_UI_BuildHUD_RecentWash.png` / `.uasset` | `1024 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentWash` | ✅ 已修订并导入；圆形墨印轮廓，含墨蓝薄墨与飞白干笔，不含 Icon 和边框 |
+| 最近构筑墨蓝衬托 | `T_UI_BuildHUD_RecentWash.png` / `.uasset` | `1024 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentWash` | ✅ 已分离并导入；只含圆形墨蓝薄墨，不含黑色、飞白、Icon 和边框 |
+| 最近构筑飞白衬托 | `T_UI_BuildHUD_RecentFeibai.png` / `.uasset` | `1024 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentFeibai` | ✅ 已从验收图分离并导入；只含白/灰白飞白，不含黑色、墨蓝、Icon 和边框 |
 
-HUD 三项纹理均已核对为 RGBA、真实透明、`Texture Group=UI`、无 mip、sRGB 开启；没有把 Icon、槽位、键位文字或详细信息 HUD 烘焙进面板。最近构筑衬托按验收图修订为整体近圆形，并补充黑灰飞白与断笔层；图 3 按工单忽略。
+HUD 四项纹理均已核对为 RGBA、真实透明、`Texture Group=UI`、无 mip、sRGB 开启；没有把 Icon、槽位、键位文字或详细信息 HUD 烘焙进面板。最近构筑衬托现拆为独立的墨蓝层与飞白层；两个圆形衬托层均不提供黑色识别信息，icon 区域的黑色仅来自上层 build icon；图 3 按工单忽略。
 
 验收预览已保存到当前目录：
 
 - `build-icon-acceptance.png`：`TwoStageArc`、`TwinSlash`、`Cooldown` 三 Icon 黑白并排验收图。
-- `build-hud-component-acceptance.png`：面板、最近构筑大图标、上一构筑小图标、独立墨蓝衬托和键帽的组件合成图；其中 `B` 是仅用于预览的叠加字，不属于键帽或面板源图。
+- `build-hud-component-acceptance.png`：面板、最近构筑大图标、上一构筑小图标、独立飞白/墨蓝衬托和键帽的组件合成图；其中 `B` 是仅用于预览的叠加字，不属于键帽或面板源图。
 
 ## 不计入当前构筑列表的内容
 
