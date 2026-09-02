@@ -4,7 +4,7 @@
 >
 > 更新时间：2026-09-02
 >
-> 本次 HUD 美术交付提交：`d66a7a6bf0dd03dd4a3a0fe1a7b6c0e71a707aeb`
+> 本次 HUD 美术交付提交：`0c9959c`（完整提交号可由 Git 历史查看）
 >
 > 统计范围：`RoguelikeRewardManager::GenerateRewardOptions()` 当前奖励池中的技能构筑候选，不代表某个具体存档已经拥有的构筑。
 
