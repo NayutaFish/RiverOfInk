@@ -7,6 +7,7 @@
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Player/PlayerCharacter.h"
@@ -622,6 +623,20 @@ float USkillComponent::GetCircularSlashCooldown() const
 float USkillComponent::GetTwoStageArcStage2InputWindow() const
 {
 	return FMath::Clamp(TwoStageArcStage2InputWindow, 0.8f, 3.0f);
+}
+
+float USkillComponent::GetTwoStageArcVFXParticleSize() const
+{
+	const int32 RadiusUpIndex = FMath::Clamp(
+		GetModifierStack(EPlayerSkillID::CircularSlash, ESkillModifierID::RadiusUp),
+		0,
+		3);
+	if (TwoStageArcVFXParticleSizeByRadiusUp.IsValidIndex(RadiusUpIndex))
+	{
+		return FMath::Max(0.01f, TwoStageArcVFXParticleSizeByRadiusUp[RadiusUpIndex]);
+	}
+
+	return FMath::Max(0.01f, TwoStageArcVFXScale);
 }
 
 EPlayerSkillForm USkillComponent::GetSkillForm(EPlayerSkillID SkillID) const
@@ -1337,22 +1352,37 @@ void USkillComponent::SpawnTwoStageArcVFX(
 		+ Forward * TwoStageArcVFXForwardOffset
 		+ Right * TwoStageArcVFXRightOffset
 		+ FVector::UpVector * TwoStageArcVFXHeightOffset;
-	const float Scale = FMath::Max(0.01f, TwoStageArcVFXScale);
-	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+	const int32 RadiusUpIndex = FMath::Clamp(
+		GetModifierStack(EPlayerSkillID::CircularSlash, ESkillModifierID::RadiusUp),
+		0,
+		3);
+	const float ParticleSize = GetTwoStageArcVFXParticleSize();
+	UNiagaraComponent* VFXComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		SelectedVFX,
 		SpawnLocation,
 		SpawnRotation,
-		FVector(Scale));
+		FVector::OneVector,
+		true,
+		false);
+	if (VFXComponent)
+	{
+		// The Niagara assets expose User.Scale_All, which drives the particle
+		// size modules. Set it before activation so particle initialization sees
+		// the indexed value instead of the authored default.
+		VFXComponent->SetVariableFloat(TEXT("User.Scale_All"), ParticleSize);
+		VFXComponent->Activate(false);
+	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("TwoStageArc VFX spawned: Asset=%s Stage=%d Judgment=%d Twin=%s Mirror=%s Scale=%.2f Yaw=%.1f Pitch=%.1f Offset=(Forward=%.1f Right=%.1f Height=%.1f)."),
+		TEXT("TwoStageArc VFX spawned: Asset=%s Stage=%d Judgment=%d Twin=%s Mirror=%s RadiusUpIndex=%d ParticleSize=%.2f Yaw=%.1f Pitch=%.1f Offset=(Forward=%.1f Right=%.1f Height=%.1f)."),
 		*GetNameSafe(SelectedVFX),
 		StageIndex + 1,
 		JudgmentIndex + 1,
 		bHasTwinSlash ? TEXT("true") : TEXT("false"),
 		bMirrorVFX ? TEXT("true") : TEXT("false"),
-		Scale,
+		RadiusUpIndex,
+		ParticleSize,
 		SweepYaw,
 		GroundAngle,
 		TwoStageArcVFXForwardOffset,

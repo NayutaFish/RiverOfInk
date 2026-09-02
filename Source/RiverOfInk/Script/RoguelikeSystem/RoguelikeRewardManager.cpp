@@ -368,13 +368,43 @@ void ARoguelikeRewardManager::SelectReward(int32 OptionIndex)
 	}
 }
 
-bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdentifier)
+bool ARoguelikeRewardManager::RejectDuplicateSkillFormSelection(
+	const FRoguelikeRewardOption& Option,
+	const TCHAR* DebugCommandName) const
+{
+	if (Option.RewardType != ERoguelikeRewardType::ChangeSkillForm || !IsValid(CachedSkillComponent))
+	{
+		return false;
+	}
+
+	const EPlayerSkillForm CurrentForm = CachedSkillComponent->GetSkillForm(Option.SkillID);
+	if (CurrentForm != Option.TargetSkillForm)
+	{
+		return false;
+	}
+
+	UE_LOG(LogRoguelike, Warning,
+		TEXT("%s rejected duplicate form selection: Skill=%d Form=%d is already active. Reward HUD was not opened."),
+		DebugCommandName,
+		static_cast<int32>(Option.SkillID),
+		static_cast<int32>(Option.TargetSkillForm));
+	return true;
+}
+
+bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount)
 {
 	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
 	if (Identifier.IsEmpty())
 	{
 		UE_LOG(LogRoguelike, Warning,
 			TEXT("DebugShowSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
+		return false;
+	}
+	if (StackCount <= 0)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward requires a positive modifier stack count; received %d."),
+			StackCount);
 		return false;
 	}
 
@@ -392,6 +422,62 @@ bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdent
 		return false;
 	}
 
+	if (!ResolvePlayer())
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward failed: player or skill component is unavailable."));
+		return false;
+	}
+
+	FRoguelikeRewardOption DebugOption;
+	if (!TryBuildDebugRewardOption(Identifier, StackCount, DebugOption))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward rejected unknown identifier '%s'."),
+			*Identifier);
+		return false;
+	}
+
+	if (DebugOption.RewardType == ERoguelikeRewardType::ChangeSkillForm)
+	{
+		if (StackCount != 1)
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugShowSpecificReward form '%s' does not accept stackCount=%d; use 1. Reward HUD was not opened."),
+				*Identifier,
+				StackCount);
+			return false;
+		}
+
+		if (RejectDuplicateSkillFormSelection(DebugOption, TEXT("DebugShowSpecificReward")))
+		{
+			return false;
+		}
+
+		if (!CachedSkillComponent->CanApplySkillForm(DebugOption.SkillID, DebugOption.TargetSkillForm))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugShowSpecificReward rejected illegal skill form: Skill=%d Current=%d Target=%d. Reward HUD was not opened."),
+				static_cast<int32>(DebugOption.SkillID),
+				static_cast<int32>(CachedSkillComponent->GetSkillForm(DebugOption.SkillID)),
+				static_cast<int32>(DebugOption.TargetSkillForm));
+			return false;
+		}
+	}
+	else if (DebugOption.RewardType == ERoguelikeRewardType::Modifier
+		&& !CachedSkillComponent->CanApplyModifier(
+			DebugOption.SkillID,
+			DebugOption.ModifierID,
+			DebugOption.StackDelta))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugShowSpecificReward rejected illegal modifier: Skill=%d Modifier=%d StackDelta=%d."),
+			static_cast<int32>(DebugOption.SkillID),
+			static_cast<int32>(DebugOption.ModifierID),
+			DebugOption.StackDelta);
+		return false;
+	}
+
 	// The production flow deliberately allows one reward UI per room. This
 	// debug-only entry point is used repeatedly in TestMap_1, so reopen the
 	// test card after a previous selection has closed the widget. Do not reset
@@ -403,42 +489,13 @@ bool ARoguelikeRewardManager::DebugShowSpecificReward(const FString& RewardIdent
 		bRewardShownForRoom = false;
 	}
 
-	if (!ResolvePlayer())
-	{
-		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugShowSpecificReward failed: player or skill component is unavailable."));
-		return false;
-	}
-
-	FRoguelikeRewardOption DebugOption;
-	if (!TryBuildDebugRewardOption(Identifier, DebugOption))
-	{
-		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugShowSpecificReward rejected unknown identifier '%s'."),
-			*Identifier);
-		return false;
-	}
-
-	if (DebugOption.RewardType == ERoguelikeRewardType::Modifier
-		&& !CachedSkillComponent->CanApplyModifier(
-			DebugOption.SkillID,
-			DebugOption.ModifierID,
-			DebugOption.StackDelta))
-	{
-		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugShowSpecificReward rejected illegal modifier: Skill=%d Modifier=%d."),
-			static_cast<int32>(DebugOption.SkillID),
-			static_cast<int32>(DebugOption.ModifierID));
-		return false;
-	}
-
 	DebugRewardOverrideOptions.Reset();
 	DebugRewardOverrideOptions.Add(MoveTemp(DebugOption));
 	ShowRewardAfterRoomClear();
 	return bRewardShownForRoom && IsValid(ActiveRewardWidget);
 }
 
-bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIdentifier)
+bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIdentifier, int32 StackCount)
 {
 	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
 	if (Identifier.IsEmpty())
@@ -447,13 +504,11 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 			TEXT("DebugSelectSpecificReward requires an identifier, e.g. ProjectileHoming or 引墨."));
 		return false;
 	}
-
-	FRoguelikeRewardOption RequestedOption;
-	if (!TryBuildDebugRewardOption(Identifier, RequestedOption))
+	if (StackCount <= 0)
 	{
 		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugSelectSpecificReward rejected unknown identifier '%s'."),
-			*Identifier);
+			TEXT("DebugSelectSpecificReward requires a positive modifier stack count; received %d."),
+			StackCount);
 		return false;
 	}
 
@@ -464,16 +519,52 @@ bool ARoguelikeRewardManager::DebugSelectSpecificReward(const FString& RewardIde
 		return false;
 	}
 
-	if (RequestedOption.RewardType == ERoguelikeRewardType::Modifier
+	FRoguelikeRewardOption RequestedOption;
+	if (!TryBuildDebugRewardOption(Identifier, StackCount, RequestedOption))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugSelectSpecificReward rejected unknown identifier '%s'."),
+			*Identifier);
+		return false;
+	}
+
+	if (RequestedOption.RewardType == ERoguelikeRewardType::ChangeSkillForm)
+	{
+		if (StackCount != 1)
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugSelectSpecificReward form '%s' does not accept stackCount=%d; use 1. Reward HUD was not opened."),
+				*Identifier,
+				StackCount);
+			return false;
+		}
+
+		if (RejectDuplicateSkillFormSelection(RequestedOption, TEXT("DebugSelectSpecificReward")))
+		{
+			return false;
+		}
+
+		if (!CachedSkillComponent->CanApplySkillForm(RequestedOption.SkillID, RequestedOption.TargetSkillForm))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("DebugSelectSpecificReward rejected illegal skill form: Skill=%d Current=%d Target=%d. Reward HUD was not opened."),
+				static_cast<int32>(RequestedOption.SkillID),
+				static_cast<int32>(CachedSkillComponent->GetSkillForm(RequestedOption.SkillID)),
+				static_cast<int32>(RequestedOption.TargetSkillForm));
+			return false;
+		}
+	}
+	else if (RequestedOption.RewardType == ERoguelikeRewardType::Modifier
 		&& !CachedSkillComponent->CanApplyModifier(
 			RequestedOption.SkillID,
 			RequestedOption.ModifierID,
 			RequestedOption.StackDelta))
 	{
 		UE_LOG(LogRoguelike, Warning,
-			TEXT("DebugSelectSpecificReward rejected illegal modifier: Skill=%d Modifier=%d."),
+			TEXT("DebugSelectSpecificReward rejected illegal modifier: Skill=%d Modifier=%d StackDelta=%d."),
 			static_cast<int32>(RequestedOption.SkillID),
-			static_cast<int32>(RequestedOption.ModifierID));
+			static_cast<int32>(RequestedOption.ModifierID),
+			RequestedOption.StackDelta);
 		return false;
 	}
 
@@ -630,6 +721,16 @@ bool ARoguelikeRewardManager::ApplyReward(const FRoguelikeRewardOption& Reward)
 	}
 	case ERoguelikeRewardType::ChangeSkillForm:
 	{
+		if (!CachedSkillComponent->CanApplySkillForm(Reward.SkillID, Reward.TargetSkillForm))
+		{
+			UE_LOG(LogRoguelike, Warning,
+				TEXT("Skill form reward rejected: Skill=%d Current=%d Target=%d (already active or invalid)."),
+				static_cast<int32>(Reward.SkillID),
+				static_cast<int32>(CachedSkillComponent->GetSkillForm(Reward.SkillID)),
+				static_cast<int32>(Reward.TargetSkillForm));
+			return false;
+		}
+
 		if (!CachedSkillComponent->ApplySkillForm(Reward.SkillID, Reward.TargetSkillForm))
 		{
 			return false;
@@ -796,6 +897,7 @@ FRoguelikeRewardOption ARoguelikeRewardManager::MakeModifierOption(
 
 bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 	const FString& RewardIdentifier,
+	int32 StackDelta,
 	FRoguelikeRewardOption& OutOption) const
 {
 	const FString Identifier = RewardIdentifier.TrimStartAndEnd();
@@ -816,7 +918,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::TripleProjectile,
 			ESkillModifierID::ProjectileHoming,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("引墨")),
 			FText::FromString(TEXT("右键命中的目标获得标记，Q 三枚弹幕在飞行中修正方向追踪该目标。")));
 		return true;
@@ -827,7 +929,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::TripleProjectile,
 			ESkillModifierID::AddProjectile,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("投射物增幅")),
 			FText::FromString(TEXT("Q 增加一枚投射物，墨雷形态同样生效。")));
 		return true;
@@ -838,7 +940,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::TripleProjectile,
 			ESkillModifierID::InkGrenade,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("墨雷形态")),
 			FText::FromString(TEXT("Q 投射物变为延迟爆炸的墨雷。")));
 		return true;
@@ -849,7 +951,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::TripleProjectile,
 			ESkillModifierID::ExtraExplosion,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("余烬连爆")),
 			FText::FromString(TEXT("每枚 Q 墨雷在原地追加一次爆炸。")));
 		return true;
@@ -860,7 +962,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::TripleProjectile,
 			ESkillModifierID::CooldownDown,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("疾速回转")),
 			FText::FromString(TEXT("Q 冷却时间缩短 0.5 秒。")));
 		return true;
@@ -871,7 +973,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::CircularSlash,
 			ESkillModifierID::TwinSlash,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("双重环斩")),
 			FText::FromString(TEXT("E 每段增加一次独立伤害判定；每段攻击伤害倍率降为 65%，两段形态同样生效。")));
 		return true;
@@ -894,7 +996,7 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::CircularSlash,
 			ESkillModifierID::NullRing,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("净墨环")),
 			FText::FromString(TEXT("E 斩击区域会抹除其中的敌方投射物。")));
 		return true;
@@ -905,18 +1007,18 @@ bool ARoguelikeRewardManager::TryBuildDebugRewardOption(
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::CircularSlash,
 			ESkillModifierID::RadiusUp,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("扩展环斩")),
 			FText::FromString(TEXT("E 斩击半径增加 60。")));
 		return true;
 	}
 
-	if (Matches({TEXT("E.CooldownDown"), TEXT("ECooldownDown"), TEXT("回锋")}))
+	if (Matches({TEXT("E.CooldownDown"), TEXT("ECooldownDown"), TEXT("CooldownDown"), TEXT("E.Cooldown"), TEXT("ECooldown"), TEXT("Cooldown"), TEXT("回锋")}))
 	{
 		OutOption = MakeModifierOption(
 			EPlayerSkillID::CircularSlash,
 			ESkillModifierID::CooldownDown,
-			1,
+			StackDelta,
 			FText::FromString(TEXT("回锋")),
 			FText::FromString(TEXT("E 冷却时间缩短 0.4 秒。")));
 		return true;
