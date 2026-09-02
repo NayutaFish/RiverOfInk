@@ -243,13 +243,21 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 	BackgroundOverlay = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardBackgroundOverlay"));
 	if (DefaultTexture)
 	{
-		BackgroundOverlay->SetBrushFromTexture(DefaultTexture, true);
+		// Do not preserve the texture's native size. The overlay is a screen-space
+		// wash and must be arranged by its parent slot instead of becoming a small
+		// dark rectangle at the viewport origin.
+		BackgroundOverlay->SetBrushFromTexture(DefaultTexture, false);
 	}
 	// Keep the gameplay world visible behind the floating ink choices. This is
 	// deliberately a low-opacity wash, not a card or a full-screen black panel.
 	BackgroundOverlay->SetColorAndOpacity(FLinearColor(0.08f, 0.07f, 0.055f, 0.22f));
 	BackgroundOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
-	RootOverlay->AddChildToOverlay(BackgroundOverlay);
+	if (UOverlaySlot* BackgroundSlot = RootOverlay->AddChildToOverlay(BackgroundOverlay))
+	{
+		BackgroundSlot->SetHorizontalAlignment(HAlign_Fill);
+		BackgroundSlot->SetVerticalAlignment(VAlign_Fill);
+		BackgroundSlot->SetPadding(FMargin(0.0f));
+	}
 
 	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));
 	TitleText->SetText(FText::FromString(TEXT("选择奖励")));
