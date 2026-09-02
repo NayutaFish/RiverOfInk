@@ -6,6 +6,8 @@
 >
 > 本次 HUD 美术交付提交：`0c9959c`（完整提交号可由 Git 历史查看）
 >
+> 最近构筑衬托视觉修订提交：`bf73bf6`（圆形墨印与飞白层）
+>
 > 统计范围：`RoguelikeRewardManager::GenerateRewardOptions()` 当前奖励池中的技能构筑候选，不代表某个具体存档已经拥有的构筑。
 
 ## 统计结论
@@ -96,9 +98,9 @@
 | --- | --- | ---: | --- | --- |
 | HUD 纸张面板 | `T_UI_BuildHUD_Panel.png` / `.uasset` | `2048 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_Panel` | ✅ 已生成、已导入；横向撕纸/宣纸底，外部透明 |
 | B 键帽底图 | `T_UI_BuildHUD_KeyCap.png` / `.uasset` | `256 × 256` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_KeyCap` | ✅ 已生成、已导入；无 `B` 字符及其他文字 |
-| 最近构筑墨蓝衬托 | `T_UI_BuildHUD_RecentWash.png` / `.uasset` | `1024 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentWash` | ✅ 已生成、已导入；独立透明层，不含 Icon 和边框 |
+| 最近构筑墨蓝衬托 | `T_UI_BuildHUD_RecentWash.png` / `.uasset` | `1024 × 1024` | `/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentWash` | ✅ 已修订并导入；圆形墨印轮廓，含墨蓝薄墨与飞白干笔，不含 Icon 和边框 |
 
-HUD 三项纹理均已核对为 RGBA、真实透明、`Texture Group=UI`、无 mip、sRGB 开启；没有把 Icon、槽位、键位文字或详细信息 HUD 烘焙进面板。图 3 按工单忽略。
+HUD 三项纹理均已核对为 RGBA、真实透明、`Texture Group=UI`、无 mip、sRGB 开启；没有把 Icon、槽位、键位文字或详细信息 HUD 烘焙进面板。最近构筑衬托按验收图修订为整体近圆形，并补充黑灰飞白与断笔层；图 3 按工单忽略。
 
 验收预览已保存到当前目录：
 
