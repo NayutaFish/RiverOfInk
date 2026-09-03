@@ -3,7 +3,9 @@
 > 当前实施分支：`codex/combat-build-hud`
 >
 > 适用范围：战斗中常驻的最近/上一构筑显示。
-> 不包含：按 B 打开的详细构筑信息 HUD、暂停逻辑、UI Only 输入模式和详细说明文案。
+> 当前设备继续负责本分支常驻 HUD 的调整、修复和验收。
+> 详细构筑信息 HUD 由另一台设备上的 Codex 独立实施。
+> 本分支不包含：按 B 打开的详细构筑信息 HUD、暂停逻辑、UI Only 输入模式和详细说明文案。
 
 ## 1. 组件职责
 
@@ -155,9 +157,11 @@ Icon 的稳定键由构筑枚举数据解析，不读取展示文本。解析优
 
 只调整整体位置时，优先修改 `MyCombatBuildHudWidget` 的 `ViewportMargin`。如果要改变内部槽位比例、背景层尺寸、Icon 间距或 B 键提示位置，目前需要修改 C++；仅在 Blueprint Designer 中拖动根 Canvas 不会暴露这些运行时子控件。
 
-## 7. 当前未实现的详细信息 HUD 边界
+## 7. 详细构筑信息 HUD：独立交给另一 Codex 实施
 
-`ToggleBuildDetails()` 目前只是 B 键兼容入口，并记录延后日志。以下内容明确留给独立的详细构筑信息 HUD：
+详细构筑信息 HUD 不属于本分支的实施范围，后续由另一台设备上的 Codex 独立设计、实现和验收；当前设备继续负责本分支常驻 HUD 的调整、修复和验收。当前 `ToggleBuildDetails()` 只是 B 键兼容入口，并记录延后日志；它是预留的对接位置，不代表详细 HUD 已经存在。
+
+另一 Codex 负责的内容包括：
 
 - 按 B 弹出独立详细信息面板；
 - 暂停游戏；
@@ -165,7 +169,13 @@ Icon 的稳定键由构筑枚举数据解析，不读取展示文本。解析优
 - 展示完整构筑分类、说明、等级和数值；
 - 关闭面板并恢复游戏输入。
 
-后续实现详细信息 HUD 时，不要把暂停、详细文案或大面板直接塞进 `UCombatBuildHudWidget`，应保持常驻 HUD 与详细 HUD 两个独立组件。
+实施边界约定：
+
+- 详细 HUD 应使用独立的 Widget 类和蓝图资产，不把暂停、详细文案或大面板直接塞进 `UCombatBuildHudWidget`；
+- 详细 HUD 可读取 `USkillComponent` 的构筑历史快照，但不应改写常驻 HUD 的两个可见槽位；
+- B 键入口、暂停和输入模式由详细 HUD 的实现负责，完成后再与 `APlayerCharacter` 的现有入口对接；
+- 常驻 HUD 的 `IsBuildDetailsOpen()` 当前固定返回 `false`，详细 HUD 不应把它当作已完成的状态同步接口；
+- 两个 HUD 独立验收后，再进行最小化对接，避免详细 HUD 的失败影响战斗中常驻构筑显示。
 
 ## 8. PIE 验证方式
 
@@ -183,7 +193,9 @@ Icon 的稳定键由构筑枚举数据解析，不读取展示文本。解析优
 4. 确认飞白、墨蓝背景层位于最近 Icon 后方；
 5. 确认新构筑出现时主条目有一次反馈动画；
 6. 确认没有构筑历史时 HUD 隐藏；
-7. 确认 B 键仅产生兼容日志，不误弹出详细信息 HUD。
+7. 在本分支基线下，确认 B 键仅产生兼容日志，不误弹出尚未交付的详细信息 HUD。
+
+> 本节是 `codex/combat-build-hud` 的常驻 HUD 基线验收，不代表另一 Codex 完成详细 HUD 后的最终 B 键验收结果。
 
 重点日志包括：
 
@@ -195,12 +207,15 @@ Icon 的稳定键由构筑枚举数据解析，不读取展示文本。解析优
 
 如出现 `Combat build HUD asset unavailable`，先检查 UE 对象路径、同名 `.uasset` 是否存在，以及资源是否已被编辑器完成导入。
 
-## 9. 跨设备交接约定
+## 9. 跨设备、跨 Codex 交接约定
 
-- 继续开发前先切换到远程 `codex/combat-build-hud` 分支；
+- 当前设备继续在 `codex/combat-build-hud` 上维护常驻 HUD；
+- 另一 Codex 实施详细 HUD 前，先从远程 `codex/combat-build-hud` 获取本分支的最新状态；
+- 详细 HUD 应在独立分支和独立组件中开发，完成后再提交对接变更；
 - 调整常驻 HUD 时优先修改 `MyCombatBuildHudWidget` 的外层布局属性；
-- 不要把详细构筑信息 HUD 的实现混入本组件；
+- 不要把详细构筑信息 HUD 的实现混入本组件或本分支的常驻显示层；
 - 不要通过旧 Redirector `PlayerCharacter.uasset` 修改玩家蓝图；
 - 新增构筑 Icon 时沿用稳定构筑键和 `_Redrawn` 资源命名；
 - 修改 C++ 后按项目约定关闭 UE Editor/Live Coding，再使用项目指定的 `Build.bat` 构建；
+- 常驻 HUD 与详细 HUD 分别完成 PIE 验收后，再进行最终集成验收；
 - PIE 验收后保留当前编辑器状态，不执行关机操作。
