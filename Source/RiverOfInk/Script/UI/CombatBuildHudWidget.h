@@ -58,6 +58,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	TObjectPtr<UTexture2D> PanelTexture;
 
+	/** Optional recent-build background layers; path fallbacks load the final art assets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Recent Build")
+	TObjectPtr<UTexture2D> RecentFeibaiTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Recent Build")
+	TObjectPtr<UTexture2D> RecentWashTexture;
+
+	/** Optional B keycap art; a native border fallback is used when absent. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	TObjectPtr<UTexture2D> KeyCapTexture;
+
 	/**
 	 * Optional imported/configured icon overrides keyed by the stable build key
 	 * (for example TwoStageArc, TwinSlash, or Cooldown). This is the first
@@ -81,6 +92,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor PreviousFallbackColor = FLinearColor::Transparent;
 
+	/** Positive right/bottom safe margins for the compact HUD viewport slot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Layout")
+	FMargin ViewportMargin = FMargin(0.0f, 0.0f, 150.0f, 300.0f);
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -88,6 +103,7 @@ protected:
 
 private:
 	void BuildDefaultWidgetTree();
+	void RefreshRecentBackgroundLayers();
 	void ApplyViewportLayout();
 	void BindSkillEvents();
 	void UnbindSkillEvents();
@@ -133,6 +149,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> RecentSlotRoot;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> RecentFeibaiImage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> RecentWashImage;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> RecentIconImage;

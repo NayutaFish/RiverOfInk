@@ -14,6 +14,7 @@
 #include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/Texture2D.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/SkillComponent.h"
@@ -22,9 +23,13 @@
 namespace
 {
 	static const TCHAR* BuildHudPanelPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_Panel.T_UI_BuildHUD_Panel");
+	static const TCHAR* BuildHudRecentFeibaiPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentFeibai.T_UI_BuildHUD_RecentFeibai");
+	static const TCHAR* BuildHudRecentWashPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_RecentWash.T_UI_BuildHUD_RecentWash");
+	static const TCHAR* BuildHudKeyCapPath = TEXT("/Game/RawContent/UI/BuildHUD/T_UI_BuildHUD_KeyCap.T_UI_BuildHUD_KeyCap");
 
 	constexpr float LatestFeedbackDuration = 0.22f;
 	constexpr float LatestFeedbackStartScale = 0.78f;
+	constexpr float RecentBackgroundSize = 178.0f;
 
 	FName MakeBuildIconKey(const FBuildHistoryEntry& Entry)
 	{
@@ -138,6 +143,7 @@ void UCombatBuildHudWidget::SetDetailsKeyLabel(const FText& InKeyLabel)
 void UCombatBuildHudWidget::RefreshBuildHistory()
 {
 	BuildDefaultWidgetTree();
+	RefreshRecentBackgroundLayers();
 	if (!IsValid(ObservedSkillComponent))
 	{
 		if (RootSizeBox)
@@ -194,6 +200,43 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 		Previous ? TEXT("true") : TEXT("false"));
 }
 
+void UCombatBuildHudWidget::RefreshRecentBackgroundLayers()
+{
+	// Retry asset resolution after the widget tree exists. This covers the
+	// editor/import order where the first RebuildWidget happens before the
+	// BuildHUD package is mounted, and re-applies the explicit brush sizing.
+	if (!RecentFeibaiTexture)
+	{
+		RecentFeibaiTexture = LoadOptionalTexture(FName(TEXT("RecentFeibai")), BuildHudRecentFeibaiPath);
+	}
+	if (!RecentWashTexture)
+	{
+		RecentWashTexture = LoadOptionalTexture(FName(TEXT("RecentWash")), BuildHudRecentWashPath);
+	}
+
+	if (RecentFeibaiImage)
+	{
+		RecentFeibaiImage->SetVisibility(RecentFeibaiTexture
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Collapsed);
+		if (RecentFeibaiTexture)
+		{
+			RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, true);
+		}
+	}
+
+	if (RecentWashImage)
+	{
+		RecentWashImage->SetVisibility(RecentWashTexture
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Collapsed);
+		if (RecentWashTexture)
+		{
+			RecentWashImage->SetBrushFromTexture(RecentWashTexture, true);
+		}
+	}
+}
+
 void UCombatBuildHudWidget::ToggleBuildDetails()
 {
 	if (!IsValid(ObservedSkillComponent) || ObservedSkillComponent->GetBuildHistory().IsEmpty())
@@ -211,13 +254,38 @@ void UCombatBuildHudWidget::ToggleBuildDetails()
 
 void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 {
-	if (!WidgetTree || WidgetTree->RootWidget)
+	if (!WidgetTree)
 	{
 		return;
 	}
 
-	RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("CombatBuildHudCanvas"));
-	WidgetTree->RootWidget = RootCanvas;
+	// A Blueprint subclass may provide the root CanvasPanel so its viewport
+	// layout is editable in UMG. The native class still owns the child tree and
+	// keeps the C++ fallback path for the class-only test build.
+	if (!RootCanvas)
+	{
+		RootCanvas = Cast<UCanvasPanel>(WidgetTree->RootWidget);
+		if (!RootCanvas)
+		{
+			if (WidgetTree->RootWidget)
+			{
+				UE_LOG(LogSkill, Warning,
+					TEXT("Combat build HUD Blueprint root must be a CanvasPanel; using no native child tree."));
+				return;
+			}
+
+			RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(
+				UCanvasPanel::StaticClass(),
+				TEXT("CombatBuildHudCanvas"));
+			WidgetTree->RootWidget = RootCanvas;
+		}
+	}
+
+	if (RootSizeBox)
+	{
+		return;
+	}
+
 	RootCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CombatBuildHudSize"));
@@ -252,7 +320,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 	if (PanelTexture)
 	{
-		PanelImage->SetBrushFromTexture(PanelTexture, true);
+		PanelImage->SetBrushFromTexture(PanelTexture, false);
 		PanelBorder->SetBrushColor(FLinearColor::Transparent);
 		PanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
@@ -299,6 +367,55 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 		RecentFallbackSlot->SetHorizontalAlignment(HAlign_Fill);
 		RecentFallbackSlot->SetVerticalAlignment(VAlign_Fill);
 		RecentFallbackSlot->SetPadding(FMargin(8.0f));
+	}
+
+	// Load these through the retryable optional-texture path. The widget can
+	// be rebuilt before the editor has mounted the newly imported UI package;
+	// keeping a null result out of the cache lets the next refresh resolve it.
+	if (!RecentFeibaiTexture)
+	{
+		RecentFeibaiTexture = LoadOptionalTexture(FName(TEXT("RecentFeibai")), BuildHudRecentFeibaiPath);
+	}
+	if (!RecentWashTexture)
+	{
+		RecentWashTexture = LoadOptionalTexture(FName(TEXT("RecentWash")), BuildHudRecentWashPath);
+	}
+
+	RecentFeibaiImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildFeibai"));
+	RecentFeibaiImage->SetColorAndOpacity(FLinearColor::White);
+	// Match the imported 1024 square first, then constrain the draw footprint
+	// with an outer SizeBox. This avoids a zero desired-size brush when the
+	// image is inside an Overlay and ScaleBox.
+	RecentFeibaiImage->SetVisibility(RecentFeibaiTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (RecentFeibaiTexture)
+	{
+		RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, true);
+	}
+	USizeBox* RecentFeibaiSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildFeibaiSize"));
+	RecentFeibaiSize->SetWidthOverride(RecentBackgroundSize);
+	RecentFeibaiSize->SetHeightOverride(RecentBackgroundSize);
+	RecentFeibaiSize->SetContent(RecentFeibaiImage);
+	if (UOverlaySlot* RecentFeibaiSlot = RecentSlotRoot->AddChildToOverlay(RecentFeibaiSize))
+	{
+		RecentFeibaiSlot->SetHorizontalAlignment(HAlign_Center);
+		RecentFeibaiSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	RecentWashImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildWash"));
+	RecentWashImage->SetColorAndOpacity(FLinearColor::White);
+	RecentWashImage->SetVisibility(RecentWashTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (RecentWashTexture)
+	{
+		RecentWashImage->SetBrushFromTexture(RecentWashTexture, true);
+	}
+	USizeBox* RecentWashSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildWashSize"));
+	RecentWashSize->SetWidthOverride(RecentBackgroundSize);
+	RecentWashSize->SetHeightOverride(RecentBackgroundSize);
+	RecentWashSize->SetContent(RecentWashImage);
+	if (UOverlaySlot* RecentWashSlot = RecentSlotRoot->AddChildToOverlay(RecentWashSize))
+	{
+		RecentWashSlot->SetHorizontalAlignment(HAlign_Center);
+		RecentWashSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
 	RecentIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildIcon"));
@@ -388,7 +505,19 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	DetailsKeyCapBox->SetWidthOverride(36.0f);
 	DetailsKeyCapBox->SetHeightOverride(36.0f);
 	DetailsKeyCapBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("BuildDetailsKeyCap"));
-	DetailsKeyCapBorder->SetBrushColor(FLinearColor(0.08f, 0.075f, 0.065f, 0.88f));
+	if (!KeyCapTexture)
+	{
+		KeyCapTexture = LoadObject<UTexture2D>(nullptr, BuildHudKeyCapPath);
+	}
+	if (KeyCapTexture)
+	{
+		DetailsKeyCapBorder->SetBrushFromTexture(KeyCapTexture);
+		DetailsKeyCapBorder->SetBrushColor(FLinearColor::White);
+	}
+	else
+	{
+		DetailsKeyCapBorder->SetBrushColor(FLinearColor(0.08f, 0.075f, 0.065f, 0.88f));
+	}
 	DetailsKeyCapBorder->SetPadding(FMargin(2.0f));
 	DetailsKeyCapBox->SetContent(DetailsKeyCapBorder);
 	DetailsKeyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BuildDetailsKeyText"));
@@ -405,18 +534,24 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 
 void UCombatBuildHudWidget::ApplyViewportLayout()
 {
-	// AddToViewport fills the widget by default. Give the widget an explicit
-	// desired size and place that size as a single bottom-right viewport slot;
-	// this remains correct when the editor embeds PIE in a non-fullscreen pane.
+	// AddToViewport uses a viewport slot whose anchor/offset behavior differs
+	// between standalone PIE and the editor-embedded host. Resolve one explicit
+	// pixel position from the active game viewport so the compact panel cannot
+	// be placed outside the visible area by a stale anchor combination.
+	FVector2D ViewportSize(PanelWidth, PanelHeight);
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	}
+
+	const FVector2D ViewportPosition(
+		FMath::Max(0.0f, ViewportSize.X - PanelWidth - ViewportMargin.Right),
+		FMath::Max(0.0f, ViewportSize.Y - PanelHeight - ViewportMargin.Bottom));
+
 	SetDesiredSizeInViewport(FVector2D(PanelWidth, PanelHeight));
-	// The editor-embedded PIE host includes the surrounding editor chrome in
-	// its viewport slot. Keep the compact panel inside the visible game pane.
-	SetPositionInViewport(FVector2D(-150.0f, -300.0f));
-	SetAlignmentInViewport(FVector2D(1.0f, 1.0f));
-	// SetPositionInViewport intentionally resets the viewport anchors to the
-	// origin in UE. Apply the bottom-right anchor last so the explicit offset
-	// and size remain a single, correctly anchored viewport slot.
-	SetAnchorsInViewport(FAnchors(1.0f, 1.0f));
+	SetAlignmentInViewport(FVector2D::ZeroVector);
+	SetAnchorsInViewport(FAnchors(0.0f, 0.0f));
+	SetPositionInViewport(ViewportPosition);
 }
 
 void UCombatBuildHudWidget::BindSkillEvents()

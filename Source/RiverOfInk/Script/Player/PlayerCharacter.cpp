@@ -63,6 +63,12 @@ APlayerCharacter::APlayerCharacter()
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
 	CombatBuildHudWidgetClass = UCombatBuildHudWidget::StaticClass();
+	static ConstructorHelpers::FClassFinder<UCombatBuildHudWidget> CombatBuildHudBlueprint(
+		TEXT("/Game/Blueprint/GamePlay/MyCombatBuildHudWidget"));
+	if (CombatBuildHudBlueprint.Succeeded())
+	{
+		CombatBuildHudWidgetClass = CombatBuildHudBlueprint.Class;
+	}
 	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(
 		TEXT("/Game/Blueprint/GameSystem/UI/Skill/WBP_SkillHUD"));
 	if (SkillWidgetBlueprint.Succeeded())

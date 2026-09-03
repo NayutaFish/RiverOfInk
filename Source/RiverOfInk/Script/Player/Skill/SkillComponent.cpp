@@ -476,7 +476,9 @@ void USkillComponent::RecordBuildAcquisition(const FRoguelikeRewardOption& Rewar
 	}
 
 	UE_LOG(LogSkill, Log,
-		TEXT("Build history appended: Type=%s Skill=%s Modifier=%s Delta=%d Total=%d History=%d."),
+		TEXT("Build history appended: Component=%s Owner=%s Type=%s Skill=%s Modifier=%s Delta=%d Total=%d History=%d."),
+		*GetNameSafe(this),
+		*GetNameSafe(GetOwner()),
 		*UEnum::GetValueAsString(Entry.RewardType),
 		*UEnum::GetValueAsString(Entry.SkillID),
 		*UEnum::GetValueAsString(Entry.ModifierID),
