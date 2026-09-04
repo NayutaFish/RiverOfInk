@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -40,4 +40,8 @@ private:
 
 	float LastInputTime = 0.0f;
 	float LastShiftTime = 0.0f;
+
+	/** 当前移动输入轴值，每帧在 Update 中统一应用，保证移动平滑。 */
+	float CurrentMoveX = 0.0f;
+	float CurrentMoveY = 0.0f;
 };

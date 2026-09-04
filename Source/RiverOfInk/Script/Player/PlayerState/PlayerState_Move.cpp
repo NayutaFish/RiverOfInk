@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "RiverOfInk.h"
@@ -26,6 +26,8 @@ void UPlayerState_Move::OnEnter_Implementation()
 
 	LastInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	LastShiftTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	CurrentMoveX = 0.0f;
+	CurrentMoveY = 0.0f;
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
@@ -87,11 +89,24 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
-	// 疾跑已取消：始终使用 WalkSpeed（默认即原疾跑速度 900）
-	float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(Player->WalkSpeed);
 
+	// 每帧根据当前输入轴值合成移动方向，保证持续、平滑地移动。
+	const FVector XDir = (FVector::RightVector - FVector::ForwardVector).GetSafeNormal();
+	const FVector YDir = (FVector::ForwardVector + FVector::RightVector).GetSafeNormal();
+	FVector InputVector = XDir * CurrentMoveX + YDir * CurrentMoveY;
+
+	if (!InputVector.IsNearlyZero())
+	{
+		if (InputVector.SizeSquared() > 1.0f)
+		{
+			InputVector = InputVector.GetSafeNormal();
+		}
+		Player->AddMovementInput(InputVector, 1.0f);
+	}
+
 	// 无输入一段时间后切回 Idle
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	if ((Now - LastInputTime) > 0.15f)
 	{
 		Player->SwitchState(UPlayerState_Idle::StaticClass());
@@ -100,32 +115,22 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 
 void UPlayerState_Move::OnMoveX(float Value)
 {
-	if (FMath::IsNearlyZero(Value)) return;
+	CurrentMoveX = Value;
 
-	LastInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-
-	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
-
-	const FVector Dir = (FVector::RightVector - FVector::ForwardVector).GetSafeNormal();
-	Player->AddMovementInput(Dir, Value);
-
-	FString DirText = Value > 0.0f ? TEXT("→ D") : TEXT("← A");
+	if (!FMath::IsNearlyZero(Value))
+	{
+		LastInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	}
 }
 
 void UPlayerState_Move::OnMoveY(float Value)
 {
-	if (FMath::IsNearlyZero(Value)) return;
+	CurrentMoveY = Value;
 
-	LastInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-
-	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (!Player) return;
-
-	const FVector Dir = (FVector::ForwardVector + FVector::RightVector).GetSafeNormal();
-	Player->AddMovementInput(Dir, Value);
-
-	FString DirText = Value > 0.0f ? TEXT("↑ W") : TEXT("↓ S");
+	if (!FMath::IsNearlyZero(Value))
+	{
+		LastInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	}
 }
 
 void UPlayerState_Move::OnQ()

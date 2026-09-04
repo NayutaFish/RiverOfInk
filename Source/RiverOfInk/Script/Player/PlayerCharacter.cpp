@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
@@ -50,6 +50,12 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->bUseControllerDesiredRotation = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+	// 移动手感优化：更快的响应与更平滑的转向/启停。
+	GetCharacterMovement()->MaxAcceleration = 3072.0f;
+	GetCharacterMovement()->BrakingDecelerationWalking = 3072.0f;
+	GetCharacterMovement()->GroundFriction = 8.0f;
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 1080.0f, 0.0f);
 
 	GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
 	GetCapsuleComponent()->SetCollisionObjectType(ECC_GameTraceChannel3);
