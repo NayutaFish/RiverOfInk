@@ -77,6 +77,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Build Icons")
 	TMap<FName, TObjectPtr<UTexture2D>> ConfiguredBuildIcons;
 
+	/** Logical pixel size of the newest build icon inside the recent slot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Build Icons", meta = (ClampMin = "16.0", ClampMax = "148.0", UIMin = "32.0", UIMax = "120.0"))
+	float RecentIconSize = 85.0f;
+
+	/** Logical pixel size of the previous build icon inside the secondary slot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Build Icons", meta = (ClampMin = "16.0", ClampMax = "104.0", UIMin = "24.0", UIMax = "96.0"))
+	float PreviousIconSize = 68.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "360.0", ClampMax = "720.0"))
 	float PanelWidth = 500.0f;
 
@@ -93,8 +101,8 @@ public:
 	FLinearColor PreviousFallbackColor = FLinearColor::Transparent;
 
 	/** Positive right/bottom safe margins for the compact HUD viewport slot. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Layout")
-	FMargin ViewportMargin = FMargin(0.0f, 0.0f, 150.0f, 300.0f);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Layout", meta = (ClampMin = "0.0", ClampMax = "32.0"))
+	FMargin ViewportMargin = FMargin(0.0f, 0.0f, 20.0f, 20.0f);
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -155,6 +163,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> RecentWashImage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> PreviousFeibaiImage;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> RecentIconImage;

@@ -14,7 +14,6 @@
 #include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
-#include "Engine/GameViewportClient.h"
 #include "Engine/Texture2D.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/SkillComponent.h"
@@ -29,7 +28,11 @@ namespace
 
 	constexpr float LatestFeedbackDuration = 0.22f;
 	constexpr float LatestFeedbackStartScale = 0.78f;
-	constexpr float RecentBackgroundSize = 178.0f;
+	constexpr float RecentBackgroundSize = 148.0f;
+	constexpr float PreviousBackgroundSize = 104.0f;
+	constexpr float PreviousIconOpacity = 0.82f;
+	constexpr float PreviousFeibaiOpacity = 0.68f;
+	constexpr float MaximumViewportMargin = 32.0f;
 
 	FName MakeBuildIconKey(const FBuildHistoryEntry& Entry)
 	{
@@ -221,7 +224,7 @@ void UCombatBuildHudWidget::RefreshRecentBackgroundLayers()
 			: ESlateVisibility::Collapsed);
 		if (RecentFeibaiTexture)
 		{
-			RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, true);
+			RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, false);
 		}
 	}
 
@@ -232,7 +235,18 @@ void UCombatBuildHudWidget::RefreshRecentBackgroundLayers()
 			: ESlateVisibility::Collapsed);
 		if (RecentWashTexture)
 		{
-			RecentWashImage->SetBrushFromTexture(RecentWashTexture, true);
+			RecentWashImage->SetBrushFromTexture(RecentWashTexture, false);
+		}
+	}
+
+	if (PreviousFeibaiImage)
+	{
+		PreviousFeibaiImage->SetVisibility(RecentFeibaiTexture
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Collapsed);
+		if (RecentFeibaiTexture)
+		{
+			PreviousFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, false);
 		}
 	}
 }
@@ -383,13 +397,12 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 
 	RecentFeibaiImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildFeibai"));
 	RecentFeibaiImage->SetColorAndOpacity(FLinearColor::White);
-	// Match the imported 1024 square first, then constrain the draw footprint
-	// with an outer SizeBox. This avoids a zero desired-size brush when the
-	// image is inside an Overlay and ScaleBox.
+	// Keep the brush independent from the imported 1024 square. The outer
+	// SizeBox owns the draw footprint while the image remains safe in an Overlay.
 	RecentFeibaiImage->SetVisibility(RecentFeibaiTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (RecentFeibaiTexture)
 	{
-		RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, true);
+		RecentFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, false);
 	}
 	USizeBox* RecentFeibaiSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildFeibaiSize"));
 	RecentFeibaiSize->SetWidthOverride(RecentBackgroundSize);
@@ -406,7 +419,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	RecentWashImage->SetVisibility(RecentWashTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (RecentWashTexture)
 	{
-		RecentWashImage->SetBrushFromTexture(RecentWashTexture, true);
+		RecentWashImage->SetBrushFromTexture(RecentWashTexture, false);
 	}
 	USizeBox* RecentWashSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RecentBuildWashSize"));
 	RecentWashSize->SetWidthOverride(RecentBackgroundSize);
@@ -420,7 +433,7 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 
 	RecentIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RecentBuildIcon"));
 	RecentIconImage->SetColorAndOpacity(FLinearColor::White);
-	RecentIconImage->SetDesiredSizeOverride(FVector2D(126.0f, 126.0f));
+	RecentIconImage->SetDesiredSizeOverride(FVector2D(RecentIconSize, RecentIconSize));
 	RecentIconImage->SetVisibility(ESlateVisibility::Collapsed);
 	UScaleBox* RecentIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("RecentBuildIconFit"));
 	RecentIconFit->SetStretch(EStretch::ScaleToFit);
@@ -444,8 +457,8 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 	}
 
 	PreviousSlotBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviousBuildSlotSize"));
-	PreviousSlotBox->SetWidthOverride(142.0f);
-	PreviousSlotBox->SetHeightOverride(154.0f);
+	PreviousSlotBox->SetWidthOverride(134.0f);
+	PreviousSlotBox->SetHeightOverride(132.0f);
 	PreviousSlotRoot = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("PreviousBuildSlot"));
 	PreviousSlotBox->SetContent(PreviousSlotRoot);
 	if (UHorizontalBoxSlot* PreviousRowSlot = ContentRow->AddChildToHorizontalBox(PreviousSlotBox))
@@ -468,9 +481,28 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 		PreviousFallbackSlot->SetPadding(FMargin(6.0f));
 	}
 
+	PreviousFeibaiImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildFeibai"));
+	PreviousFeibaiImage->SetColorAndOpacity(FLinearColor(0.72f, 0.72f, 0.72f, PreviousFeibaiOpacity));
+	PreviousFeibaiImage->SetVisibility(RecentFeibaiTexture
+		? ESlateVisibility::HitTestInvisible
+		: ESlateVisibility::Collapsed);
+	if (RecentFeibaiTexture)
+	{
+		PreviousFeibaiImage->SetBrushFromTexture(RecentFeibaiTexture, false);
+	}
+	USizeBox* PreviousFeibaiSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviousBuildFeibaiSize"));
+	PreviousFeibaiSize->SetWidthOverride(PreviousBackgroundSize);
+	PreviousFeibaiSize->SetHeightOverride(PreviousBackgroundSize);
+	PreviousFeibaiSize->SetContent(PreviousFeibaiImage);
+	if (UOverlaySlot* PreviousFeibaiSlot = PreviousSlotRoot->AddChildToOverlay(PreviousFeibaiSize))
+	{
+		PreviousFeibaiSlot->SetHorizontalAlignment(HAlign_Center);
+		PreviousFeibaiSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
 	PreviousIconImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviousBuildIcon"));
-	PreviousIconImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
-	PreviousIconImage->SetDesiredSizeOverride(FVector2D(78.0f, 78.0f));
+	PreviousIconImage->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, PreviousIconOpacity));
+	PreviousIconImage->SetDesiredSizeOverride(FVector2D(PreviousIconSize, PreviousIconSize));
 	PreviousIconImage->SetVisibility(ESlateVisibility::Collapsed);
 	UScaleBox* PreviousIconFit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("PreviousBuildIconFit"));
 	PreviousIconFit->SetStretch(EStretch::ScaleToFit);
@@ -534,24 +566,17 @@ void UCombatBuildHudWidget::BuildDefaultWidgetTree()
 
 void UCombatBuildHudWidget::ApplyViewportLayout()
 {
-	// AddToViewport uses a viewport slot whose anchor/offset behavior differs
-	// between standalone PIE and the editor-embedded host. Resolve one explicit
-	// pixel position from the active game viewport so the compact panel cannot
-	// be placed outside the visible area by a stale anchor combination.
-	FVector2D ViewportSize(PanelWidth, PanelHeight);
-	if (GEngine && GEngine->GameViewport)
-	{
-		GEngine->GameViewport->GetViewportSize(ViewportSize);
-	}
-
-	const FVector2D ViewportPosition(
-		FMath::Max(0.0f, ViewportSize.X - PanelWidth - ViewportMargin.Right),
-		FMath::Max(0.0f, ViewportSize.Y - PanelHeight - ViewportMargin.Bottom));
-
+	// Anchor the viewport slot at the bottom-right. Resolving an absolute pixel
+	// position from the render viewport diverges from the Slate/UMG logical
+	// viewport under F11 and DPI scaling, which can push the panel off-screen.
+	// SetPositionInViewport resets the viewport anchors to (0, 0), so anchors
+	// must be applied after the position call.
+	const float RightMargin = FMath::Clamp(ViewportMargin.Right, 0.0f, MaximumViewportMargin);
+	const float BottomMargin = FMath::Clamp(ViewportMargin.Bottom, 0.0f, MaximumViewportMargin);
 	SetDesiredSizeInViewport(FVector2D(PanelWidth, PanelHeight));
-	SetAlignmentInViewport(FVector2D::ZeroVector);
-	SetAnchorsInViewport(FAnchors(0.0f, 0.0f));
-	SetPositionInViewport(ViewportPosition);
+	SetPositionInViewport(FVector2D(-RightMargin, -BottomMargin));
+	SetAnchorsInViewport(FAnchors(1.0f, 1.0f));
+	SetAlignmentInViewport(FVector2D(1.0f, 1.0f));
 }
 
 void UCombatBuildHudWidget::BindSkillEvents()
@@ -634,10 +659,14 @@ void UCombatBuildHudWidget::SetBuildEntry(const FBuildHistoryEntry* Entry, bool 
 	{
 		IconPlaceholder->SetVisibility(ESlateVisibility::Collapsed);
 	}
-	IconImage->SetBrushFromTexture(IconTexture, true);
+	// Keep the imported 1024x1024 texture from becoming the widget desired
+	// size. The outer ScaleBox/SizeBox owns the HUD footprint.
+	IconImage->SetBrushFromTexture(IconTexture, false);
+	const float IconSize = bRecent ? RecentIconSize : PreviousIconSize;
+	IconImage->SetDesiredSizeOverride(FVector2D(IconSize, IconSize));
 	IconImage->SetColorAndOpacity(bRecent
 		? FLinearColor::White
-		: FLinearColor(1.0f, 1.0f, 1.0f, 0.78f));
+		: FLinearColor(1.0f, 1.0f, 1.0f, PreviousIconOpacity));
 	IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
