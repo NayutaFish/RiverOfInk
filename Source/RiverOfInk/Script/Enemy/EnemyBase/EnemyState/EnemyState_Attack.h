@@ -14,26 +14,29 @@
 UCLASS(meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API UEnemyState_Attack : public UStateBase
 {
-	GENERATED_BODY()
+GENERATED_BODY()
 
 public:
-	UEnemyState_Attack();
+UEnemyState_Attack();
 
 protected:
-	virtual void OnEnter_Implementation() override;
-	virtual void OnExit_Implementation() override;
-	virtual void Update_Implementation(float DeltaTime) override;
+virtual void OnEnter_Implementation() override;
+virtual void OnExit_Implementation() override;
+virtual void Update_Implementation(float DeltaTime) override;
 
-	/** 硬值被击破：切入击退状态 */
-	UFUNCTION()
-	void OnHardBreak(const FEnemyDamageResult& DamageResult);
+/** 硬值被击破：切入击退状态 */
+UFUNCTION()
+void OnHardBreak(const FEnemyDamageResult& DamageResult);
+
+/** 子类可覆盖以自定义攻击生成逻辑。 */
+virtual void ExecuteAttack();
+
+/** 攻击结束后返回追击/丢失目标状态。 */
+virtual void ReturnToChase();
 
 private:
-	void ExecuteAttack();
-	void ReturnToChase();
-
-	FRotator LockedRotation = FRotator::ZeroRotator;
-	FTimerHandle AttackDelayHandle;
-	FTimerHandle ReturnHandle;
-	bool bAttackExecuted = false;
+FRotator LockedRotation = FRotator::ZeroRotator;
+FTimerHandle AttackDelayHandle;
+FTimerHandle ReturnHandle;
+bool bAttackExecuted = false;
 };
