@@ -53,8 +53,9 @@ void UPlayerState_Attack1::PlayAttackMontage()
 		return;
 	}
 
-	// 由 PlayerCharacter::BeginAttack 统一处理动作状态、Montage 播放与结束回调。
-	Player->BeginAttack(AttackMontage);
+	// 由 PlayerCharacter::BeginAttackFromSection 统一处理动作状态、Montage 播放与结束回调；
+	// AttackSectionName 为 None 时保持从 Montage 开头播放的旧行为。
+	Player->BeginAttackFromSection(AttackMontage, AttackSectionName);
 }
 
 void UPlayerState_Attack1::OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
@@ -87,6 +88,7 @@ void UPlayerState_Attack1::OnEnter_Implementation()
 
 	bHadMoveInput = false;
 	bAttackQueued = false;
+	bCompletedNormally = false;
 	AttackInputBufferAge = -1.0f;
 	MoveInputX = 0.0f;
 	MoveInputY = 0.0f;
@@ -114,7 +116,13 @@ void UPlayerState_Attack1::OnExit_Implementation()
 
 		// 防止状态被受击等外部事件打断后残留 Attacking 动作状态。
 		Player->EndAttack();
-		Player->StartAttack1Cooldown();
+
+		// 仅在中途退出（受击/闪避等）或末段（第三击）正常收尾时保留冷却；
+		// 第一、二击正常完成或向下一段衔接不再启动冷却，避免吞掉连段有效期内稍晚的续招输入。
+		if (!bCompletedNormally || attackStage >= 3)
+		{
+			Player->StartAttack1Cooldown();
+		}
 	}
 
 	if (UWorld* World = GetWorld())
@@ -140,16 +148,6 @@ void UPlayerState_Attack1::Update_Implementation(float DeltaTime)
 	if (!Player)
 	{
 		return;
-	}
-
-	if (bAttackQueued)
-	{
-		AttackInputBufferAge += DeltaTime;
-		if (AttackInputBufferAge > AttackInputBufferWindow)
-		{
-			bAttackQueued = false;
-			AttackInputBufferAge = -1.0f;
-		}
 	}
 
 	FVector MoveDirection = FVector::ZeroVector;
@@ -215,11 +213,18 @@ void UPlayerState_Attack1::OnMoveY(float Value)
 
 void UPlayerState_Attack1::OnLmb()
 {
-// 多段普攻的段数切换由 PlayerCharacter 的普攻管理组件负责；
-// 状态内不再缓存连段输入，避免与 attackStage 组件切换逻辑冲突。
-UE_LOG(LogRiverOfInk, Verbose,
-TEXT("Player Attack1 stage %d ignores in-state LMB (manager owns combo routing)."),
-attackStage);
+	// 末段（第三击）不再缓存续招输入，避免在衔接点自动回到第一击。
+	if (attackStage >= 3)
+	{
+		return;
+	}
+
+	// 攻击期间缓存“下一击待执行”，最多缓存一次，多次点击不累积；
+	// 由 FinishAttackStep 在衔接点消费，经 CommonAttackManage 进入下一段。
+	bAttackQueued = true;
+	UE_LOG(LogRiverOfInk, Verbose,
+		TEXT("Player Attack1 stage %d buffered next attack."),
+		attackStage);
 }
 
 void UPlayerState_Attack1::OnSpace()
@@ -383,9 +388,28 @@ void UPlayerState_Attack1::FinishAttackStep()
 
 	ClearActiveAttackArea();
 
-Player->EndAttack();
-UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 stage %d finished."), attackStage);
-SwitchAfterAttack();
+	// 到达衔接点即视为“普攻正常完成”：后续要么向下一段衔接，要么正常收尾回 Idle/Move，
+	// 均属正常退出（见 OnExit 对冷却的处理）。
+	bCompletedNormally = true;
+
+	// 末段（第三击）不缓存续招：清掉待执行输入，确保正常收尾，而不是经缓存回到第一击。
+	if (attackStage >= 3)
+	{
+		bAttackQueued = false;
+	}
+
+	// 攻击期间若已缓存下一击输入，则在此衔接点直接进入下一段；
+	// 成功衔接后立即返回，不再执行回 Idle/Move 的流程。
+	if (bAttackQueued)
+	{
+		bAttackQueued = false;
+		Player->RequestNormalAttack();
+		return;
+	}
+
+	Player->EndAttack();
+	UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 stage %d finished."), attackStage);
+	SwitchAfterAttack();
 }
 
 void UPlayerState_Attack1::ClearActiveAttackArea()
