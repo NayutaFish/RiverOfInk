@@ -16,6 +16,7 @@ void AAttackAreaBase_Bezier::BeginPlay()
 
 	StartPoint = GetActorLocation();
 	BezierElapsedTime = 0.0f;
+	TangentExitVelocity = FVector::ZeroVector;
 	bBezierInitialized = false;
 }
 
@@ -41,6 +42,7 @@ void AAttackAreaBase_Bezier::SetBezierTarget(const FVector& InTarget)
 
 	bBezierInitialized = true;
 	BezierElapsedTime = 0.0f;
+	TangentExitVelocity = FVector::ZeroVector;
 }
 
 void AAttackAreaBase_Bezier::Tick(float DeltaTime)
@@ -48,9 +50,25 @@ void AAttackAreaBase_Bezier::Tick(float DeltaTime)
 	if (bBezierInitialized)
 	{
 		BezierElapsedTime += DeltaTime;
-		const float Duration = FMath::Max(0.001f, LifeTime);
-		const float Alpha = FMath::Clamp(BezierElapsedTime / Duration, 0.0f, 1.0f);
-		SetActorLocation(CalculateBezierPosition(Alpha));
+		const float TotalTime = FMath::Max(0.001f, LifeTime);
+		const float CurveDuration = TotalTime * FMath::Clamp(BezierReachTargetRatio, 0.05f, 0.95f);
+
+		if (BezierElapsedTime < CurveDuration)
+		{
+			const float Alpha = FMath::Clamp(BezierElapsedTime / CurveDuration, 0.0f, 1.0f);
+			SetActorLocation(CalculateBezierPosition(Alpha));
+		}
+		else
+		{
+			// 第一次进入直线飞出阶段时，根据 P2 处切线计算持续速度。
+			if (TangentExitVelocity.IsNearlyZero())
+			{
+				// 二阶贝塞尔在 Alpha=1 处的导数：2 * (P2 - P1)
+				TangentExitVelocity = 2.0f * (EndPoint - ControlPoint) / CurveDuration;
+			}
+
+			AddActorWorldOffset(TangentExitVelocity * DeltaTime, true);
+		}
 	}
 
 	Super::Tick(DeltaTime);

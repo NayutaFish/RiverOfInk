@@ -34,12 +34,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier")
 	float BezierP1Offset = 100.0f;
 
+	/** 贝塞尔曲线段占 LifeTime 的比例；到达 P2 后剩余时间沿切线直线飞出。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier", meta = (ClampMin = "0.05", ClampMax = "0.95"))
+	float BezierReachTargetRatio = 0.5f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
 private:
 	FVector CalculateBezierPosition(float Alpha) const;
+	FVector TangentExitVelocity = FVector::ZeroVector;
 
 	FVector StartPoint = FVector::ZeroVector;
 	FVector ControlPoint = FVector::ZeroVector;
