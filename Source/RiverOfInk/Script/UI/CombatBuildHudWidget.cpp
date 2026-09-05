@@ -18,6 +18,7 @@
 #include "Engine/Texture2D.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/Skill/SkillComponent.h"
+#include "UI/BuildPresentationResolver.h"
 #include "TimerManager.h"
 
 namespace
@@ -30,59 +31,6 @@ namespace
 	constexpr float LatestFeedbackDuration = 0.22f;
 	constexpr float LatestFeedbackStartScale = 0.78f;
 	constexpr float RecentBackgroundSize = 178.0f;
-
-	FName MakeBuildIconKey(const FBuildHistoryEntry& Entry)
-	{
-		if (Entry.RewardType == ERoguelikeRewardType::ChangeSkillForm)
-		{
-			return Entry.NewSkillForm == EPlayerSkillForm::TwoStageArc
-				? FName(TEXT("TwoStageArc"))
-				: FName(TEXT("SkillForm"));
-		}
-
-		if (Entry.RewardType == ERoguelikeRewardType::GainSkill)
-		{
-			return Entry.SkillID == EPlayerSkillID::CircularSlash
-				? FName(TEXT("CircularSlash"))
-				: FName(TEXT("TripleProjectile"));
-		}
-
-		if (Entry.RewardType == ERoguelikeRewardType::UpgradeSkill)
-		{
-			switch (Entry.UpgradeType)
-			{
-			case ESkillUpgradeType::Cooldown:
-				return FName(TEXT("Cooldown"));
-			case ESkillUpgradeType::Damage:
-				return FName(TEXT("Damage"));
-			case ESkillUpgradeType::Mechanic:
-			default:
-				return FName(TEXT("ProjectileCount"));
-			}
-		}
-
-		switch (Entry.ModifierID)
-		{
-		case ESkillModifierID::AddProjectile:
-			return FName(TEXT("ProjectileCount"));
-		case ESkillModifierID::InkGrenade:
-			return FName(TEXT("InkGrenade"));
-		case ESkillModifierID::ExtraExplosion:
-			return FName(TEXT("ExtraExplosion"));
-		case ESkillModifierID::TwinSlash:
-			return FName(TEXT("TwinSlash"));
-		case ESkillModifierID::NullRing:
-			return FName(TEXT("ProjectileErase"));
-		case ESkillModifierID::RadiusUp:
-			return FName(TEXT("Radius"));
-		case ESkillModifierID::CooldownDown:
-			return FName(TEXT("Cooldown"));
-		case ESkillModifierID::ProjectileHoming:
-			return FName(TEXT("ProjectileHoming"));
-		default:
-			return FName(TEXT("ProjectileCount"));
-		}
-	}
 
 	FString MakeBuildCacheKey(const FBuildHistoryEntry& Entry)
 	{
@@ -239,17 +187,18 @@ void UCombatBuildHudWidget::RefreshRecentBackgroundLayers()
 
 void UCombatBuildHudWidget::ToggleBuildDetails()
 {
-	if (!IsValid(ObservedSkillComponent) || ObservedSkillComponent->GetBuildHistory().IsEmpty())
+	if (ObservedPlayer)
 	{
-		UE_LOG(LogSkill, Verbose, TEXT("Combat build detail request ignored: build history is empty."));
+		ObservedPlayer->ToggleCombatBuildDetails();
 		return;
 	}
 
-	// The detail panel, pause, focus, and UIOnly input belong to a later
-	// feature slice. Keep this method as a compatibility boundary for the
-	// existing B binding without embedding that feature in the combat HUD.
-	UE_LOG(LogSkill, Verbose,
-		TEXT("Combat build detail request deferred: detail HUD is outside the current slice."));
+	UE_LOG(LogSkill, Verbose, TEXT("Combat build detail request ignored: no observed player."));
+}
+
+bool UCombatBuildHudWidget::IsBuildDetailsOpen() const
+{
+	return ObservedPlayer && ObservedPlayer->IsCombatBuildDetailsOpen();
 }
 
 void UCombatBuildHudWidget::BuildDefaultWidgetTree()
@@ -821,25 +770,12 @@ FName UCombatBuildHudWidget::ResolveBuildIconKey(const FBuildHistoryEntry& Entry
 {
 	// Build history is value data; the stable enum identifiers are the only
 	// source for icon resolution. Display text is never parsed here.
-	return MakeBuildIconKey(Entry);
+	return FBuildPresentationResolver::ResolveIconKey(Entry);
 }
 
 ECombatBuildIconPlaceholderKind UCombatBuildHudWidget::ResolvePlaceholderKind(FName BuildIconKey) const
 {
-	if (BuildIconKey == FName(TEXT("TwoStageArc")))
-	{
-		return ECombatBuildIconPlaceholderKind::TwoStageArc;
-	}
-	if (BuildIconKey == FName(TEXT("TwinSlash")))
-	{
-		return ECombatBuildIconPlaceholderKind::TwinSlash;
-	}
-	if (BuildIconKey == FName(TEXT("Cooldown")))
-	{
-		return ECombatBuildIconPlaceholderKind::Cooldown;
-	}
-
-	return ECombatBuildIconPlaceholderKind::Generic;
+	return FBuildPresentationResolver::ResolvePlaceholderKind(BuildIconKey);
 }
 
 bool UCombatBuildHudWidget::IsSameEntry(const FBuildHistoryEntry& A, const FBuildHistoryEntry& B) const

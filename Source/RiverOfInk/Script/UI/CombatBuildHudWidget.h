@@ -42,7 +42,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void RefreshBuildHistory();
 
-	/** Compatibility boundary for the future detail HUD; intentionally deferred. */
+	/** Compatibility forwarder to the player-owned detail modal. */
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void ToggleBuildDetails();
 
@@ -50,9 +50,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD|Build")
 	void SetDetailsKeyLabel(const FText& InKeyLabel);
 
-	/** Always false until the separate detail HUD is implemented. */
+	/** Whether the player-owned detail modal is currently open. */
 	UFUNCTION(BlueprintPure, Category = "HUD|Build")
-	bool IsBuildDetailsOpen() const { return false; }
+	bool IsBuildDetailsOpen() const;
 
 	/** Optional panel texture. A native border fallback is used when absent. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")

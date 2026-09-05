@@ -28,6 +28,8 @@
 
 - [战斗内构筑 HUD｜美术实施工单](./build-hud-art-implementation-work-order.md)
 - [战斗内构筑 HUD｜技术实施工单](./build-hud-technical-implementation-work-order.md)
+- [构筑详情 HUD｜美术资源实施工单](./combat-build-details-hud-art-implementation-work-order.md)
+- [构筑详情 HUD｜技术实施方案](./combat-build-details-hud-technical-implementation-plan.md)
 
 ## 方案对照
 

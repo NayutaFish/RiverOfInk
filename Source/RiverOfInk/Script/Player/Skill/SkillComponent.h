@@ -173,7 +173,7 @@ public:
 	/** Native notification for HUDs and other runtime observers. */
 	FOnSkillStateChanged OnSkillStateChanged;
 
-	/** Native notification after a successful build-history entry is appended. */
+	/** Native notification after a build-history entry is appended or a runtime snapshot is restored. */
 	FOnBuildHistoryChanged OnBuildHistoryChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Slots")

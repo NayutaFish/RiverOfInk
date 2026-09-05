@@ -34,10 +34,14 @@
 #include "UI/PlayerHealthWidget.h"
 #include "UI/PlayerSkillWidget.h"
 #include "UI/CombatBuildHudWidget.h"
+#include "UI/CombatBuildDetailsWidget.h"
+#include "GameFramework/PlayerController.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/PackageName.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -63,11 +67,26 @@ APlayerCharacter::APlayerCharacter()
 	HealthWidgetClass = UPlayerHealthWidget::StaticClass();
 	SkillWidgetClass = UPlayerSkillWidget::StaticClass();
 	CombatBuildHudWidgetClass = UCombatBuildHudWidget::StaticClass();
+	CombatBuildDetailsWidgetClass = UCombatBuildDetailsWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UCombatBuildHudWidget> CombatBuildHudBlueprint(
 		TEXT("/Game/Blueprint/GamePlay/MyCombatBuildHudWidget"));
 	if (CombatBuildHudBlueprint.Succeeded())
 	{
 		CombatBuildHudWidgetClass = CombatBuildHudBlueprint.Class;
+	}
+	// The details Blueprint is optional while the native whitebox is being
+	// integrated. Check the package first so an absent optional asset does not
+	// emit a CDO-construction error during editor startup or PIE.
+	static const TCHAR* CombatBuildDetailsBlueprintPath =
+		TEXT("/Game/Blueprint/GamePlay/MyCombatBuildDetailsWidget");
+	if (FPackageName::DoesPackageExist(CombatBuildDetailsBlueprintPath))
+	{
+		static ConstructorHelpers::FClassFinder<UCombatBuildDetailsWidget> CombatBuildDetailsBlueprint(
+			CombatBuildDetailsBlueprintPath);
+		if (CombatBuildDetailsBlueprint.Succeeded())
+		{
+			CombatBuildDetailsWidgetClass = CombatBuildDetailsBlueprint.Class;
+		}
 	}
 	static ConstructorHelpers::FClassFinder<UPlayerSkillWidget> SkillWidgetBlueprint(
 		TEXT("/Game/Blueprint/GameSystem/UI/Skill/WBP_SkillHUD"));
@@ -275,6 +294,7 @@ void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	FEventBus::Unsubscribe<FCombatRoomStartedEvent>(CombatRoomStartedHandle);
 	FEventBus::Unsubscribe<FCombatRoomClearedEvent>(CombatRoomClearedHandle);
+	CloseCombatBuildDetails();
 
     if (HealthWidget)
     {
@@ -290,6 +310,11 @@ void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		CombatBuildHudWidget->RemoveFromParent();
 		CombatBuildHudWidget = nullptr;
+	}
+	if (CombatBuildDetailsWidget)
+	{
+		CombatBuildDetailsWidget->RemoveFromParent();
+		CombatBuildDetailsWidget = nullptr;
 	}
 
     Super::EndPlay(EndPlayReason);
@@ -463,13 +488,220 @@ bool APlayerCharacter::IsDead() const
 
 void APlayerCharacter::ToggleCombatBuildDetails()
 {
-	if (!CombatBuildHudWidget)
+	if (bCombatBuildDetailsOpen)
 	{
-		CreateCombatBuildHudWidget();
+		CloseCombatBuildDetails();
+		return;
 	}
-	if (CombatBuildHudWidget)
+
+	if (!IsLocallyControlled() || !SkillComponent)
 	{
-		CombatBuildHudWidget->ToggleBuildDetails();
+		UE_LOG(LogSkill, Verbose,
+			TEXT("Combat build details request ignored: no local player or skill component for %s."),
+			*GetName());
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+	if (!PlayerController)
+	{
+		UE_LOG(LogSkill, Warning,
+			TEXT("Combat build details request ignored: no local PlayerController for %s."),
+			*GetName());
+		return;
+	}
+
+	// A reward/shop modal already owns pause and UI-only input. Do not stack a
+	// second modal on top of it through the gameplay B binding.
+	if (PlayerController->IsPaused())
+	{
+		UE_LOG(LogSkill, Verbose,
+			TEXT("Combat build details request ignored: PlayerController is already paused."));
+		return;
+	}
+
+	CreateCombatBuildDetailsWidget();
+}
+
+void APlayerCharacter::CreateCombatBuildDetailsWidget()
+{
+	if (bCombatBuildDetailsOpen && CombatBuildDetailsWidget)
+	{
+		CombatBuildDetailsWidget->FocusFirstAvailableSlot();
+		return;
+	}
+
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+	if (!PlayerController || PlayerController->IsPaused())
+	{
+		return;
+	}
+
+	TSubclassOf<UCombatBuildDetailsWidget> WidgetClass = CombatBuildDetailsWidgetClass;
+	if (!WidgetClass)
+	{
+		WidgetClass = UCombatBuildDetailsWidget::StaticClass();
+	}
+
+	if (!CombatBuildDetailsWidget)
+	{
+		CombatBuildDetailsWidget = CreateWidget<UCombatBuildDetailsWidget>(PlayerController, WidgetClass);
+	}
+	if (!CombatBuildDetailsWidget)
+	{
+		UE_LOG(LogSkill, Error, TEXT("Combat build details HUD creation failed for %s."), *GetName());
+		return;
+	}
+
+	DetailsInputController = PlayerController;
+	bDetailsPreviousPaused = PlayerController->IsPaused();
+	bDetailsPreviousShowMouseCursor = PlayerController->bShowMouseCursor;
+	bDetailsPreviousMoveInputIgnored = PlayerController->IsMoveInputIgnored();
+	bDetailsPreviousLookInputIgnored = PlayerController->IsLookInputIgnored();
+	DetailsPreviousKeyboardFocus.Reset();
+	if (FSlateApplication::IsInitialized())
+	{
+		DetailsPreviousKeyboardFocus = FSlateApplication::Get().GetKeyboardFocusedWidget();
+	}
+
+	CombatBuildDetailsWidget->SetDetailsKey(BuildDetailsKey);
+	CombatBuildDetailsWidget->SetIsFocusable(true);
+	CombatBuildDetailsWidget->SetVisibility(ESlateVisibility::Visible);
+	if (!CombatBuildDetailsWidget->IsInViewport())
+	{
+		// Keep the modal above the persistent HUD and other non-modal HUD layers.
+		CombatBuildDetailsWidget->AddToViewport(110);
+	}
+	CombatBuildDetailsWidget->InitializeForPlayer(this);
+	CombatBuildDetailsWidget->ForceLayoutPrepass();
+
+	if (!bDetailsPreviousPaused)
+	{
+		if (!PlayerController->SetPause(true))
+		{
+			CombatBuildDetailsWidget->ClearForClose();
+			CombatBuildDetailsWidget->SetVisibility(ESlateVisibility::Collapsed);
+			CombatBuildDetailsWidget->RemoveFromParent();
+			DetailsInputController.Reset();
+			DetailsPreviousKeyboardFocus.Reset();
+			UE_LOG(LogSkill, Warning,
+				TEXT("Combat build details HUD could not acquire pause ownership for %s."),
+				*GetName());
+			return;
+		}
+		bDetailsOwnsPause = true;
+	}
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(CombatBuildDetailsWidget->TakeWidget());
+	PlayerController->SetInputMode(InputMode);
+	PlayerController->SetShowMouseCursor(true);
+	PlayerController->SetIgnoreMoveInput(true);
+	PlayerController->SetIgnoreLookInput(true);
+
+	bCombatBuildDetailsOpen = true;
+	CombatBuildDetailsWidget->FocusFirstAvailableSlot();
+
+	UE_LOG(LogSkill, Log,
+		TEXT("Combat build details HUD opened for %s. PauseOwned=%s."),
+		*GetName(),
+		bDetailsOwnsPause ? TEXT("true") : TEXT("false"));
+}
+
+void APlayerCharacter::CloseCombatBuildDetails()
+{
+	const bool bWasOpen = bCombatBuildDetailsOpen;
+	if (!bWasOpen && !bDetailsOwnsPause && !DetailsInputController.IsValid())
+	{
+		if (CombatBuildDetailsWidget)
+		{
+			CombatBuildDetailsWidget->SetVisibility(ESlateVisibility::Collapsed);
+			CombatBuildDetailsWidget->RemoveFromParent();
+		}
+		return;
+	}
+
+	bCombatBuildDetailsOpen = false;
+
+	APlayerController* PlayerController = DetailsInputController.Get();
+	if (!PlayerController)
+	{
+		PlayerController = Cast<APlayerController>(GetController());
+	}
+
+	if (FSlateApplication::IsInitialized())
+	{
+		// The details widget owns the current UI focus while it is open. Clear it
+		// before removing the widget so a stale Slate path cannot capture B again.
+		FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
+	}
+
+	if (CombatBuildDetailsWidget)
+	{
+		CombatBuildDetailsWidget->SetVisibility(ESlateVisibility::Collapsed);
+		CombatBuildDetailsWidget->ClearForClose();
+		CombatBuildDetailsWidget->RemoveFromParent();
+	}
+
+	if (PlayerController)
+	{
+		// This feature is entered from gameplay input, whose project path is
+		// GameOnly. UE does not expose the prior FInputMode instance, so restore
+		// that mode while preserving the independently observable input flags.
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		PlayerController->SetInputMode(InputMode);
+		PlayerController->SetShowMouseCursor(bDetailsPreviousShowMouseCursor);
+		PlayerController->ResetIgnoreMoveInput();
+		PlayerController->ResetIgnoreLookInput();
+		if (bDetailsPreviousMoveInputIgnored)
+		{
+			PlayerController->SetIgnoreMoveInput(true);
+		}
+		if (bDetailsPreviousLookInputIgnored)
+		{
+			PlayerController->SetIgnoreLookInput(true);
+		}
+		if (bDetailsOwnsPause && !bDetailsPreviousPaused)
+		{
+			PlayerController->SetPause(false);
+		}
+	}
+
+	if (FSlateApplication::IsInitialized())
+	{
+		if (DetailsPreviousKeyboardFocus.IsValid())
+		{
+			FSlateApplication::Get().SetKeyboardFocus(
+				DetailsPreviousKeyboardFocus,
+				EFocusCause::SetDirectly);
+		}
+	}
+
+	DetailsInputController.Reset();
+	DetailsPreviousKeyboardFocus.Reset();
+	bDetailsOwnsPause = false;
+	bDetailsPreviousPaused = false;
+	bDetailsPreviousShowMouseCursor = false;
+	bDetailsPreviousMoveInputIgnored = false;
+	bDetailsPreviousLookInputIgnored = false;
+
+	if (bWasOpen)
+	{
+		UE_LOG(LogSkill, Log, TEXT("Combat build details HUD closed for %s."), *GetName());
 	}
 }
 
