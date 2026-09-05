@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -17,39 +17,43 @@
 UCLASS(Blueprintable)
 class RIVEROFINK_API AAttackAreaBase_Bezier : public AAttackAreaBase
 {
-	GENERATED_BODY()
+GENERATED_BODY()
 
 public:
-	AAttackAreaBase_Bezier();
+AAttackAreaBase_Bezier();
 
-	/** 设置贝塞尔终点 P2，并自动根据 P0/P2 计算控制点 P1。 */
-	UFUNCTION(BlueprintCallable, Category = "Attack|Bezier")
-	void SetBezierTarget(const FVector& InTarget);
+/** 设置贝塞尔终点 P2，并自动根据 P0/P2 计算控制点 P1。 */
+UFUNCTION(BlueprintCallable, Category = "Attack|Bezier")
+void SetBezierTarget(const FVector& InTarget);
 
-	/** P1 沿 P0->P2 方向的比例（0~1）。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float BezierP1PositionRate = 0.5f;
+/** P1 沿 P0->P2 方向的比例（0~1）。 */
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+float BezierP1PositionRate = 0.5f;
 
-	/** P1 在 P0-P2 垂直方向上的偏移距离。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier")
-	float BezierP1Offset = 100.0f;
+/** P1 在 P0-P2 垂直方向上的偏移距离。 */
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier")
+float BezierP1Offset = 100.0f;
 
-	/** 贝塞尔曲线段占 LifeTime 的比例；到达 P2 后剩余时间沿切线直线飞出。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier", meta = (ClampMin = "0.05", ClampMax = "0.95"))
-	float BezierReachTargetRatio = 0.5f;
+/** 贝塞尔曲线段占 LifeTime 的比例；到达 P2 后剩余时间沿切线直线飞出。 */
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Bezier", meta = (ClampMin = "0.05", ClampMax = "0.95"))
+float BezierReachTargetRatio = 0.5f;
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
+virtual void BeginPlay() override;
+virtual void Tick(float DeltaTime) override;
+
+/** 子类可覆盖以改变贝塞尔移动的时间流速（例如慢启动）。 */
+virtual float GetMovementTimeScale(float RealTime) const;
 
 private:
-	FVector CalculateBezierPosition(float Alpha) const;
-	FVector TangentExitVelocity = FVector::ZeroVector;
+FVector CalculateBezierPosition(float Alpha) const;
+FVector TangentExitVelocity = FVector::ZeroVector;
 
-	FVector StartPoint = FVector::ZeroVector;
-	FVector ControlPoint = FVector::ZeroVector;
-	FVector EndPoint = FVector::ZeroVector;
+FVector StartPoint = FVector::ZeroVector;
+FVector ControlPoint = FVector::ZeroVector;
+FVector EndPoint = FVector::ZeroVector;
 
-	float BezierElapsedTime = 0.0f;
-	bool bBezierInitialized = false;
+float BezierElapsedTime = 0.0f;
+float RealElapsedTime = 0.0f;
+bool bBezierInitialized = false;
 };

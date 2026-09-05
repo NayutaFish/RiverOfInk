@@ -4,6 +4,7 @@
 #include "RiverOfInk.h"
 
 #include "Common/AttackArea/AttackAreaBase_Bezier.h"
+#include "Common/AttackArea/AttackAreaBaseBz_LanternGhostRange.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
@@ -97,6 +98,18 @@ BezierArea->BezierP1Offset = Offset;
 BezierArea->bDamageOpponentOnly = true;
 BezierArea->bIsEnemyProjectile = true;
 BezierArea->bDetectObstacle = Enemy->bAttackAreaDetectObstacle;
+
+// 如果实际使用的是灯笼怪远程专用贝塞尔子类，则补充慢启动和 Niagara 缩放参数。
+if (AAttackAreaBaseBz_LanternGhostRange* LanternArea =
+Cast<AAttackAreaBaseBz_LanternGhostRange>(BezierArea))
+{
+LanternArea->InitialSpeedScale = 0.2f;
+LanternArea->SlowDuration = 0.8f;
+LanternArea->SlowStartDelay = 0.5f;
+LanternArea->ScaleSizeStart = 0.2f;
+LanternArea->ScaleSizeEnd = 1.0f;
+LanternArea->ScaleSizeDuration = 0.5f;
+}
 
 UGameplayStatics::FinishSpawningActor(BezierArea, SpawnTransform);
 BezierArea->SetBezierTarget(TargetLocation);
