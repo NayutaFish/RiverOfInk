@@ -82,6 +82,10 @@ struct FPlayerRuntimeData
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Skills")
 	TMap<EPlayerSkillID, FSkillUpgradeState> SkillUpgradeStates;
 
+	/** Chronological successful skill-build acquisitions for combat HUD recovery. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Skills")
+	TArray<FBuildHistoryEntry> BuildHistory;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")
 	FPlayerRuntimeStats Stats;
 

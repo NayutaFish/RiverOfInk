@@ -23,6 +23,10 @@ class UProjectileTargetingComponent;
 class UPlayerInputComponent;
 class UPlayerHealthWidget;
 class UPlayerSkillWidget;
+class UCombatBuildHudWidget;
+class UCombatBuildDetailsWidget;
+class APlayerController;
+class SWidget;
 class ARoguelikeShopManager;
 
 
@@ -127,6 +131,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Health")
 	bool IsDead() const;
 
+	/** Toggle the optional combat-build detail panel using the configured key. */
+	UFUNCTION(BlueprintCallable, Category = "Player|UI")
+	void ToggleCombatBuildDetails();
+
+	/** Close the detail modal and restore the player-owned input state. */
+	UFUNCTION(BlueprintCallable, Category = "Player|UI")
+	void CloseCombatBuildDetails();
+
+	UFUNCTION(BlueprintPure, Category = "Player|UI")
+	bool IsCombatBuildDetailsOpen() const { return bCombatBuildDetailsOpen; }
+
 	/** Register the Shop Manager whose interaction area currently contains this player. */
 	void SetNearbyShopManager(ARoguelikeShopManager* InShopManager);
 
@@ -188,6 +203,12 @@ protected:
 	/** Create the fixed Q/E skill HUD for the locally controlled player. */
 	void CreateSkillWidget();
 
+	/** Create the recent/previous build HUD for the locally controlled player. */
+	void CreateCombatBuildHudWidget();
+
+	/** Create and open the modal build-details HUD for the locally controlled player. */
+	void CreateCombatBuildDetailsWidget();
+
 	/** Optional Blueprint subclass for the health HUD. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<UPlayerHealthWidget> HealthWidgetClass;
@@ -201,6 +222,24 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPlayerSkillWidget> SkillWidget;
+
+	/** Optional Blueprint subclass for the combat-build HUD. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UCombatBuildHudWidget> CombatBuildHudWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCombatBuildHudWidget> CombatBuildHudWidget;
+
+	/** Optional Blueprint subclass for the build-details modal. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UCombatBuildDetailsWidget> CombatBuildDetailsWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCombatBuildDetailsWidget> CombatBuildDetailsWidget;
+
+	/** Default detail-panel key; the HUD prompt follows this value. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Build HUD")
+	FKey BuildDetailsKey = EKeys::B;
 
 	/** Default Shop interaction key. Kept local to player input so the first UI slice needs no new input asset. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Interaction")
@@ -232,6 +271,16 @@ private:
 
 	// 取消当前攻击
 	void CancelAttack();
+
+	/** Modal state captured before the details HUD switches to UI-only input. */
+	bool bCombatBuildDetailsOpen = false;
+	bool bDetailsOwnsPause = false;
+	bool bDetailsPreviousPaused = false;
+	bool bDetailsPreviousShowMouseCursor = false;
+	bool bDetailsPreviousMoveInputIgnored = false;
+	bool bDetailsPreviousLookInputIgnored = false;
+	TWeakObjectPtr<APlayerController> DetailsInputController;
+	TSharedPtr<SWidget> DetailsPreviousKeyboardFocus;
 
 	public:
 	virtual void Tick(float DeltaTime) override;
