@@ -988,13 +988,27 @@ void APlayerCharacter::SetActionState(EHikariActionState NewState)
 
 void APlayerCharacter::BeginAttack(UAnimMontage* InMontage, bool bRestartMontage)
 {
-	if (!bRestartMontage && !CanStartAction()) return;
-UAnimMontage* MontageToPlay = InMontage ? InMontage : DefaultAttackMontage.Get();
-if (!MontageToPlay)
-{
-UE_LOG(LogTemp, Warning, TEXT("BeginAttack has no montage (InMontage and DefaultAttackMontage are both null)."));
-return;
+	BeginAttackFromSection(InMontage, NAME_None, bRestartMontage);
 }
+
+void APlayerCharacter::BeginAttackFromSection(UAnimMontage* InMontage, FName StartSectionName, bool bRestartMontage)
+{
+	if (!bRestartMontage && !CanStartAction()) return;
+
+	UAnimMontage* MontageToPlay = InMontage ? InMontage : DefaultAttackMontage.Get();
+	if (!MontageToPlay)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BeginAttack has no montage (InMontage and DefaultAttackMontage are both null)."));
+		return;
+	}
+
+	// 显式指定起始 Section 时先校验其存在；不存在则报错并放弃本次播放，避免错误配置被掩盖。
+	if (StartSectionName != NAME_None && MontageToPlay->GetSectionIndex(StartSectionName) == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BeginAttackFromSection: Section '%s' not found in montage '%s'; attack not played."),
+			*StartSectionName.ToString(), *MontageToPlay->GetName());
+		return;
+	}
 
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (!AnimInstance) return;
@@ -1009,7 +1023,7 @@ return;
 
 	SetActionState(EHikariActionState::Attacking);
 
-	float MontageLength = PlayAnimMontage(MontageToPlay);
+	float MontageLength = PlayAnimMontage(MontageToPlay, 1.0f, StartSectionName);
 	if (MontageLength <= 0.0f)
 	{
 		SetActionState(EHikariActionState::Normal);

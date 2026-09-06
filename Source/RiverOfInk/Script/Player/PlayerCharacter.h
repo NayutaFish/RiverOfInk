@@ -62,6 +62,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void BeginAttack(UAnimMontage* InMontage = nullptr, bool bRestartMontage = false);
 
+	// 从指定 Section 开始攻击（仅供 C++ 调用；不暴露给蓝图，避免破坏现有节点）
+	void BeginAttackFromSection(UAnimMontage* InMontage, FName StartSectionName, bool bRestartMontage = false);
+
 	// 结束攻击
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void EndAttack();
