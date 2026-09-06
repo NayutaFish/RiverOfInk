@@ -3,6 +3,7 @@
 #include "RoguelikeSystem/RoguelikeRewardWidget.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Components/BackgroundBlur.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Button.h"
@@ -13,6 +14,7 @@
 #include "Components/OverlaySlot.h"
 #include "Components/Widget.h"
 #include "Components/TextBlock.h"
+#include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
@@ -22,6 +24,8 @@ namespace
 {
 	const TCHAR* DefaultTexturePath = TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture");
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
+	const TCHAR* StandardUiFontPath = TEXT(
+		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
 	FVector2D GetTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
 	{
@@ -249,12 +253,35 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 	// deliberately a low-opacity wash, not a card or a full-screen black panel.
 	BackgroundOverlay->SetColorAndOpacity(FLinearColor(0.08f, 0.07f, 0.055f, 0.22f));
 	BackgroundOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
-	RootOverlay->AddChildToOverlay(BackgroundOverlay);
+	if (UOverlaySlot* BackgroundSlot = RootOverlay->AddChildToOverlay(BackgroundOverlay))
+	{
+		// An overlay slot defaults to the child desired size in some native
+		// construction paths. The scrim must follow the viewport-sized root,
+		// not the imported texture's size.
+		BackgroundSlot->SetHorizontalAlignment(HAlign_Fill);
+		BackgroundSlot->SetVerticalAlignment(VAlign_Fill);
+		BackgroundSlot->SetPadding(FMargin(0.0f));
+	}
+
+	BackgroundBlur = WidgetTree->ConstructWidget<UBackgroundBlur>(UBackgroundBlur::StaticClass(), TEXT("RewardBackgroundBlur"));
+	BackgroundBlur->SetBlurStrength(FMath::Clamp(ScrimBlurStrength, 0.0f, 100.0f));
+	BackgroundBlur->SetApplyAlphaToBlur(false);
+	BackgroundBlur->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* BlurSlot = RootOverlay->AddChildToOverlay(BackgroundBlur))
+	{
+		BlurSlot->SetHorizontalAlignment(HAlign_Fill);
+		BlurSlot->SetVerticalAlignment(VAlign_Fill);
+		BlurSlot->SetPadding(FMargin(0.0f));
+	}
 
 	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));
 	TitleText->SetText(FText::FromString(TEXT("选择奖励")));
 	TitleText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo TitleFont = TitleText->GetFont();
+	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, StandardUiFontPath))
+	{
+		TitleFont.FontObject = StandardUiFont;
+	}
 	TitleFont.Size = 50;
 	TitleText->SetFont(TitleFont);
 	TitleText->SetColorAndOpacity(FSlateColor(FLinearColor(0.025f, 0.022f, 0.018f, 1.0f)));
@@ -301,6 +328,10 @@ void URoguelikeRewardWidget::ConfigureWidgetTree()
 	if (BackgroundOverlay)
 	{
 		BackgroundOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (BackgroundBlur)
+	{
+		BackgroundBlur->SetBlurStrength(FMath::Clamp(ScrimBlurStrength, 0.0f, 100.0f));
 	}
 	if (TitleText)
 	{
