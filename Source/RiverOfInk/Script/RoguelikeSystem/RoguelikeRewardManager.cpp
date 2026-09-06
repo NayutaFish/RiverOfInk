@@ -1103,11 +1103,11 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 			*Option.NewValue.ToString()));
 		Option.TargetSkill = FText::FromString(TEXT("E  环斩"));
 		Option.BuildType = FText::FromString(TEXT("形态构筑"));
-		// No dedicated flat art is required for this slice. Reuse the existing
-		// E skill icon until the reward-specific plane artwork is supplied.
+		// Use the dedicated build silhouette so the reward card and the build HUD
+		// present the same form instead of keeping the old base skill icon.
 		Option.RewardIcon = LoadObject<UTexture2D>(
 			nullptr,
-			TEXT("/Game/RawContent/UI/Texture/Icon_CircularSlash.Icon_CircularSlash"));
+			TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwoStageArc_Redrawn.T_UI_Build_TwoStageArc_Redrawn"));
 		return;
 	}
 
@@ -1145,52 +1145,50 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 	Option.BuildType = FText::FromString(TEXT("强化构筑"));
 
 	const TCHAR* IconPath = Option.SkillID == EPlayerSkillID::CircularSlash
-		? TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash")
-		: TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+		? TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash_Redrawn.T_UI_Build_TwinSlash_Redrawn")
+		: TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount_Redrawn.T_UI_Build_ProjectileCount_Redrawn");
 
 	switch (Option.ModifierID)
 	{
 	case ESkillModifierID::AddProjectile:
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 枚"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 枚"), Option.AfterValue));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount_Redrawn.T_UI_Build_ProjectileCount_Redrawn");
 		break;
 	case ESkillModifierID::InkGrenade:
 		Option.OldValue = FText::FromString(TEXT("普通墨矢"));
 		Option.NewValue = FText::FromString(TEXT("墨雷"));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_InkGrenade.T_UI_Build_InkGrenade");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_InkGrenade_Redrawn.T_UI_Build_InkGrenade_Redrawn");
 		break;
 	case ESkillModifierID::ExtraExplosion:
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f 次"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f 次"), Option.AfterValue));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion.T_UI_Build_ExtraExplosion");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ExtraExplosion_Redrawn.T_UI_Build_ExtraExplosion_Redrawn");
 		break;
 	case ESkillModifierID::TwinSlash:
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("每段 %.0f 次判定"), Option.AfterValue));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash.T_UI_Build_TwinSlash");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_TwinSlash_Redrawn.T_UI_Build_TwinSlash_Redrawn");
 		break;
 	case ESkillModifierID::NullRing:
 		Option.OldValue = FText::FromString(Option.BeforeValue > 0.5f ? TEXT("开启") : TEXT("关闭"));
 		Option.NewValue = FText::FromString(TEXT("开启"));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileErase.T_UI_Build_ProjectileErase");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileErase_Redrawn.T_UI_Build_ProjectileErase_Redrawn");
 		break;
 	case ESkillModifierID::RadiusUp:
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.0f"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.0f"), Option.AfterValue));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Radius.T_UI_Build_Radius");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Radius_Redrawn.T_UI_Build_Radius_Redrawn");
 		break;
 	case ESkillModifierID::CooldownDown:
 		Option.OldValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.BeforeValue));
 		Option.NewValue = FText::FromString(FString::Printf(TEXT("%.1f 秒"), Option.AfterValue));
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown.T_UI_Build_Cooldown");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_Cooldown_Redrawn.T_UI_Build_Cooldown_Redrawn");
 		break;
 	case ESkillModifierID::ProjectileHoming:
 		Option.OldValue = FText::FromString(Option.BeforeValue > 0.5f ? TEXT("开启") : TEXT("关闭"));
 		Option.NewValue = FText::FromString(TEXT("开启"));
-		// No dedicated homing artwork exists yet; keep the icon contract stable
-		// with the existing projectile-build placeholder until final art arrives.
-		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileCount.T_UI_Build_ProjectileCount");
+		IconPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Build_ProjectileHoming_Redrawn.T_UI_Build_ProjectileHoming_Redrawn");
 		break;
 	default:
 		break;

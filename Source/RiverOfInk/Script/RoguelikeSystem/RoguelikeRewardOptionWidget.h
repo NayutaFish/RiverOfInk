@@ -11,6 +11,8 @@ class UButton;
 class UImage;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UOverlay;
+class UOverlaySlot;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
@@ -72,6 +74,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Layout", meta = (ClampMin = "32.0", ClampMax = "512.0"))
 	float SmallDividerWidth = 192.0f;
 
+	/** Vertical gap between the description's bottom edge and the independent divider. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Layout", meta = (ClampMin = "0.0", ClampMax = "128.0"))
+	float DividerTextOffsetY = 30.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.1", ClampMax = "1.0"))
 	float SelectionSweepDuration = 0.63f;
 
@@ -87,6 +93,7 @@ public:
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void NativeDestruct() override;
 
 private:
@@ -95,6 +102,7 @@ private:
 	void InitializeSelectionBrushMaterial();
 	void SetSelectionBrushRevealProgress(float Progress);
 	void UpdateSelectionBrushReveal();
+	void UpdateDividerLayout();
 	void SetTextStyle(UTextBlock* TextBlock, int32 FontSize, const FLinearColor& Color) const;
 	void SetButtonStyle();
 	void SetVisualScale(float Scale);
@@ -118,6 +126,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> ButtonHitArea;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlay> OptionOverlay;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentGroup;
@@ -144,10 +155,16 @@ private:
 	TObjectPtr<UTextBlock> TextDescription;
 
 	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DescriptionSizeBox;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> HoverInkImage;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> SmallDividerImage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlaySlot> SmallDividerSlot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> ImageSelectionBrush;
@@ -177,4 +194,7 @@ private:
 	FTimerHandle SelectionHoldTimer;
 	FTimerHandle SelectionRevealTimer;
 	float SelectionRevealStartTime = 0.0f;
+	float LastDescriptionBottomY = -1.0f;
+	float LastOverlayHeight = -1.0f;
+	float LastDividerTextOffsetY = -1.0f;
 };

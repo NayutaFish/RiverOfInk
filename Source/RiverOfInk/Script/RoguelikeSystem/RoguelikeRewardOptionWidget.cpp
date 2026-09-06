@@ -15,7 +15,9 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
+#include "Engine/Font.h"
 #include "Engine/Texture2D.h"
+#include "Layout/Clipping.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MovieScene.h"
@@ -31,6 +33,7 @@ namespace
 	constexpr float OptionWidth = 270.0f;
 	constexpr float OptionHeight = 420.0f;
 	constexpr float IconSize = 112.0f;
+	constexpr float MaximumDescriptionHeight = 112.0f;
 	constexpr float SelectionBrushWidth = 76.0f;
 	constexpr float HoverScale = 1.03f;
 
@@ -38,6 +41,8 @@ namespace
 	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
+	const TCHAR* StandardUiFontPath = TEXT(
+		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
 	const FName SelectionBrushTextureParameter(TEXT("SelectionBrushTexture"));
 	const FName SelectionBrushRevealProgressParameter(TEXT("RevealProgress"));
@@ -377,6 +382,14 @@ void URoguelikeRewardOptionWidget::NativeConstruct()
 	{
 		SmallDividerImage->SetRenderOpacity(0.55f);
 	}
+	ForceLayoutPrepass();
+	UpdateDividerLayout();
+}
+
+void URoguelikeRewardOptionWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	UpdateDividerLayout();
 }
 
 void URoguelikeRewardOptionWidget::NativeDestruct()
@@ -479,6 +492,7 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 		SmallDividerImage->SetRenderOpacity(0.55f);
 	}
 	ForceLayoutPrepass();
+	UpdateDividerLayout();
 }
 
 bool URoguelikeRewardOptionWidget::PlaySelectionFeedback()
@@ -619,13 +633,14 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardOptionSize"));
 	RootSizeBox->SetWidthOverride(OptionWidth);
 	RootSizeBox->SetHeightOverride(OptionHeight);
+	RootSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
 	WidgetTree->RootWidget = RootSizeBox;
 
 	ButtonHitArea = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RewardOptionHitArea"));
 	SetButtonStyle();
 	RootSizeBox->AddChild(ButtonHitArea);
 
-	UOverlay* OptionOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RewardOptionOverlay"));
+	OptionOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RewardOptionOverlay"));
 	ButtonHitArea->SetContent(OptionOverlay);
 
 	// The hover mark sits behind the content and only becomes visible for the
@@ -652,12 +667,13 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	USizeBox* ContentSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardOptionContentSize"));
 	ContentSize->SetWidthOverride(OptionWidth);
 	ContentSize->SetHeightOverride(OptionHeight);
+	ContentSize->SetClipping(EWidgetClipping::ClipToBounds);
 	ContentGroup = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("RewardOptionContentGroup"));
 	ContentSize->SetContent(ContentGroup);
 	if (UOverlaySlot* ContentSlot = OptionOverlay->AddChildToOverlay(ContentSize))
 	{
 		ContentSlot->SetHorizontalAlignment(HAlign_Center);
-		ContentSlot->SetVerticalAlignment(VAlign_Center);
+		ContentSlot->SetVerticalAlignment(VAlign_Top);
 	}
 
 	TextRewardCategory = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardCategory"));
@@ -721,8 +737,14 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	TextDescription->SetJustification(ETextJustify::Center);
 	TextDescription->SetAutoWrapText(true);
 	TextDescription->SetWrapTextAt(230.0f);
+	TextDescription->SetTextOverflowPolicy(ETextOverflowPolicy::MultilineEllipsis);
 	SetTextStyle(TextDescription, 16, FLinearColor(0.28f, 0.28f, 0.25f, 1.0f));
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextDescription))
+	DescriptionSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardDescriptionSize"));
+	DescriptionSizeBox->SetWidthOverride(OptionWidth - 24.0f);
+	DescriptionSizeBox->SetMaxDesiredHeight(MaximumDescriptionHeight);
+	DescriptionSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
+	DescriptionSizeBox->SetContent(TextDescription);
+	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(DescriptionSizeBox))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
 		VerticalSlot->SetPadding(FMargin(12.0f, 0.0f, 12.0f, 10.0f));
@@ -742,11 +764,14 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	SmallDividerImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	SmallDividerImage->SetDesiredSizeOverride(
 		GetOptionTextureAspectSize(SmallDividerTexture, SmallDividerWidth, FVector2D(SmallDividerWidth, 18.0f)));
-	if (UOverlaySlot* DividerSlot = OptionOverlay->AddChildToOverlay(SmallDividerImage))
+	// Keep the divider independent from the content flow. Its slot is
+	// repositioned from the measured description bottom after layout.
+	SmallDividerSlot = OptionOverlay->AddChildToOverlay(SmallDividerImage);
+	if (SmallDividerSlot)
 	{
-		DividerSlot->SetHorizontalAlignment(HAlign_Center);
-		DividerSlot->SetVerticalAlignment(VAlign_Bottom);
-		DividerSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 28.0f));
+		SmallDividerSlot->SetHorizontalAlignment(HAlign_Center);
+		SmallDividerSlot->SetVerticalAlignment(VAlign_Top);
+		SmallDividerSlot->SetPadding(FMargin(0.0f));
 	}
 
 	ImageSelectionBrush = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardSelectionBrush"));
@@ -845,6 +870,46 @@ void URoguelikeRewardOptionWidget::UpdateSelectionBrushReveal()
 	}
 }
 
+void URoguelikeRewardOptionWidget::UpdateDividerLayout()
+{
+	if (!OptionOverlay || !DescriptionSizeBox || !SmallDividerImage || !SmallDividerSlot)
+	{
+		return;
+	}
+
+	const FGeometry& OverlayGeometry = OptionOverlay->GetCachedGeometry();
+	const FGeometry& DescriptionGeometry = DescriptionSizeBox->GetCachedGeometry();
+	const FVector2D OverlaySize = OverlayGeometry.GetLocalSize();
+	const FVector2D DescriptionSize = DescriptionGeometry.GetLocalSize();
+	if (OverlaySize.X <= KINDA_SMALL_NUMBER || OverlaySize.Y <= KINDA_SMALL_NUMBER
+		|| DescriptionSize.Y <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const FVector2D DescriptionBottomAbsolute = DescriptionGeometry.LocalToAbsolute(
+		FVector2D(0.0f, DescriptionSize.Y));
+	const float DescriptionBottomY = OverlayGeometry.AbsoluteToLocal(DescriptionBottomAbsolute).Y;
+	const float DividerHeight = FMath::Max(0.0f, SmallDividerImage->GetDesiredSize().Y);
+	const float DesiredDividerY = DescriptionBottomY + FMath::Max(0.0f, DividerTextOffsetY);
+	const float MaxDividerY = FMath::Max(0.0f, OverlaySize.Y - DividerHeight);
+	const float DividerY = FMath::Clamp(DesiredDividerY, 0.0f, MaxDividerY);
+
+	if (FMath::IsNearlyEqual(DescriptionBottomY, LastDescriptionBottomY, 0.05f)
+		&& FMath::IsNearlyEqual(OverlaySize.Y, LastOverlayHeight, 0.05f)
+		&& FMath::IsNearlyEqual(DividerTextOffsetY, LastDividerTextOffsetY, 0.05f))
+	{
+		return;
+	}
+
+	SmallDividerSlot->SetHorizontalAlignment(HAlign_Center);
+	SmallDividerSlot->SetVerticalAlignment(VAlign_Top);
+	SmallDividerSlot->SetPadding(FMargin(0.0f, DividerY, 0.0f, 0.0f));
+	LastDescriptionBottomY = DescriptionBottomY;
+	LastOverlayHeight = OverlaySize.Y;
+	LastDividerTextOffsetY = DividerTextOffsetY;
+}
+
 void URoguelikeRewardOptionWidget::BuildAnimations()
 {
 	if (HoverInAnimation || HoverOutAnimation || FadeOutAnimation || !RootSizeBox)
@@ -898,6 +963,10 @@ void URoguelikeRewardOptionWidget::SetTextStyle(UTextBlock* TextBlock, int32 Fon
 	}
 
 	FSlateFontInfo Font = TextBlock->GetFont();
+	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, StandardUiFontPath))
+	{
+		Font.FontObject = StandardUiFont;
+	}
 	Font.Size = FontSize;
 	TextBlock->SetFont(Font);
 	TextBlock->SetColorAndOpacity(FSlateColor(Color));
