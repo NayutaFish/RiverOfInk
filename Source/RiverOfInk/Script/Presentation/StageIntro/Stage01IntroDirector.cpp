@@ -35,6 +35,7 @@ void AStage01IntroDirector::BeginPlay()
 	IntroState = EStage01IntroState::Idle;
 	bIntroPlaying = false;
 	bTravelRequested = false;
+	InkEffectElapsed = 0.0f;
 
 	ResolveSceneReferences();
 
@@ -55,8 +56,8 @@ void AStage01IntroDirector::BeginPlay()
 void AStage01IntroDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// Sequencer may have possessed the camera when PIE is torn down. Remove
-	// the delegate before stopping, then restore the editor-authored transform
-	// so a later PIE starts from the same shot instead of an accumulated pose.
+	// the delegate before stopping, then restore the authored K0 transform so
+	// a later PIE starts from the same shot instead of an accumulated pose.
 	if (IsValid(SequencePlayer))
 	{
 		SequencePlayer->OnFinished.RemoveDynamic(this, &AStage01IntroDirector::OnSequenceFinished);
@@ -79,19 +80,12 @@ void AStage01IntroDirector::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (!bIntroPlaying || IntroState != EStage01IntroState::Playing)
+	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
 	{
 		return;
 	}
 
-	float SequenceSeconds = 0.0f;
-	if (IsValid(SequencePlayer))
-	{
-		SequenceSeconds = static_cast<float>(SequencePlayer->GetCurrentTime().AsSeconds());
-	}
-
-	UpdateIntroPresentation(SequenceSeconds);
-	(void)DeltaTime;
+	UpdateInkEffect(DeltaTime);
 }
 
 bool AStage01IntroDirector::ResolveSceneReferences()
@@ -140,8 +134,6 @@ bool AStage01IntroDirector::ResolveSceneReferences()
 		if (!bInitialCameraTransformCached)
 		{
 			InitialCameraTransform = IntroCamera->GetActorTransform();
-			FinalCameraTransform = InitialCameraTransform;
-			FinalCameraTransform.AddToTranslation(CameraPushOffset);
 			bInitialCameraTransformCached = true;
 		}
 	}
@@ -167,7 +159,9 @@ bool AStage01IntroDirector::CreateSequencePlayer()
 
 	FMovieSceneSequencePlaybackSettings PlaybackSettings;
 	PlaybackSettings.bAutoPlay = false;
-	PlaybackSettings.FinishCompletionStateOverride = EMovieSceneCompletionModeOverride::ForceRestoreState;
+	// Keep the authored K3 pose after the sequence finishes. The following ink
+	// effect is played while the camera is held on that exact final keyframe.
+	PlaybackSettings.FinishCompletionStateOverride = EMovieSceneCompletionModeOverride::ForceKeepState;
 
 	if (IsValid(SequencePlayer))
 	{
@@ -211,6 +205,7 @@ bool AStage01IntroDirector::PlayIntro()
 
 	bIntroPlaying = true;
 	bTravelRequested = false;
+	InkEffectElapsed = 0.0f;
 	IntroState = EStage01IntroState::Playing;
 	ClearIntroTimers();
 
@@ -218,49 +213,40 @@ bool AStage01IntroDirector::PlayIntro()
 	{
 		InkOverlay->SetInkProgress(0.0f);
 	}
+	// Stop every menu camera owner before selecting the authored intro camera.
+	// This must happen before the cut, otherwise the current PlayerController
+	// view (which can be seeded by the PIE/editor viewport) becomes an implicit
+	// first keyframe.
+	SetMenuCinematicState(true);
 	if (IsValid(IntroCamera))
 	{
 		ResetIntroCamera();
 		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 		{
-			// The menu uses a separate camera composition. Give the handoff enough
-			// time to read as a deliberate move into the Stage 1 establishing shot.
-			PC->SetViewTargetWithBlend(IntroCamera, FMath::Max(0.1f, CameraTransitionDuration));
+			// A hard cut establishes the authored K0. Do not blend from the
+			// current view target or the editor/PIE viewport camera.
+			PC->SetViewTarget(IntroCamera);
 		}
 	}
 
-	SetMenuCinematicState(true);
-	const float TransitionDuration = FMath::Max(0.1f, CameraTransitionDuration);
-	if (TransitionDuration > KINDA_SMALL_NUMBER && GetWorld())
-	{
-		GetWorld()->GetTimerManager().SetTimer(
-			CameraTransitionTimer,
-			this,
-			&AStage01IntroDirector::StartSequenceAfterCameraTransition,
-			TransitionDuration,
-			false);
-		UE_LOG(
-			LogTemp,
-			Log,
-			TEXT("Stage01 camera handoff started. Duration=%.2fs; sequence will start after handoff."),
-			TransitionDuration);
-	}
-	else
-	{
-		StartSequenceAfterCameraTransition();
-	}
+	StartSequenceAtAuthoredStart();
 	return true;
 }
 
-void AStage01IntroDirector::StartSequenceAfterCameraTransition()
+void AStage01IntroDirector::StartSequenceAtAuthoredStart()
 {
 	if (!bIntroPlaying || IntroState != EStage01IntroState::Playing || !IsValid(SequencePlayer))
 	{
 		return;
 	}
 
+	// Evaluate frame zero explicitly before playback. This makes the first
+	// rendered frame the sequence's authored K0 rather than the previous view
+	// target's transform.
+	SequencePlayer->SetPlaybackPosition(
+		FMovieSceneSequencePlaybackParams(0.0f, EUpdatePositionMethod::Jump));
 	SequencePlayer->Play();
-	UE_LOG(LogTemp, Log, TEXT("Stage01 intro started after camera handoff. Duration=%.2fs."), IntroDuration);
+	UE_LOG(LogTemp, Log, TEXT("Stage01 intro started at authored K0. Duration=%.2fs."), IntroDuration);
 }
 
 void AStage01IntroDirector::OnSequenceFinished()
@@ -275,17 +261,74 @@ void AStage01IntroDirector::HandleSequenceFinished()
 		return;
 	}
 
+	// The sequence owns only the camera track. Keep its authored K3 pose, then
+	// start the pollution effect as a separate phase on that locked camera.
+	StartInkEffect();
+}
+
+void AStage01IntroDirector::StartInkEffect()
+{
+	if (!bIntroPlaying || IntroState != EStage01IntroState::Playing)
+	{
+		return;
+	}
+
+	InkEffectElapsed = 0.0f;
+	IntroState = EStage01IntroState::EffectPlaying;
+	if (IsValid(InkOverlay))
+	{
+		InkOverlay->SetInkProgress(0.0f);
+	}
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Stage01 camera track finished at K3; starting ink effect. Duration=%.2fs."),
+		FMath::Max(0.0f, InkEffectDuration));
+
+	if (InkEffectDuration <= KINDA_SMALL_NUMBER)
+	{
+		FinishInkEffect();
+	}
+}
+
+void AStage01IntroDirector::UpdateInkEffect(float DeltaTime)
+{
+	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
+	{
+		return;
+	}
+
+	const float Duration = FMath::Max(KINDA_SMALL_NUMBER, InkEffectDuration);
+	InkEffectElapsed = FMath::Min(InkEffectElapsed + FMath::Max(0.0f, DeltaTime), Duration);
+	const float Progress = FMath::Clamp(InkEffectElapsed / Duration, 0.0f, 1.0f);
+
+	if (IsValid(InkOverlay))
+	{
+		InkOverlay->SetInkProgress(Progress);
+	}
+
+	if (InkEffectElapsed >= Duration)
+	{
+		FinishInkEffect();
+	}
+}
+
+void AStage01IntroDirector::FinishInkEffect()
+{
+	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
+	{
+		return;
+	}
+
 	if (IsValid(InkOverlay))
 	{
 		InkOverlay->SetInkProgress(1.0f);
 	}
-	if (IsValid(IntroCamera) && bInitialCameraTransformCached)
-	{
-		IntroCamera->SetActorTransform(FinalCameraTransform);
-	}
+
 	IntroState = EStage01IntroState::Fading;
 	StartFadeToBlack();
-	UE_LOG(LogTemp, Log, TEXT("Stage01 intro sequence finished; beginning fade before RunFlow travel."));
+	UE_LOG(LogTemp, Log, TEXT("Stage01 ink effect finished; beginning fade before RunFlow travel."));
 }
 
 void AStage01IntroDirector::StartFadeToBlack()
@@ -366,6 +409,7 @@ void AStage01IntroDirector::AbortIntro()
 	ResetIntroCamera();
 	bIntroPlaying = false;
 	bTravelRequested = false;
+	InkEffectElapsed = 0.0f;
 	IntroState = EStage01IntroState::Failed;
 
 	if (IsValid(InkOverlay))
@@ -566,38 +610,6 @@ void AStage01IntroDirector::RestoreMainMenuAfterFailure()
 	SetMenuCinematicState(false);
 }
 
-void AStage01IntroDirector::UpdateIntroPresentation(float SequenceSeconds)
-{
-	// Match the review storyboard: hold the clean establishing shot for
-	// 0.0-0.8s, reveal the first ink mark by 1.5s, then let the stain take
-	// over as the camera pushes through 2.5-4.3s.
-	float Progress = 0.0f;
-	if (SequenceSeconds >= 0.8f && SequenceSeconds < 1.5f)
-	{
-		Progress = FMath::GetMappedRangeValueClamped(
-			FVector2D(0.8f, 1.5f), FVector2D(0.0f, 0.2f), SequenceSeconds);
-	}
-	else if (SequenceSeconds >= 1.5f && SequenceSeconds < 2.5f)
-	{
-		Progress = FMath::GetMappedRangeValueClamped(
-			FVector2D(1.5f, 2.5f), FVector2D(0.2f, 0.55f), SequenceSeconds);
-	}
-	else if (SequenceSeconds >= 2.5f && SequenceSeconds < 3.8f)
-	{
-		Progress = FMath::GetMappedRangeValueClamped(
-			FVector2D(2.5f, 3.8f), FVector2D(0.55f, 0.88f), SequenceSeconds);
-	}
-	else if (SequenceSeconds >= 3.8f)
-	{
-		Progress = FMath::GetMappedRangeValueClamped(
-			FVector2D(3.8f, FMath::Max(3.8f, IntroDuration)), FVector2D(0.88f, 1.0f), SequenceSeconds);
-	}
-	if (IsValid(InkOverlay))
-	{
-		InkOverlay->SetInkProgress(Progress);
-	}
-}
-
 void AStage01IntroDirector::ResetIntroCamera()
 {
 	if (IsValid(IntroCamera) && bInitialCameraTransformCached)
@@ -610,7 +622,6 @@ void AStage01IntroDirector::ClearIntroTimers()
 {
 	if (GetWorld())
 	{
-		GetWorld()->GetTimerManager().ClearTimer(CameraTransitionTimer);
 		GetWorld()->GetTimerManager().ClearTimer(FadeTimer);
 	}
 }

@@ -19,6 +19,7 @@ enum class EStage01IntroState : uint8
 {
 	Idle,
 	Playing,
+	EffectPlaying,
 	Fading,
 	Traveling,
 	Failed
@@ -67,12 +68,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.1"))
 	float FadeDuration = 0.45f;
 
-	/** Smooth handoff from the menu camera into the Stage 1 establishing shot. */
+	/**
+	 * Deprecated. The intro no longer blends from the current PlayerController
+	 * view; it cuts to the authored K0 camera pose before playing the sequence.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.1", ClampMax = "3.0"))
 	float CameraTransitionDuration = 2.25f;
 
+	/**
+	 * Deprecated. The sequence's authored K3 pose is kept as-is; no runtime
+	 * translation is added after the camera track finishes.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Camera")
 	FVector CameraPushOffset = FVector(300.0f, 0.0f, -260.0f);
+
+	/** Duration of the pollution effect after the authored camera track ends. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.0"))
+	float InkEffectDuration = 3.5f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Intro|Runtime")
 	bool bIntroPlaying = false;
@@ -94,7 +106,7 @@ protected:
 	void HandleFadeTimer();
 
 	UFUNCTION()
-	void StartSequenceAfterCameraTransition();
+	void StartSequenceAtAuthoredStart();
 
 private:
 	bool ResolveSceneReferences();
@@ -102,7 +114,9 @@ private:
 	bool TryBindMainMenu();
 	void SetMenuCinematicState(bool bCinematic);
 	void RestoreMainMenuAfterFailure();
-	void UpdateIntroPresentation(float SequenceSeconds);
+	void UpdateInkEffect(float DeltaTime);
+	void StartInkEffect();
+	void FinishInkEffect();
 	void ResetIntroCamera();
 	void StartFadeToBlack();
 	void ClearIntroTimers();
@@ -120,10 +134,9 @@ private:
 	TArray<TObjectPtr<UButton>> BoundNewGameButtons;
 
 	FTimerHandle MainMenuBindTimer;
-	FTimerHandle CameraTransitionTimer;
 	FTimerHandle FadeTimer;
 	FTransform InitialCameraTransform;
-	FTransform FinalCameraTransform;
+	float InkEffectElapsed = 0.0f;
 	int32 MainMenuBindAttempts = 0;
 	bool bMainMenuBound = false;
 	bool bTravelRequested = false;
