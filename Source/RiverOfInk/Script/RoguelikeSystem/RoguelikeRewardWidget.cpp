@@ -24,7 +24,7 @@ namespace
 {
 	const TCHAR* DefaultTexturePath = TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture");
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
-	const TCHAR* StandardUiFontPath = TEXT(
+	const TCHAR* RewardWidgetStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
 	FVector2D GetTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
@@ -281,7 +281,7 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 	TitleText->SetText(FText::FromString(TEXT("选择奖励")));
 	TitleText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo TitleFont = TitleText->GetFont();
-	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, StandardUiFontPath))
+	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, RewardWidgetStandardUiFontPath))
 	{
 		TitleFont.FontObject = StandardUiFont;
 	}

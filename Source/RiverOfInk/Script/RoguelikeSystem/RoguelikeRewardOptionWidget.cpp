@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RoguelikeSystem/RoguelikeRewardOptionWidget.h"
 
@@ -41,7 +41,7 @@ namespace
 	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
-	const TCHAR* StandardUiFontPath = TEXT(
+	const TCHAR* RewardOptionStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
 	const FName SelectionBrushTextureParameter(TEXT("SelectionBrushTexture"));
@@ -963,7 +963,7 @@ void URoguelikeRewardOptionWidget::SetTextStyle(UTextBlock* TextBlock, int32 Fon
 	}
 
 	FSlateFontInfo Font = TextBlock->GetFont();
-	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, StandardUiFontPath))
+	if (UFont* StandardUiFont = LoadObject<UFont>(nullptr, RewardOptionStandardUiFontPath))
 	{
 		Font.FontObject = StandardUiFont;
 	}
