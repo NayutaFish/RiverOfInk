@@ -167,16 +167,12 @@ void AStage01IntroDirector::PrepareIntroCameraAtMenuStart()
 	SetIntroCameraOwnership(true);
 	ResetIntroCamera();
 
-	// Evaluate and pause the authored sequence at K0. This initializes the
-	// possessable camera track before the first menu frame without starting the
-	// opening movement until the player presses New Game.
-	if (IsValid(IntroSequence) && CreateSequencePlayer() && IsValid(SequencePlayer))
-	{
-		SequencePlayer->SetPlaybackPosition(
-			FMovieSceneSequencePlaybackParams(0.0f, EUpdatePositionMethod::Jump));
-		SequencePlayer->Pause();
-	}
-
+	// Do not create a paused LevelSequencePlayer here. A camera cut player
+	// captures the current view as pre-animated state; stopping that player at
+	// the first click can restore the PIE/editor view and make it look like the
+	// intro path starts from the editor camera. The menu only needs the authored
+	// CineCamera at K0. The sequence player is created once, after that camera
+	// has become the active runtime view target, when PlayIntro() is requested.
 	MaintainIntroCameraOwnership();
 	UE_LOG(LogTemp, Log, TEXT("Stage01 menu camera prepared on authored CineCamera K0: %s."), *IntroCamera->GetName());
 }
@@ -270,7 +266,7 @@ bool AStage01IntroDirector::PlayIntro()
 		return false;
 	}
 
-	if (!ResolveSceneReferences() || !CreateSequencePlayer())
+	if (!ResolveSceneReferences())
 	{
 		AbortIntro();
 		return false;
@@ -301,6 +297,15 @@ bool AStage01IntroDirector::PlayIntro()
 			// current view target or the editor/PIE viewport camera.
 			PC->SetViewTarget(IntroCamera);
 		}
+	}
+
+	// Create the player only after the authored camera owns the PlayerController.
+	// This prevents Sequencer's pre-animated camera state from ever being seeded
+	// by the editor/PIE viewport.
+	if (!CreateSequencePlayer())
+	{
+		AbortIntro();
+		return false;
 	}
 
 	StartSequenceAtAuthoredStart();
