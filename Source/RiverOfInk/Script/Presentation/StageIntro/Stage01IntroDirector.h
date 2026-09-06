@@ -112,6 +112,9 @@ private:
 	bool ResolveSceneReferences();
 	bool CreateSequencePlayer();
 	bool TryBindMainMenu();
+	void PrepareIntroCameraAtMenuStart();
+	void MaintainIntroCameraOwnership();
+	void SetIntroCameraOwnership(bool bOwnCamera);
 	void SetMenuCinematicState(bool bCinematic);
 	void RestoreMainMenuAfterFailure();
 	void UpdateInkEffect(float DeltaTime);
@@ -141,4 +144,5 @@ private:
 	bool bMainMenuBound = false;
 	bool bTravelRequested = false;
 	bool bInitialCameraTransformCached = false;
+	bool bIntroCameraOwnershipActive = false;
 };

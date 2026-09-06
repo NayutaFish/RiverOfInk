@@ -38,6 +38,10 @@ void AStage01IntroDirector::BeginPlay()
 	InkEffectElapsed = 0.0f;
 
 	ResolveSceneReferences();
+	// MainMenu already owns an authored CineCamera. Establish that camera before
+	// the Level Blueprint creates the menu widget, so PIE/editor viewport state
+	// can never become the first rendered frame.
+	PrepareIntroCameraAtMenuStart();
 
 	// The Level Blueprint creates WBP_MainMenu. Retry briefly so the director
 	// does not depend on BeginPlay ordering between the map and the widget.
@@ -69,6 +73,7 @@ void AStage01IntroDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
 	}
+	SetIntroCameraOwnership(false);
 	ResetIntroCamera();
 	SequencePlayer = nullptr;
 	SequenceActor = nullptr;
@@ -79,6 +84,7 @@ void AStage01IntroDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AStage01IntroDirector::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	MaintainIntroCameraOwnership();
 
 	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
 	{
@@ -150,6 +156,73 @@ bool AStage01IntroDirector::ResolveSceneReferences()
 	return bValid;
 }
 
+void AStage01IntroDirector::PrepareIntroCameraAtMenuStart()
+{
+	if (!IsValid(IntroCamera))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Stage01 intro cannot prepare the menu camera: IntroCamera is null."));
+		return;
+	}
+
+	SetIntroCameraOwnership(true);
+	ResetIntroCamera();
+
+	// Evaluate and pause the authored sequence at K0. This initializes the
+	// possessable camera track before the first menu frame without starting the
+	// opening movement until the player presses New Game.
+	if (IsValid(IntroSequence) && CreateSequencePlayer() && IsValid(SequencePlayer))
+	{
+		SequencePlayer->SetPlaybackPosition(
+			FMovieSceneSequencePlaybackParams(0.0f, EUpdatePositionMethod::Jump));
+		SequencePlayer->Pause();
+	}
+
+	MaintainIntroCameraOwnership();
+	UE_LOG(LogTemp, Log, TEXT("Stage01 menu camera prepared on authored CineCamera K0: %s."), *IntroCamera->GetName());
+}
+
+void AStage01IntroDirector::MaintainIntroCameraOwnership()
+{
+	if (!bIntroCameraOwnershipActive || !GetWorld())
+	{
+		return;
+	}
+
+	// A legacy follow-camera actor can still exist when the global GameMode is
+	// used in PIE. It must not reclaim the PlayerController during the menu or
+	// while Sequencer is moving the authored CineCamera.
+	for (TActorIterator<ACameraManager> It(GetWorld()); It; ++It)
+	{
+		It->SetActorTickEnabled(false);
+	}
+
+	if (IsValid(IntroCamera))
+	{
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+		{
+			if (PC->GetViewTarget() != IntroCamera)
+			{
+				PC->SetViewTarget(IntroCamera);
+			}
+		}
+	}
+}
+
+void AStage01IntroDirector::SetIntroCameraOwnership(bool bOwnCamera)
+{
+	bIntroCameraOwnershipActive = bOwnCamera;
+
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ACameraManager> It(GetWorld()); It; ++It)
+	{
+		It->SetActorTickEnabled(!bOwnCamera);
+	}
+}
+
 bool AStage01IntroDirector::CreateSequencePlayer()
 {
 	if (!IsValid(IntroSequence) || !GetWorld())
@@ -213,6 +286,7 @@ bool AStage01IntroDirector::PlayIntro()
 	{
 		InkOverlay->SetInkProgress(0.0f);
 	}
+	SetIntroCameraOwnership(IsValid(IntroCamera));
 	// Stop every menu camera owner before selecting the authored intro camera.
 	// This must happen before the cut, otherwise the current PlayerController
 	// view (which can be seeded by the PIE/editor viewport) becomes an implicit
@@ -560,14 +634,14 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 		}
 	}
 
-	// The menu game mode owns a follow camera actor that normally claims the
-	// PlayerController every tick. Pause that one owner while the explicit
-	// intro CineCamera is active, otherwise the camera cut is overwritten.
+	// The menu game mode may own a follow camera actor that normally claims the
+	// PlayerController every tick. Keep it disabled for the lifetime of the
+	// authored intro camera, including the idle menu before the click.
 	if (GetWorld())
 	{
 		for (TActorIterator<ACameraManager> It(GetWorld()); It; ++It)
 		{
-			It->SetActorTickEnabled(!bCinematic);
+			It->SetActorTickEnabled(!bCinematic && !bIntroCameraOwnershipActive);
 		}
 	}
 
