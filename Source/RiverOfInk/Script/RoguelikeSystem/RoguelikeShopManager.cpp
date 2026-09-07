@@ -389,13 +389,13 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		ShopItems.Add(MoveTemp(TemporaryBoost));
 	};
 
-	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("Quick Rinse"), TEXT("Restore 250 HP."), 5, 250.0f);
-	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("Pure Wash"), TEXT("Restore 500 HP."), 10, 500.0f);
-	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("Deep Cleanse"), TEXT("Restore 1000 HP."), 18, 1000.0f);
+	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 250 生命"), 5, 250.0f);
+	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 500 生命"), 10, 500.0f);
+	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 1000 生命"), 18, 1000.0f);
 	AddTemporaryOffer(
 		TEXT("shop_temp_walk_speed"),
-		TEXT("Swift Current"),
-		TEXT("Increase Walk Speed by 120 for 2 Combat Rooms."),
+		TEXT("疾流"),
+		TEXT("移速 +120 · 持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::WalkSpeed,
 		120.0f,
@@ -403,8 +403,8 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		2);
 	AddTemporaryOffer(
 		TEXT("shop_temp_defense"),
-		TEXT("Ink Shell"),
-		TEXT("Increase Defense by 15 for 2 Combat Rooms."),
+		TEXT("墨甲"),
+		TEXT("防御 +15 · 持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::Defense,
 		15.0f,
