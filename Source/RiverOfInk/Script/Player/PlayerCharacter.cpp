@@ -178,6 +178,7 @@ bool APlayerCharacter::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) co
 	OutRuntimeData.Stats.SprintSpeed = FMath::Max(
 		OutRuntimeData.Stats.WalkSpeed,
 		SprintSpeed);
+	OutRuntimeData.Stats.BaseAttackPower = FMath::Max(0.0f, BaseAttackPower);
 
 	return bCapturedAllComponents;
 }
@@ -212,6 +213,7 @@ bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 
 	WalkSpeed = FMath::Max(0.0f, InRuntimeData.Stats.WalkSpeed);
 	SprintSpeed = FMath::Max(WalkSpeed, InRuntimeData.Stats.SprintSpeed);
+	BaseAttackPower = FMath::Max(0.0f, InRuntimeData.Stats.BaseAttackPower);
 	ApplyRuntimeBuffEffects(InRuntimeData.RunBuffs);
 
 	if (HealthComponent)
@@ -1097,6 +1099,15 @@ void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 	HealthComponent->ApplyDamageContext(Context);
 }
 
+float APlayerCharacter::GetBaseAttackPower() const
+{
+	const float RuntimeAdditive = CombatEffectComponent
+		? CombatEffectComponent->GetModifierAdditiveValue(
+			RiverOfInkCombatEffectTags::Attribute_Attack_BaseAdditive)
+		: 0.0f;
+	return FMath::Max(0.0f, BaseAttackPower + RuntimeAdditive);
+}
+
 bool APlayerCharacter::IsInvincible() const
 {
 	return CombatEffectComponent && CombatEffectComponent->IsInvulnerable();
@@ -1160,6 +1171,11 @@ void APlayerCharacter::ApplyRuntimeBuffEffects(const TArray<FRunBuffData>& InRun
 
 		case EPlayerRuntimeStat::Defense:
 			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Defense_Additive;
+			Modifier.Magnitude = Buff.AdditiveValue;
+			break;
+
+		case EPlayerRuntimeStat::BaseAttackPower:
+			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Attack_BaseAdditive;
 			Modifier.Magnitude = Buff.AdditiveValue;
 			break;
 

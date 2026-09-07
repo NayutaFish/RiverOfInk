@@ -171,6 +171,7 @@ void UEnemyState_Charge::BeginCharge()
 
 			if (ChargeAttackArea)
 			{
+				ChargeAttackArea->AttackDamageProfile.AttackType = EAttackType::EnemyCharge;
 				ChargeAttackArea->Initialize(
 					FMath::Max(0.01f, Enemy->ChargeDuration),
 					0.0f,

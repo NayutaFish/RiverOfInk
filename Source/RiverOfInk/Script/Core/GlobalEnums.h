@@ -23,3 +23,25 @@ enum class EDamageType : uint8
 	Must UMETA(DisplayName = "Must"),
 	Unified UMETA(DisplayName = "Unified Damage")
 };
+
+// ====================
+// 攻击类型
+// ====================
+
+/** Identifies one damage-event source for the BaseAttackPower model. */
+UENUM(BlueprintType)
+enum class EAttackType : uint8
+{
+	Unknown UMETA(DisplayName = "Unknown"),
+	PlayerBasicAttack UMETA(DisplayName = "Player Basic Attack"),
+	PlayerRightClick UMETA(DisplayName = "Player Right Click"),
+	PlayerQProjectile UMETA(DisplayName = "Player Q Projectile"),
+	PlayerQGrenade UMETA(DisplayName = "Player Q Grenade"),
+	PlayerESlash UMETA(DisplayName = "Player E Slash"),
+	PlayerESlashStage UMETA(DisplayName = "Player E Slash Stage"),
+	PlayerETwinSlashSecond UMETA(DisplayName = "Player E Twin Slash Second"),
+	EnemyMelee UMETA(DisplayName = "Enemy Melee"),
+	EnemyRanged UMETA(DisplayName = "Enemy Ranged"),
+	EnemyCharge UMETA(DisplayName = "Enemy Charge"),
+	EnemySuicide UMETA(DisplayName = "Enemy Suicide")
+};

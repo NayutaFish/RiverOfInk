@@ -51,6 +51,10 @@ struct FPlayerRuntimeStats
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats")
 	int32 Defense = 0;
 
+	/** Actor-level damage scale used by every resolved player damage event. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats", meta = (ClampMin = "0.0"))
+	float BaseAttackPower = 100.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player Runtime|Stats", meta = (DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 PhysicalResistance = 0;
 

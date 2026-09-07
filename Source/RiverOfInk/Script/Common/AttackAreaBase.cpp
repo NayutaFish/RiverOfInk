@@ -3,6 +3,7 @@
 #include "Common/AttackAreaBase.h"
 #include "RiverOfInk.h"
 #include "Core/GlobalStructs.h"
+#include "Core/CombatDamageCalculator.h"
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Components/StaticMeshComponent.h"
@@ -252,6 +253,7 @@ void AAttackAreaBase::Disappear(EAttackAreaDisappearReason Reason)
 
 void AAttackAreaBase::Initialize(float InLifeTime, float InSpeed, bool InIsMeleeAttack, AActor* InFollowTarget)
 {
+	bAttackDamageResolved = false;
 	ProjectileSpec = FProjectileSpec();
 	ProjectileSpec.LifeTime = InLifeTime;
 	ProjectileSpec.ProjectileSpeed = InSpeed;
@@ -265,10 +267,44 @@ void AAttackAreaBase::Initialize(float InLifeTime, float InSpeed, bool InIsMelee
 	{
 		FollowOffset = GetActorLocation() - FollowTarget->GetActorLocation();
 	}
+
+	ResolveDamageFromSource();
+}
+
+void AAttackAreaBase::ApplyAttackMultiplierScale(float InMultiplier)
+{
+	const float SafeMultiplier = FMath::IsFinite(InMultiplier)
+		? FMath::Max(0.0f, InMultiplier)
+		: 1.0f;
+	if (bAttackDamageResolved)
+	{
+		DamageInfo.DamageValue *= SafeMultiplier;
+		if (DamageInfo.HardDamageValue > KINDA_SMALL_NUMBER)
+		{
+			DamageInfo.HardDamageValue *= SafeMultiplier;
+		}
+		return;
+	}
+
+	if (AttackDamageProfile.bDeriveMultiplierFromLegacyDamage)
+	{
+		DamageInfo.DamageValue *= SafeMultiplier;
+	}
+	else
+	{
+		AttackDamageProfile.AttackMultiplier *= SafeMultiplier;
+	}
+
+	if (DamageInfo.HardDamageValue > KINDA_SMALL_NUMBER)
+	{
+		DamageInfo.HardDamageValue *= SafeMultiplier;
+	}
+	bAttackDamageResolved = false;
 }
 
 void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSpec)
 {
+	bAttackDamageResolved = false;
 	ProjectileSpec = InProjectileSpec;
 	ProjectileSpec.LifeTime = FMath::Max(0.01f, InProjectileSpec.LifeTime);
 	ProjectileSpec.ProjectileSpeed = FMath::Max(0.0f, InProjectileSpec.ProjectileSpeed);
@@ -297,6 +333,7 @@ void AAttackAreaBase::InitializeProjectile(const FProjectileSpec& InProjectileSp
 	bIsMeleeAttack = false;
 	FollowTarget = nullptr;
 	FollowOffset = FVector::ZeroVector;
+	ResolveDamageFromSource();
 }
 
 void AAttackAreaBase::UpdateHoming(float DeltaTime)
@@ -379,6 +416,8 @@ bool AAttackAreaBase::NullifyEnemyProjectile()
 
 void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 {
+	ResolveDamageFromSource();
+
 	// 攻击者由代码填充（施放者），不依赖编辑器配置
 	DamageInfo.Attacker = GetOwner();
 
@@ -410,6 +449,40 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	{
 		Player->TakeDamage(DamageInfo);
 	}
+}
+
+void AAttackAreaBase::ResolveDamageFromSource()
+{
+	if (bAttackDamageResolved)
+	{
+		return;
+	}
+
+	const float LegacyDamageValue = DamageInfo.DamageValue;
+	const float ResolvedDamage = RiverOfInkDamage::ResolveAttackDamage(
+		GetOwner(),
+		AttackDamageProfile,
+		LegacyDamageValue);
+	DamageInfo.DamageValue = ResolvedDamage;
+	bAttackDamageResolved = true;
+
+	const float CurrentBase = RiverOfInkDamage::ResolveBaseAttackPower(GetOwner());
+	const float DefaultBase = RiverOfInkDamage::ResolveDefaultBaseAttackPower(GetOwner());
+	const float EffectiveMultiplier = AttackDamageProfile.bDeriveMultiplierFromLegacyDamage
+		? (DefaultBase > KINDA_SMALL_NUMBER ? LegacyDamageValue / DefaultBase : 0.0f)
+		: AttackDamageProfile.AttackMultiplier;
+	UE_LOG(
+		LogRiverOfInk,
+		Verbose,
+		TEXT("Attack damage resolved: Area=%s Source=%s Type=%s Base=%.1f Multiplier=%.4f Legacy=%.1f Resolved=%.1f LegacyMode=%s."),
+		*GetName(),
+		GetOwner() ? *GetOwner()->GetName() : TEXT("None"),
+		*UEnum::GetValueAsString(AttackDamageProfile.AttackType),
+		CurrentBase,
+		EffectiveMultiplier,
+		LegacyDamageValue,
+		ResolvedDamage,
+		AttackDamageProfile.bDeriveMultiplierFromLegacyDamage ? TEXT("true") : TEXT("false"));
 }
 
 bool AAttackAreaBase::IsTargetWithinFanHitbox(const AActor* Target) const

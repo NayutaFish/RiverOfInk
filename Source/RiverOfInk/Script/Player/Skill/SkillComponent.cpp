@@ -5,6 +5,7 @@
 #include "Common/AttackAreaBase.h"
 #include "Common/CombatEffectTags.h"
 #include "Core/Audio/AudioManager.h"
+#include "Core/CombatDamageCalculator.h"
 #include "Engine/World.h"
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "NiagaraComponent.h"
@@ -828,7 +829,14 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 		Spec.ProjectileLifeTime = TripleProjectileLifeTime;
 		Spec.FuseTime = ThrownGrenadeFuseTime;
 		Spec.ExplosionRadius = ThrownGrenadeExplosionRadius;
-		Spec.ExplosionDamage = ThrownGrenadeDamage;
+		Spec.ExplosionDamageProfile.AttackType = EAttackType::PlayerQGrenade;
+		Spec.ExplosionDamageProfile.AttackMultiplier = FMath::Max(0.0f, ThrownGrenadeAttackMultiplier);
+		Spec.ExplosionDamageProfile.bUseBaseAttackPower = true;
+		Spec.ExplosionDamageProfile.bDeriveMultiplierFromLegacyDamage = false;
+		Spec.ExplosionDamage = RiverOfInkDamage::ResolveAttackDamage(
+			OwnerCharacter,
+			Spec.ExplosionDamageProfile,
+			ThrownGrenadeDamage);
 		Spec.CollisionRadius = ThrownGrenadeCollisionRadius;
 		Spec.ExplosionCount = bHasGrenadePayload
 			? 1 + FMath::Min(1, GetModifierStack(SkillID, ESkillModifierID::ExtraExplosion))
@@ -872,7 +880,14 @@ FResolvedSkillSpec USkillComponent::ResolveSkillSpec(EPlayerSkillID SkillID) con
 			: 1.0f;
 		Spec.HitCount = Spec.StageCount * Spec.JudgmentsPerStage;
 		Spec.Radius = GetCircularSlashRadius();
-		Spec.Damage = CircularSlashDamage;
+		Spec.DamageProfile.AttackType = EAttackType::PlayerESlash;
+		Spec.DamageProfile.AttackMultiplier = FMath::Max(0.0f, CircularSlashAttackMultiplier);
+		Spec.DamageProfile.bUseBaseAttackPower = true;
+		Spec.DamageProfile.bDeriveMultiplierFromLegacyDamage = false;
+		Spec.Damage = RiverOfInkDamage::ResolveAttackDamage(
+			OwnerCharacter,
+			Spec.DamageProfile,
+			CircularSlashDamage);
 		Spec.StageDamageMultiplier = bTwoStageArc
 			? FMath::Max(0.0f, TwoStageArcStageDamageMultiplier)
 			: 1.0f;
@@ -1740,6 +1755,7 @@ bool USkillComponent::SpawnProjectile(
 		return false;
 	}
 
+	Projectile->AttackDamageProfile.AttackType = EAttackType::PlayerQProjectile;
 	Projectile->InitializeProjectile(ProjectileSpec);
 	Projectile->bDetectObstacle = true;
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);

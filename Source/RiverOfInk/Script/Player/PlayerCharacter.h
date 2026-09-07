@@ -306,6 +306,13 @@ private:
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void TakeDamage(const FTakeDamageInfo& InInfo);
 
+	/** Actor-level damage scale used by every new player damage event. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Combat|Stats", meta = (ClampMin = "0.0"))
+	float BaseAttackPower = 100.0f;
+
+	UFUNCTION(BlueprintPure, Category = "Player|Combat|Stats")
+	float GetBaseAttackPower() const;
+
 	/** 是否处于战斗外无敌；战斗开始时解除，战斗结束时启用，受击时若为真则忽略伤害 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|State")
 	bool isInBattleInvincible = true;

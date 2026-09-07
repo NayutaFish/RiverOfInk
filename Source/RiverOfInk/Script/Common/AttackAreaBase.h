@@ -54,6 +54,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	FTakeDamageInfo DamageInfo;
 
+	/** Per-damage-event type and BaseAttackPower conversion profile. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage")
+	FAttackDamageProfile AttackDamageProfile;
+
 	/** 只伤害敌对目标？
 	 *  true  → 玩家打敌人，敌人打玩家（不会误伤自己人）
 	 *  false → 不分敌我，碰到谁伤谁 */
@@ -115,6 +119,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void Initialize(float InLifeTime, float InSpeed, bool InIsMeleeAttack = false, AActor* InFollowTarget = nullptr);
 
+	/** Scale this attack event before Initialize resolves its damage snapshot. */
+	UFUNCTION(BlueprintCallable, Category = "Attack|Damage")
+	void ApplyAttackMultiplierScale(float InMultiplier);
+
 	/** Initialize a moving projectile from the shared homing-capable spec. */
 	UFUNCTION(BlueprintCallable, Category = "Attack|Projectile")
 	void InitializeProjectile(const FProjectileSpec& InProjectileSpec);
@@ -132,6 +140,9 @@ protected:
 
 	/** 绘制与真实扇形判定一致的边界线。 */
 	void DrawDebugFanHitbox() const;
+
+	/** Resolve BaseAttackPower and the attack profile into DamageInfo once. */
+	void ResolveDamageFromSource();
 
 	UFUNCTION(BlueprintNativeEvent, Category = "Attack")
 	void ApplyDamage(AActor* Target);
@@ -170,4 +181,7 @@ private:
 	/** 使用 UE 内置 WireframeMaterial 的可视化球体；DrawDebugSphere 负责颜色和高亮。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug|Hitbox", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMeshComponent> DebugHitboxMesh;
+
+	/** Prevent a persistent melee area from resolving its attack more than once. */
+	bool bAttackDamageResolved = false;
 };

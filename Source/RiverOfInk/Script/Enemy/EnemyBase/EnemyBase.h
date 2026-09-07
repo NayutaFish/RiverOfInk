@@ -130,6 +130,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "0"))
 	int32 Defense = 0;
 
+	/** Actor-level damage scale used by every enemy damage event. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "0.0"))
+	float BaseAttackPower = 30.0f;
+
 	/** Legacy physical resistance retained for old Blueprint assets. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Legacy", meta = (ClampMin = "0", DeprecatedProperty, DeprecationMessage = "Use Defense."))
 	int32 PhysicalResistance = 0;
@@ -348,6 +352,24 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Enemy|Stats")
 	float GetCurrentHealth() const { return CurrentHealth; }
+
+	UFUNCTION(BlueprintPure, Category = "Enemy|Stats")
+	float GetBaseAttackPower() const
+	{
+		// Existing Blueprints may only set EnemyRank. Preserve the chosen rank
+		// defaults while allowing an explicit custom value.
+		if (EnemyRank == EEnemyRank::Elite
+			&& FMath::IsNearlyEqual(BaseAttackPower, 30.0f))
+		{
+			return 45.0f;
+		}
+		if (EnemyRank == EEnemyRank::Boss
+			&& FMath::IsNearlyEqual(BaseAttackPower, 30.0f))
+		{
+			return 70.0f;
+		}
+		return FMath::Max(0.0f, BaseAttackPower);
+	}
 
 	UFUNCTION(BlueprintPure, Category = "Enemy|Identity")
 	EEnemyRank GetEnemyRank() const { return EnemyRank; }

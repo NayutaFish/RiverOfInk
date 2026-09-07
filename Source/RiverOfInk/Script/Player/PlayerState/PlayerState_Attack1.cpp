@@ -327,8 +327,7 @@ void UPlayerState_Attack1::BeginActivePhase()
 						ActiveAttackArea->HasActorBegunPlay());
 				}
 
-				ActiveAttackArea->DamageInfo.DamageValue *= ComboSecondDamageMultiplier;
-				ActiveAttackArea->DamageInfo.HardDamageValue *= ComboSecondDamageMultiplier;
+				ActiveAttackArea->ApplyAttackMultiplierScale(ComboSecondDamageMultiplier);
 			}
 
 			// 调试球体直接读取 CollisionSphere，确保观察到的描线与真实 Hitbox 一致。
