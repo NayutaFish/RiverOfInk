@@ -16,6 +16,7 @@ AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
 	// Attack2 is a moving projectile. Its hitbox is the inherited sphere, not a player-centered fan.
 	bUseFanHitbox = false;
 	bIsMeleeAttack = false;
+	AttackDamageProfile.AttackType = EAttackType::PlayerRightClick;
 	bFollowTargetRotation = false;
 	bDetectObstacle = true;
 	LifeTime = 1.5f;

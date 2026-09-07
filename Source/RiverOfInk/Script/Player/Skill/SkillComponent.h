@@ -237,6 +237,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "0.0"))
 	float CircularSlashDamage = 120.0f;
 
+	/** BaseAttackPower multiplier applied to each CircularSlash judgment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash|Damage", meta = (ClampMin = "0.0"))
+	float CircularSlashAttackMultiplier = 1.2f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|CircularSlash", meta = (ClampMin = "1.0"))
 	float CircularSlashRadius = 260.0f;
 
@@ -300,6 +304,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0"))
 	float ThrownGrenadeDamage = 120.0f;
+
+	/** BaseAttackPower multiplier applied to each grenade explosion. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Damage", meta = (ClampMin = "0.0"))
+	float ThrownGrenadeAttackMultiplier = 1.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade", meta = (ClampMin = "0.0", Units = "s"))
 	float ThrownGrenadeExplosionDelay = 0.12f;

@@ -10,6 +10,32 @@
 class AActor;
 
 /**
+ * Damage configuration owned by one attack type/damage event.
+ *
+ * Existing attack-area Blueprints predate this profile and still author a
+ * direct DamageValue. bDeriveMultiplierFromLegacyDamage keeps those assets
+ * balance-compatible while they are migrated to an explicit multiplier.
+ */
+USTRUCT(BlueprintType)
+struct FAttackDamageProfile
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage")
+	EAttackType AttackType = EAttackType::Unknown;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage", meta = (ClampMin = "0.0"))
+	float AttackMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage")
+	bool bUseBaseAttackPower = true;
+
+	/** Temporary migration path for old Blueprint DamageInfo values. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage|Migration")
+	bool bDeriveMultiplierFromLegacyDamage = true;
+};
+
+/**
  * 全局玩法结构体
  * 所有与 GamePlay 相关的跨模块结构体统一在此定义。
  */

@@ -117,7 +117,7 @@ void AEnemyBase::BeginPlay()
 		{
 			WidgetClass = UEnemyHealthWidget::StaticClass();
 		}
-		const FVector2D WidgetDrawSize = EnemyRank == EEnemyRank::Elite
+		const FVector2D WidgetDrawSize = EnemyRank != EEnemyRank::Normal
 			? EliteHealthWidgetDrawSize
 			: HealthWidgetDrawSize;
 		HealthWidgetComponent->SetDrawSize(WidgetDrawSize);

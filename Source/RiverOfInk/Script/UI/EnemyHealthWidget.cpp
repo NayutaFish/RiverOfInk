@@ -111,9 +111,9 @@ void UEnemyHealthWidget::InitializeForEnemy(AEnemyBase* InEnemy)
 		TEXT("Enemy health widget visuals: Enemy=%s Rank=%d Size=(%.0f,%.0f) Frame=%s Current=(%.3f,%.3f,%.3f) Empty=(%.3f,%.3f,%.3f) RecentDamage=(%.3f,%.3f,%.3f)."),
 		*GetNameSafe(ObservedEnemy),
 		static_cast<int32>(EnemyRank),
-		EnemyRank == EEnemyRank::Elite ? EliteWidgetSize.X : NormalWidgetSize.X,
-		EnemyRank == EEnemyRank::Elite ? EliteWidgetSize.Y : NormalWidgetSize.Y,
-		*GetNameSafe(EnemyRank == EEnemyRank::Elite ? EliteFrameTexture.Get() : NormalFrameTexture.Get()),
+		EnemyRank != EEnemyRank::Normal ? EliteWidgetSize.X : NormalWidgetSize.X,
+		EnemyRank != EEnemyRank::Normal ? EliteWidgetSize.Y : NormalWidgetSize.Y,
+		*GetNameSafe(EnemyRank != EEnemyRank::Normal ? EliteFrameTexture.Get() : NormalFrameTexture.Get()),
 		CurrentHealthColor.R,
 		CurrentHealthColor.G,
 		CurrentHealthColor.B,
@@ -233,7 +233,7 @@ void UEnemyHealthWidget::ConfigureWidgetTree()
 {
 	ApplyRankLayout();
 
-	const FMargin& BarInset = EnemyRank == EEnemyRank::Elite
+	const FMargin& BarInset = EnemyRank != EEnemyRank::Normal
 		? EliteBarInset
 		: NormalBarInset;
 	if (UOverlaySlot* HealthBarLayerSlot = Cast<UOverlaySlot>(HealthBarLayer ? HealthBarLayer->Slot : nullptr))
@@ -263,7 +263,7 @@ void UEnemyHealthWidget::ConfigureWidgetTree()
 
 	if (Image_HealthFrame)
 	{
-		UTexture2D* FrameTexture = EnemyRank == EEnemyRank::Elite
+		UTexture2D* FrameTexture = EnemyRank != EEnemyRank::Normal
 			? EliteFrameTexture.Get()
 			: NormalFrameTexture.Get();
 		if (FrameTexture)
@@ -328,7 +328,7 @@ void UEnemyHealthWidget::ApplyRankLayout()
 		return;
 	}
 
-	const FVector2D WidgetSize = EnemyRank == EEnemyRank::Elite
+	const FVector2D WidgetSize = EnemyRank != EEnemyRank::Normal
 		? EliteWidgetSize
 		: NormalWidgetSize;
 	HealthSizeBox->SetWidthOverride(WidgetSize.X);

@@ -4,9 +4,86 @@
 
 #include "Common/CombatEffectComponent.h"
 #include "Core/CombatDamageSettings.h"
+#include "Enemy/EnemyBase/EnemyBase.h"
+#include "Player/PlayerCharacter.h"
 
 namespace RiverOfInkDamage
 {
+	float ResolveBaseAttackPower(const AActor* SourceActor)
+	{
+		if (const APlayerCharacter* Player = Cast<APlayerCharacter>(SourceActor))
+		{
+			return Player->GetBaseAttackPower();
+		}
+
+		if (const AEnemyBase* Enemy = Cast<AEnemyBase>(SourceActor))
+		{
+			return Enemy->GetBaseAttackPower();
+		}
+
+		return 0.0f;
+	}
+
+	float ResolveDefaultBaseAttackPower(const AActor* SourceActor)
+	{
+		if (const APlayerCharacter* Player = Cast<APlayerCharacter>(SourceActor))
+		{
+			const APlayerCharacter* DefaultPlayer =
+				Player->GetClass()->GetDefaultObject<APlayerCharacter>();
+			return DefaultPlayer ? DefaultPlayer->GetBaseAttackPower() : 0.0f;
+		}
+
+		if (const AEnemyBase* Enemy = Cast<AEnemyBase>(SourceActor))
+		{
+			const AEnemyBase* DefaultEnemy =
+				Enemy->GetClass()->GetDefaultObject<AEnemyBase>();
+			return DefaultEnemy ? DefaultEnemy->GetBaseAttackPower() : 0.0f;
+		}
+
+		return 0.0f;
+	}
+
+	float ResolveAttackDamage(
+		const AActor* SourceActor,
+		const FAttackDamageProfile& DamageProfile,
+		float LegacyDamageValue)
+	{
+		const float SafeLegacyDamage = FMath::IsFinite(LegacyDamageValue)
+			? FMath::Max(0.0f, LegacyDamageValue)
+			: 0.0f;
+		if (!DamageProfile.bUseBaseAttackPower)
+		{
+			return SafeLegacyDamage;
+		}
+
+		const float CurrentBaseAttackPower = ResolveBaseAttackPower(SourceActor);
+		if (!FMath::IsFinite(CurrentBaseAttackPower)
+			|| CurrentBaseAttackPower <= KINDA_SMALL_NUMBER)
+		{
+			return SafeLegacyDamage;
+		}
+
+		float AttackMultiplier = DamageProfile.AttackMultiplier;
+		if (DamageProfile.bDeriveMultiplierFromLegacyDamage)
+		{
+			const float DefaultBaseAttackPower = ResolveDefaultBaseAttackPower(SourceActor);
+			if (!FMath::IsFinite(DefaultBaseAttackPower)
+				|| DefaultBaseAttackPower <= KINDA_SMALL_NUMBER)
+			{
+				return SafeLegacyDamage;
+			}
+
+			AttackMultiplier = SafeLegacyDamage / DefaultBaseAttackPower;
+		}
+
+		if (!FMath::IsFinite(AttackMultiplier))
+		{
+			return SafeLegacyDamage;
+		}
+
+		return FMath::Max(0.0f, CurrentBaseAttackPower * AttackMultiplier);
+	}
+
 	int32 CalculateFinalDamage(float Damage, float Defense)
 	{
 		const UCombatDamageSettings* Settings = GetDefault<UCombatDamageSettings>();

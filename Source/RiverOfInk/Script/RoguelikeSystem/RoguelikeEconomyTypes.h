@@ -32,7 +32,9 @@ enum class EPlayerRuntimeStat : uint8
 	MaxHealth UMETA(DisplayName = "Max Health"),
 	Defense UMETA(DisplayName = "Defense"),
 	WalkSpeed UMETA(DisplayName = "Walk Speed"),
-	SprintSpeed UMETA(DisplayName = "Sprint Speed")
+	SprintSpeed UMETA(DisplayName = "Sprint Speed"),
+	/** Appended to preserve serialized values of the existing runtime stats. */
+	BaseAttackPower UMETA(DisplayName = "Base Attack Power")
 };
 
 /** Value data owned by the GameInstance-level economy subsystem. */

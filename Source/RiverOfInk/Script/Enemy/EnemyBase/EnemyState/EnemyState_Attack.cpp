@@ -121,6 +121,9 @@ void UEnemyState_Attack::ExecuteAttack()
 
 	if (AAttackAreaBase* AttackArea = SpawnedAttackArea)
 	{
+		AttackArea->AttackDamageProfile.AttackType = Enemy->bAttackAreaIsMelee
+			? EAttackType::EnemyMelee
+			: EAttackType::EnemyRanged;
 		AttackArea->Initialize(Enemy->AttackAreaLifeTime, Enemy->AttackAreaSpeed,
 			Enemy->bAttackAreaIsMelee, FollowTarget);
 		AttackArea->bDamageOpponentOnly = true;
