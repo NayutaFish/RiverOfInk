@@ -178,6 +178,7 @@ bool APlayerCharacter::CaptureRuntimeData(FPlayerRuntimeData& OutRuntimeData) co
 	OutRuntimeData.Stats.SprintSpeed = FMath::Max(
 		OutRuntimeData.Stats.WalkSpeed,
 		SprintSpeed);
+	OutRuntimeData.Stats.BaseAttackPower = FMath::Max(0.0f, BaseAttackPower);
 
 	return bCapturedAllComponents;
 }
@@ -212,6 +213,7 @@ bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 
 	WalkSpeed = FMath::Max(0.0f, InRuntimeData.Stats.WalkSpeed);
 	SprintSpeed = FMath::Max(WalkSpeed, InRuntimeData.Stats.SprintSpeed);
+	BaseAttackPower = FMath::Max(0.0f, InRuntimeData.Stats.BaseAttackPower);
 	ApplyRuntimeBuffEffects(InRuntimeData.RunBuffs);
 
 	if (HealthComponent)
@@ -988,13 +990,27 @@ void APlayerCharacter::SetActionState(EHikariActionState NewState)
 
 void APlayerCharacter::BeginAttack(UAnimMontage* InMontage, bool bRestartMontage)
 {
-	if (!bRestartMontage && !CanStartAction()) return;
-UAnimMontage* MontageToPlay = InMontage ? InMontage : DefaultAttackMontage.Get();
-if (!MontageToPlay)
-{
-UE_LOG(LogTemp, Warning, TEXT("BeginAttack has no montage (InMontage and DefaultAttackMontage are both null)."));
-return;
+	BeginAttackFromSection(InMontage, NAME_None, bRestartMontage);
 }
+
+void APlayerCharacter::BeginAttackFromSection(UAnimMontage* InMontage, FName StartSectionName, bool bRestartMontage)
+{
+	if (!bRestartMontage && !CanStartAction()) return;
+
+	UAnimMontage* MontageToPlay = InMontage ? InMontage : DefaultAttackMontage.Get();
+	if (!MontageToPlay)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BeginAttack has no montage (InMontage and DefaultAttackMontage are both null)."));
+		return;
+	}
+
+	// 显式指定起始 Section 时先校验其存在；不存在则报错并放弃本次播放，避免错误配置被掩盖。
+	if (StartSectionName != NAME_None && MontageToPlay->GetSectionIndex(StartSectionName) == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BeginAttackFromSection: Section '%s' not found in montage '%s'; attack not played."),
+			*StartSectionName.ToString(), *MontageToPlay->GetName());
+		return;
+	}
 
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (!AnimInstance) return;
@@ -1009,7 +1025,7 @@ return;
 
 	SetActionState(EHikariActionState::Attacking);
 
-	float MontageLength = PlayAnimMontage(MontageToPlay);
+	float MontageLength = PlayAnimMontage(MontageToPlay, 1.0f, StartSectionName);
 	if (MontageLength <= 0.0f)
 	{
 		SetActionState(EHikariActionState::Normal);
@@ -1083,6 +1099,15 @@ void APlayerCharacter::TakeDamage(const FTakeDamageInfo& InInfo)
 	HealthComponent->ApplyDamageContext(Context);
 }
 
+float APlayerCharacter::GetBaseAttackPower() const
+{
+	const float RuntimeAdditive = CombatEffectComponent
+		? CombatEffectComponent->GetModifierAdditiveValue(
+			RiverOfInkCombatEffectTags::Attribute_Attack_BaseAdditive)
+		: 0.0f;
+	return FMath::Max(0.0f, BaseAttackPower + RuntimeAdditive);
+}
+
 bool APlayerCharacter::IsInvincible() const
 {
 	return CombatEffectComponent && CombatEffectComponent->IsInvulnerable();
@@ -1146,6 +1171,11 @@ void APlayerCharacter::ApplyRuntimeBuffEffects(const TArray<FRunBuffData>& InRun
 
 		case EPlayerRuntimeStat::Defense:
 			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Defense_Additive;
+			Modifier.Magnitude = Buff.AdditiveValue;
+			break;
+
+		case EPlayerRuntimeStat::BaseAttackPower:
+			Modifier.AttributeTag = RiverOfInkCombatEffectTags::Attribute_Attack_BaseAdditive;
 			Modifier.Magnitude = Buff.AdditiveValue;
 			break;
 

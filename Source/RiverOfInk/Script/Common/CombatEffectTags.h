@@ -24,5 +24,6 @@ namespace RiverOfInkCombatEffectTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Control_ResistMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Defense_Additive);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Health_MaxAdditive);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attribute_Attack_BaseAdditive);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Build_Projectile_Homing);
 }

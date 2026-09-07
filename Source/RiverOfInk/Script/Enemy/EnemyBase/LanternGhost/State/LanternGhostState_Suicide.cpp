@@ -69,6 +69,7 @@ void ULanternGhostState_Suicide::Detonate()
 				Explosion->bDamageOpponentOnly = true;
 				Explosion->bDetectObstacle = false;
 				Explosion->bIsEnemyProjectile = false;
+				Explosion->AttackDamageProfile.AttackType = EAttackType::EnemySuicide;
 				Explosion->Initialize(ExplosionLifetime, 0.0f, true, nullptr);
 				UGameplayStatics::FinishSpawningActor(Explosion, SpawnTransform);
 

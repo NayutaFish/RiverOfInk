@@ -41,6 +41,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Animation")
 	TObjectPtr<UAnimMontage> AttackMontage;
 
+	/** 该段普攻在攻击蒙太奇内起始播放的 Section 名称；为空（None）时从蒙太奇开头播放。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Animation")
+	FName AttackSectionName = NAME_None;
+
 	UFUNCTION(BlueprintPure, Category = "Attack|Stage")
 	int32 GetAttackStage() const { return attackStage; }
 
@@ -89,7 +93,7 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Timing", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
 	float AttackRecoveryTime = 0.14f;
 
-	/** 左键输入在攻击结束前的有效缓存窗口。 */
+	/** 已废弃：连击缓存改为“保留到当前段衔接点”后不再按此超时清除；保留仅为兼容旧资产，可忽略。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Combo", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
 	float AttackInputBufferWindow = 0.18f;
 
@@ -172,6 +176,10 @@ private:
 
 	bool bHadMoveInput = false;
 	bool bAttackQueued = false;
+
+	/** 本次退出是否为普攻正常完成（正常收尾或向下一段衔接）；中断退出（受击/闪避）为 false。 */
+	bool bCompletedNormally = false;
+
 	float AttackInputBufferAge = -1.0f;
 	float MoveInputX = 0.0f;
 	float MoveInputY = 0.0f;

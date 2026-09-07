@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/GlobalStructs.h"
 #include "Common/ProjectileTypes.h"
 #include "PlayerSkillTypes.generated.h"
 
@@ -139,6 +140,10 @@ struct FResolvedSkillSpec
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q")
 	float ExplosionDamage = 0.0f;
 
+	/** Per-explosion BaseAttackPower profile captured for this cast. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q|Damage")
+	FAttackDamageProfile ExplosionDamageProfile;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|Q")
 	float CollisionRadius = 0.0f;
 
@@ -199,6 +204,10 @@ struct FResolvedSkillSpec
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")
 	float Damage = 0.0f;
+
+	/** Per-judgment BaseAttackPower profile captured for this cast. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E|Damage")
+	FAttackDamageProfile DamageProfile;
 
 	/** Damage multiplier applied to every judgment in a stage. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|Resolved|E")

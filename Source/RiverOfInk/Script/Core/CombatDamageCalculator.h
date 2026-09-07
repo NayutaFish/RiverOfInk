@@ -9,6 +9,18 @@ class UCombatEffectComponent;
 
 namespace RiverOfInkDamage
 {
+	/** Read the current BaseAttackPower from a supported damage source. */
+	RIVEROFINK_API float ResolveBaseAttackPower(const AActor* SourceActor);
+
+	/** Read the source class default BaseAttackPower for legacy conversion. */
+	RIVEROFINK_API float ResolveDefaultBaseAttackPower(const AActor* SourceActor);
+
+	/** Resolve one damage event before effects and target Defense are applied. */
+	RIVEROFINK_API float ResolveAttackDamage(
+		const AActor* SourceActor,
+		const FAttackDamageProfile& DamageProfile,
+		float LegacyDamageValue);
+
 	/**
 	 * Calculates final damage for the current single-type test model.
 	 *

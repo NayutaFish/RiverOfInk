@@ -8,6 +8,7 @@
 #include "RoguelikeRewardWidget.generated.h"
 
 class ARoguelikeRewardManager;
+class UBackgroundBlur;
 class UCanvasPanel;
 class UHorizontalBox;
 class UImage;
@@ -57,6 +58,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> TitleDividerTexture;
 
+	/** Full-screen background blur strength used to keep the gameplay scene behind the reward text subdued. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float ScrimBlurStrength = 14.0f;
+
 	/** Duration for the selected card's fixed brush to reveal from top to bottom. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float SelectionSweepDuration = 0.63f;
@@ -93,6 +98,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> BackgroundOverlay;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBackgroundBlur> BackgroundBlur;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;

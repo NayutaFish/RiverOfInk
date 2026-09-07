@@ -21,5 +21,7 @@ UENUM(BlueprintType)
 enum class EEnemyRank : uint8
 {
 	Normal UMETA(DisplayName = "Normal"),
-	Elite UMETA(DisplayName = "Elite")
+	Elite UMETA(DisplayName = "Elite"),
+	/** Appended to preserve serialized values of Normal and Elite. */
+	Boss UMETA(DisplayName = "Boss")
 };

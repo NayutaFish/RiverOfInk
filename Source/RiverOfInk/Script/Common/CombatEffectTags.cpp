@@ -21,5 +21,6 @@ namespace RiverOfInkCombatEffectTags
 	UE_DEFINE_GAMEPLAY_TAG(Attribute_Control_ResistMultiplier, "Attribute.Control.ResistMultiplier");
 	UE_DEFINE_GAMEPLAY_TAG(Attribute_Defense_Additive, "Attribute.Defense.Additive");
 	UE_DEFINE_GAMEPLAY_TAG(Attribute_Health_MaxAdditive, "Attribute.Health.MaxAdditive");
+	UE_DEFINE_GAMEPLAY_TAG(Attribute_Attack_BaseAdditive, "Attribute.Attack.BaseAdditive");
 	UE_DEFINE_GAMEPLAY_TAG(Build_Projectile_Homing, "Build.Projectile.Homing");
 }
