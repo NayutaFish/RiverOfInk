@@ -163,7 +163,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopTitle"));
-	Title->SetText(FText::FromString(TEXT("INK EXCHANGE")));
+	Title->SetText(FText::FromString(TEXT("墨铺")));
 	SetTextStyle(Title, 38, FLinearColor(0.72f, 0.9f, 1.0f, 1.0f), ETextJustify::Left);
 	if (UHorizontalBoxSlot* TitleSlot = Header->AddChildToHorizontalBox(Title))
 	{
@@ -189,7 +189,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	BalanceRow->AddChildToHorizontalBox(BalanceInkSize);
 
 	BalanceText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PureInkBalanceText"));
-	BalanceText->SetText(FText::FromString(TEXT("Pure Ink: 0")));
+	BalanceText->SetText(FText::FromString(TEXT("纯墨：0")));
 	SetTextStyle(BalanceText, 23, FLinearColor(0.86f, 0.95f, 1.0f, 1.0f));
 	if (UHorizontalBoxSlot* BalanceTextSlot = BalanceRow->AddChildToHorizontalBox(BalanceText))
 	{
@@ -198,7 +198,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 
 	UTextBlock* CloseHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopCloseHint"));
-	CloseHint->SetText(FText::FromString(TEXT("ESC  Close")));
+	CloseHint->SetText(FText::FromString(TEXT("ESC 关闭")));
 	SetTextStyle(CloseHint, 18, FLinearColor(0.6f, 0.72f, 0.84f, 1.0f));
 	if (UHorizontalBoxSlot* CloseSlot = Header->AddChildToHorizontalBox(CloseHint))
 	{
@@ -316,7 +316,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 
 	FeedbackText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopFeedbackText"));
-	FeedbackText->SetText(FText::FromString(TEXT("Choose an item. Purchased items remain sold out.")));
+	FeedbackText->SetText(FText::FromString(TEXT("选择一件商品。已购买商品会显示为售罄。")));
 	SetTextStyle(FeedbackText, 17, FLinearColor(0.68f, 0.8f, 0.94f, 1.0f));
 	if (UVerticalBoxSlot* FeedbackSlot = PanelContent->AddChildToVerticalBox(FeedbackText))
 	{
@@ -359,7 +359,7 @@ void URoguelikeShopWidget::RefreshShop()
 	if (BalanceText)
 	{
 		const int32 Balance = ObservedShopManager ? ObservedShopManager->GetCurrentPureInkBalance() : 0;
-		BalanceText->SetText(FText::Format(FText::FromString(TEXT("Pure Ink: {0}")), Balance));
+		BalanceText->SetText(FText::Format(FText::FromString(TEXT("纯墨：{0}")), Balance));
 	}
 
 	DisplayedItemIds.SetNum(VisibleOfferCount);
@@ -387,41 +387,47 @@ void URoguelikeShopWidget::RefreshOfferSlot(int32 SlotIndex)
 
 	if (!Offer)
 	{
-		ItemTitles[SlotIndex]->SetText(FText::FromString(TEXT("Empty Offer")));
-		DescriptionTexts[SlotIndex]->SetText(FText::FromString(TEXT("No item configured for this Shop slot.")));
+		ItemTitles[SlotIndex]->SetText(FText::FromString(TEXT("空商品")));
+		DescriptionTexts[SlotIndex]->SetText(FText::FromString(TEXT("此商店槽位未配置商品。")));
 		PureInkCostTexts[SlotIndex]->SetText(FText::FromString(TEXT("—")));
-		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("UNAVAILABLE")));
+		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("不可购买")));
 		BuyButtons[SlotIndex]->SetIsEnabled(false);
 		return;
 	}
 
 	const bool bSoldOut = ObservedShopManager->IsItemPurchased(Offer->ItemId);
+	if (bSoldOut)
+	{
+		ItemTitles[SlotIndex]->SetText(FText::GetEmpty());
+		DescriptionTexts[SlotIndex]->SetText(FText::GetEmpty());
+		PureInkCostTexts[SlotIndex]->SetText(FText::GetEmpty());
+		BuyButtons[SlotIndex]->SetIsEnabled(false);
+		BuyButtons[SlotIndex]->SetBackgroundColor(FLinearColor(0.18f, 0.22f, 0.28f, 1.0f));
+		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("售罄")));
+		return;
+	}
 	const bool bCanPurchase = ObservedShopManager->CanPurchaseItem(Offer->ItemId);
 	const int32 Balance = ObservedShopManager->GetCurrentPureInkBalance();
 
 	ItemTitles[SlotIndex]->SetText(Offer->Title);
 	DescriptionTexts[SlotIndex]->SetText(Offer->Description);
-	PureInkCostTexts[SlotIndex]->SetText(FText::Format(FText::FromString(TEXT("{0} Pure Ink")), Offer->Cost));
+	PureInkCostTexts[SlotIndex]->SetText(FText::Format(FText::FromString(TEXT("{0} 纯墨")), Offer->Cost));
 	BuyButtons[SlotIndex]->SetIsEnabled(bCanPurchase);
 	BuyButtons[SlotIndex]->SetBackgroundColor(bCanPurchase
 		? GetOfferColor(SlotIndex)
 		: FLinearColor(0.18f, 0.22f, 0.28f, 1.0f));
 
-	if (bSoldOut)
+	if (Balance < Offer->Cost)
 	{
-		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("SOLD OUT")));
-	}
-	else if (Balance < Offer->Cost)
-	{
-		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("NEED INK")));
+		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("墨量不足")));
 	}
 	else if (!bCanPurchase)
 	{
-		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("UNAVAILABLE")));
+		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("不可购买")));
 	}
 	else
 	{
-		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("BUY")));
+		BuyButtonTexts[SlotIndex]->SetText(FText::FromString(TEXT("购买")));
 	}
 }
 
@@ -429,18 +435,18 @@ void URoguelikeShopWidget::TryPurchaseSlot(int32 SlotIndex)
 {
 	if (!ObservedShopManager || !DisplayedItemIds.IsValidIndex(SlotIndex) || DisplayedItemIds[SlotIndex].IsNone())
 	{
-		SetFeedbackText(FText::FromString(TEXT("This offer is unavailable.")), FLinearColor(1.0f, 0.58f, 0.38f, 1.0f));
+		SetFeedbackText(FText::FromString(TEXT("该商品不可购买。")), FLinearColor(1.0f, 0.58f, 0.38f, 1.0f));
 		return;
 	}
 
 	const FName ItemId = DisplayedItemIds[SlotIndex];
 	if (ObservedShopManager->PurchaseItem(ItemId))
 	{
-		SetFeedbackText(FText::FromString(TEXT("Purchase complete.")), FLinearColor(0.34f, 1.0f, 0.72f, 1.0f));
+		SetFeedbackText(FText::FromString(TEXT("购买成功。")), FLinearColor(0.34f, 1.0f, 0.72f, 1.0f));
 	}
 	else
 	{
-		SetFeedbackText(FText::FromString(TEXT("Purchase unavailable: check your health, ink, or sold-out state.")), FLinearColor(1.0f, 0.58f, 0.38f, 1.0f));
+		SetFeedbackText(FText::FromString(TEXT("暂不可购买：请检查生命、墨量或商品是否售罄。")), FLinearColor(1.0f, 0.58f, 0.38f, 1.0f));
 	}
 	RefreshShop();
 }
@@ -471,8 +477,10 @@ void URoguelikeShopWidget::HandleBuyThird()
 
 void URoguelikeShopWidget::HandlePurchaseCompleted(FName ItemId, int32 Cost, int32 NewBalance)
 {
+	(void)ItemId;
+	(void)Cost;
 	SetFeedbackText(
-		FText::Format(FText::FromString(TEXT("Purchased {0} for {1} Pure Ink. Balance: {2}.")), FText::FromName(ItemId), Cost, NewBalance),
+		FText::Format(FText::FromString(TEXT("购买成功，剩余纯墨：{0}。")), NewBalance),
 		FLinearColor(0.34f, 1.0f, 0.72f, 1.0f));
 	RefreshShop();
 }
