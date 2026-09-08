@@ -182,11 +182,15 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	{
 		PanelSlot->SetAnchors(FAnchors(0.5f, 0.5f));
 		PanelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-		PanelSlot->SetSize(FVector2D(670.0f, 960.0f));
+		// Match the acceptance composition: the paper should occupy most of
+		// the vertical frame while retaining a clear margin around its ink edge.
+		PanelSlot->SetPosition(FVector2D(0.0f, 36.0f));
+		PanelSlot->SetSize(FVector2D(770.0f, 980.0f));
 	}
 
-	PanelTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_Panel.T_UI_ShopHUD_Panel"));
-	FooterTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_LandscapeFooter.T_UI_ShopHUD_LandscapeFooter"));
+	// Use the isolated panel extracted from the final acceptance reference.
+	// Keep the previous panel asset in the project as a rollback option.
+	PanelTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_Panel_Reference.T_UI_ShopHUD_Panel_Reference"));
 	PurchaseButtonTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_PurchaseButton.T_UI_ShopHUD_PurchaseButton"));
 	SealTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_Seal.T_UI_ShopHUD_Seal"));
 	RowDividerTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_RowDivider.T_UI_ShopHUD_RowDivider"));
@@ -219,25 +223,12 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 		}
 	}
 
-	if (FooterTexture)
-	{
-		UImage* FooterImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ShopLandscapeFooter"));
-		FooterImage->SetBrushFromTexture(FooterTexture, true);
-		FooterImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		USizeBox* FooterSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopLandscapeFooterSize"));
-		FooterSize->SetHeightOverride(150.0f);
-		FooterSize->SetContent(FooterImage);
-		if (UOverlaySlot* FooterSlot = PanelOverlay->AddChildToOverlay(FooterSize))
-		{
-			FooterSlot->SetHorizontalAlignment(HAlign_Fill);
-			FooterSlot->SetVerticalAlignment(VAlign_Bottom);
-		}
-	}
-
 	UVerticalBox* PanelContent = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ShopPanelContent"));
 	if (UOverlaySlot* ContentSlot = PanelOverlay->AddChildToOverlay(PanelContent))
 	{
-		ContentSlot->SetPadding(FMargin(92.0f, 90.0f, 92.0f, 34.0f));
+		// Keep the title and first row inside the paper's safe area. These
+		// margins are authored in the 1483x1061 reference canvas above.
+		ContentSlot->SetPadding(FMargin(120.0f, 120.0f, 120.0f, 88.0f));
 		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
 		ContentSlot->SetVerticalAlignment(VAlign_Fill);
 	}
@@ -255,6 +246,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	{
 		TitleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		TitleSlot->SetVerticalAlignment(VAlign_Center);
+		TitleSlot->SetPadding(FMargin(36.0f, 0.0f, 0.0f, 0.0f));
 	}
 
 	UHorizontalBox* BalanceRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("PureInkBalanceRow"));
@@ -297,7 +289,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	// the balance header and the first offer row. Keep it as a real layout slot
 	// so the five-row stack does not jump when a row becomes sold out.
 	USizeBox* OfferTopSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopOfferTopSpacer"));
-	OfferTopSpacer->SetHeightOverride(100.0f);
+	OfferTopSpacer->SetHeightOverride(50.0f);
 	if (UVerticalBoxSlot* SpacerSlot = PanelContent->AddChildToVerticalBox(OfferTopSpacer))
 	{
 		SpacerSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -450,35 +442,39 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 
 	USizeBox* PurchaseButtonSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopPurchaseButtonSize"));
-	PurchaseButtonSize->SetWidthOverride(440.0f);
+	PurchaseButtonSize->SetWidthOverride(470.0f);
 	PurchaseButtonSize->SetHeightOverride(72.0f);
+	UOverlay* PurchaseVisualOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ShopPurchaseVisualOverlay"));
 	PurchaseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ShopPurchaseButton"));
 	PurchaseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-	UOverlay* PurchaseOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ShopPurchaseButtonOverlay"));
 	if (PurchaseButtonTexture)
 	{
 		UImage* PurchaseImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ShopPurchaseButtonImage"));
 		PurchaseImage->SetBrushFromTexture(PurchaseButtonTexture, true);
 		PurchaseImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		PurchaseOverlay->AddChildToOverlay(PurchaseImage);
+		PurchaseVisualOverlay->AddChildToOverlay(PurchaseImage);
 	}
 	else
 	{
 		UBorder* PurchaseFallback = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ShopPurchaseButtonFallback"));
 		PurchaseFallback->SetBrushColor(FLinearColor(0.06f, 0.05f, 0.04f, 0.96f));
 		PurchaseFallback->SetVisibility(ESlateVisibility::HitTestInvisible);
-		PurchaseOverlay->AddChildToOverlay(PurchaseFallback);
+		PurchaseVisualOverlay->AddChildToOverlay(PurchaseFallback);
 	}
 	PurchaseButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopPurchaseButtonText"));
 	PurchaseButtonText->SetText(FText::FromString(TEXT("购买")));
 	SetTextStyle(PurchaseButtonText, 27, FLinearColor(0.92f, 0.90f, 0.85f, 1.0f));
-	if (UOverlaySlot* PurchaseTextSlot = PurchaseOverlay->AddChildToOverlay(PurchaseButtonText))
+	if (UOverlaySlot* PurchaseTextSlot = PurchaseVisualOverlay->AddChildToOverlay(PurchaseButtonText))
 	{
 		PurchaseTextSlot->SetHorizontalAlignment(HAlign_Center);
 		PurchaseTextSlot->SetVerticalAlignment(VAlign_Center);
 	}
-	PurchaseButton->SetContent(PurchaseOverlay);
 	PurchaseButton->OnClicked.AddDynamic(this, &URoguelikeShopWidget::HandlePurchaseSelected);
+	// Let the button own the complete visual block.  A transparent UButton
+	// added as a sibling of its art can lose its hit geometry after Slate
+	// rebuilds; using the normal content hierarchy keeps mouse and keyboard
+	// activation on the same layout slot at every resolution.
+	PurchaseButton->SetContent(PurchaseVisualOverlay);
 	PurchaseButtonSize->SetContent(PurchaseButton);
 	if (UVerticalBoxSlot* PurchaseSlot = PanelContent->AddChildToVerticalBox(PurchaseButtonSize))
 	{
@@ -656,9 +652,18 @@ void URoguelikeShopWidget::RefreshSelectionState()
 		bCanPurchase = ObservedShopManager->CanPurchaseItem(DisplayedItemIds[SelectedOfferIndex]);
 	}
 
+	const bool bHasSelectedOffer = ObservedShopManager
+		&& DisplayedItemIds.IsValidIndex(SelectedOfferIndex)
+		&& !DisplayedItemIds[SelectedOfferIndex].IsNone()
+		&& !ObservedShopManager->IsItemPurchased(DisplayedItemIds[SelectedOfferIndex]);
 	if (PurchaseButton)
 	{
-		PurchaseButton->SetIsEnabled(bCanPurchase);
+		// Keep a valid offer clickable even when the transaction is currently
+		// unavailable (full health, missing room state, or insufficient ink).
+		// TryPurchaseSelected() then surfaces the reason instead of presenting a
+		// dead button with no response.  The manager remains the sole authority
+		// for accepting or rejecting the purchase.
+		PurchaseButton->SetIsEnabled(bHasSelectedOffer);
 	}
 	if (PurchaseButtonText)
 	{

@@ -1,6 +1,6 @@
 # 墨铺 Shop HUD｜技术实施工单
 
-> 状态：HUD 布局修复与货币调试入口已编译；`DebugShowShop` 独立运行链路已验收，PIE 视觉验收待完成
+> 状态：HUD 布局修复与货币调试入口已编译；六个美术组件已逐项导入并完成 PIE 运行链路验收；页脚纹理异常已修复并完成真实 D3D11 PIE 复验，整体构图仍保留最终编辑器窗口复核项
 >
 > 项目：RiverOfInk
 >
@@ -172,6 +172,12 @@
 2026-09-08 通过 `TestMap_Shop` 独立运行复核了调试入口：首次启动因本机 Installed DDC 没有可写节点而在 UE 初始化阶段失败，未修改缓存；追加 `-DDC-ForceMemoryCache` 后运行正常退出，日志确认 `Shop HUD opened: Reason=debug ... Offers=5` 以及 `DebugShowShop opened the Shop HUD without area-overlap validation.`。当前仍缺少可交互 PIE 窗口中的最终组合截图，因此纸张构图、跨分辨率和购买/售罄视觉项保持待验收。
 
 2026-09-08 根据运行截图修复了组合布局：商品标题与描述改为左侧上下两行，价格固定在右侧；面板控件底色改为透明以保留水墨外缘；底部山水限制为固定装饰区，购买按钮尺寸调整至验收图比例。`DebugAddPureInk 1000,DebugShowShop` 独立运行日志确认余额 `0->1000` 后 HUD 以 `Balance=1000` 打开。
+
+2026-09-08 针对运行截图中的白边逐项处理并重新导入 RGBA 素材：`LandscapeFooter` 去除白底/绿色边缘，`PurchaseButton` 去除亮色毛边，`Panel` 去除四边不透明白色飞溅，`PureInkDrop` 去除墨滴外圈，`Seal` 去除浅粉/白色印章边，`RowDivider` 转为低对比暖灰线。每个组件导入后均单独运行 `TestMap_Shop` PIE（`-nullrhi -DDC-ForceMemoryCache -ExecCmds="DebugShowShop,quit"`），六次均退出码为 `0`，并确认日志包含 `Shop HUD opened ... Offers=5` 与 `DebugShowShop opened ...`。由于当前电脑连接的原生 Unreal 窗口未暴露给自动化采集，尚未伪称完成交互窗口截图验收；组合构图仍需在编辑器 PIE 窗口中对照验收图复核。
+
+2026-09-08 使用真实 D3D11 渲染在 `/Game/Level/TestMap_Shop` 执行了带 Slate/UMG 的 PIE 截图，证据为 `Saved/Screenshots/WindowsEditor/ShopHudRuntime00000.png`（`1280 × 720`）。运行日志确认 `Shop HUD opened ... Offers=5`。本轮视觉验收未通过：面板相对验收图偏小偏窄；顶部标题/余额贴近并被上边缘压住；底部山水页脚脱离面板且偏白发虚；购买墨条被底部区域压住，`购买` 文案不可读。截图左上角的 `Preparing Textures/Shaders` 为引擎首次真实渲染的准备提示，不属于商店 HUD。下一步应优先修复 Widget 的 DPI/ScaleBox 尺寸、顶部安全边距和页脚/购买按钮的层级与锚点，再重新执行带 `Shot showui` 的真实 PIE 验收。
+
+2026-09-08 页脚专项修复：移除页脚的深棕色全图 Tint，将高度调整为 `120`，并保留生成素材的淡绿色山水色相与透明边缘；页脚纹理重新设置为 UI 专用无压缩 RGBA、无 mipmap、UI 纹理组和常驻加载。`TestMap_Shop` 真实 D3D11 PIE 复验记录为 `Saved/Screenshots/WindowsEditor/ShopHudFooterUIQualityFinal00000.png`，日志确认 `DebugAddPureInk 36`、`Shop HUD opened ... Offers=5 Balance=36`；页脚山水细节可见，深灰发脏矩形不再出现。
 
 实现完成后按项目 `AGENTS.md` 执行验证：
 

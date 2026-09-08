@@ -106,9 +106,6 @@ private:
 	TObjectPtr<UTexture2D> PanelTexture;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTexture2D> FooterTexture;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> PurchaseButtonTexture;
 
 	UPROPERTY(Transient)
