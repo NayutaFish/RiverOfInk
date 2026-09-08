@@ -230,10 +230,45 @@ bool ARoguelikeShopManager::TryOpenShop(APlayerCharacter* InPlayer)
 		return false;
 	}
 
+	return OpenShopForController(PlayerController, TEXT("interaction"));
+}
+
+bool ARoguelikeShopManager::DebugOpenShop(APlayerController* InPlayerController)
+{
+	if (!IsValid(InPlayerController))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("Debug shop opening failed: PlayerController is unavailable."));
+		return false;
+	}
+
+	// Keep the debug route focused on presentation. PurchaseItem and
+	// CanPurchaseItem continue to enforce the normal room/economy contracts.
+	AddDefaultOffersIfUnset();
+	return OpenShopForController(InPlayerController, TEXT("debug"));
+}
+
+bool ARoguelikeShopManager::OpenShopForController(
+	APlayerController* PlayerController,
+	const TCHAR* OpenReason)
+{
+	if (!IsValid(PlayerController))
+	{
+		return false;
+	}
+
+	if (ActiveShopWidget && ActiveShopWidget->IsInViewport())
+	{
+		ActiveShopWidget->FocusFirstPurchase();
+		return true;
+	}
+
 	ActiveShopWidget = CreateWidget<URoguelikeShopWidget>(PlayerController, URoguelikeShopWidget::StaticClass());
 	if (!ActiveShopWidget)
 	{
-		UE_LOG(LogRoguelike, Error, TEXT("Shop interaction failed: Shop HUD creation returned null."));
+		UE_LOG(LogRoguelike, Error,
+			TEXT("Shop HUD creation failed: Reason=%s."),
+			OpenReason ? OpenReason : TEXT("unknown"));
 		return false;
 	}
 
@@ -253,8 +288,9 @@ bool ARoguelikeShopManager::TryOpenShop(APlayerCharacter* InPlayer)
 	ActiveShopWidget->FocusFirstPurchase();
 
 	UE_LOG(LogRoguelike, Log,
-		TEXT("Shop HUD opened: Player=%s Offers=%d Balance=%d."),
-		*GetNameSafe(InPlayer),
+		TEXT("Shop HUD opened: Reason=%s PlayerController=%s Offers=%d Balance=%d."),
+		OpenReason ? OpenReason : TEXT("unknown"),
+		*GetNameSafe(PlayerController),
 		ShopItems.Num(),
 		GetCurrentPureInkBalance());
 	return true;
@@ -389,13 +425,13 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		ShopItems.Add(MoveTemp(TemporaryBoost));
 	};
 
-	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("Quick Rinse"), TEXT("Restore 250 HP."), 5, 250.0f);
-	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("Pure Wash"), TEXT("Restore 500 HP."), 10, 500.0f);
-	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("Deep Cleanse"), TEXT("Restore 1000 HP."), 18, 1000.0f);
+	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 250 生命"), 5, 250.0f);
+	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 500 生命"), 10, 500.0f);
+	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 1000 生命"), 18, 1000.0f);
 	AddTemporaryOffer(
 		TEXT("shop_temp_walk_speed"),
-		TEXT("Swift Current"),
-		TEXT("Increase Walk Speed by 120 for 2 Combat Rooms."),
+		TEXT("疾流"),
+		TEXT("移速 +120 · 持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::WalkSpeed,
 		120.0f,
@@ -403,8 +439,8 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		2);
 	AddTemporaryOffer(
 		TEXT("shop_temp_defense"),
-		TEXT("Ink Shell"),
-		TEXT("Increase Defense by 15 for 2 Combat Rooms."),
+		TEXT("墨甲"),
+		TEXT("防御 +15 · 持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::Defense,
 		15.0f,

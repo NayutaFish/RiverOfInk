@@ -13,7 +13,9 @@ enum class EPureInkChangeReason : uint8
 	RoomResult UMETA(DisplayName = "Room Result"),
 	ShopPurchase UMETA(DisplayName = "Shop Purchase"),
 	NewRunReset UMETA(DisplayName = "New Run Reset"),
-	RewardChoice UMETA(DisplayName = "Reward Choice")
+	RewardChoice UMETA(DisplayName = "Reward Choice"),
+	/** Development-only wallet adjustment; never emitted by normal gameplay. */
+	Debug UMETA(DisplayName = "Debug")
 };
 
 /** Effect categories reserved for the first Shop Room implementation. */

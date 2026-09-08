@@ -3,10 +3,13 @@
 #include "GameMode/RiverOfInkPlayerController.h"
 
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 #include "Player/PlayerCharacter.h"
 #include "Player/ProjectileTargetingComponent.h"
+#include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "RoguelikeSystem/RoguelikeShopManager.h"
 #include "RiverOfInk.h"
 
 ARiverOfInkPlayerController::ARiverOfInkPlayerController()
@@ -103,6 +106,62 @@ void ARiverOfInkPlayerController::DebugSelectFirstReward()
 	}
 
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectFirstReward found no RoguelikeRewardManager."));
+}
+
+void ARiverOfInkPlayerController::DebugShowShop()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeShopManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeShopManager* ShopManager = *It)
+		{
+			if (ShopManager->DebugOpenShop(this))
+			{
+				UE_LOG(LogRoguelike, Log,
+					TEXT("DebugShowShop opened the Shop HUD without area-overlap validation."));
+			}
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning,
+		TEXT("DebugShowShop found no RoguelikeShopManager in the current world."));
+}
+
+void ARiverOfInkPlayerController::DebugAddPureInk(int32 Amount)
+{
+	if (Amount <= 0)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugAddPureInk rejected non-positive amount %d."),
+			Amount);
+		return;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeEconomySubsystem* Economy = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeEconomySubsystem>()
+		: nullptr;
+	if (!Economy)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugAddPureInk failed because the economy subsystem is unavailable."));
+		return;
+	}
+
+	const int32 PreviousBalance = Economy->GetPureInkBalance();
+	if (Economy->AddPureInk(Amount, EPureInkChangeReason::Debug))
+	{
+		UE_LOG(LogRoguelike, Log,
+			TEXT("DebugAddPureInk added %d. Balance=%d->%d."),
+			Amount,
+			PreviousBalance,
+			Economy->GetPureInkBalance());
+	}
 }
 
 void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount)
