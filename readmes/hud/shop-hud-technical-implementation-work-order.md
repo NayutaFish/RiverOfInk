@@ -1,6 +1,6 @@
 # 墨铺 Shop HUD｜技术实施工单
 
-> 状态：已实施；`DebugShowShop` 独立运行链路已验收，PIE 视觉验收待完成
+> 状态：HUD 布局修复与货币调试入口已编译；`DebugShowShop` 独立运行链路已验收，PIE 视觉验收待完成
 >
 > 项目：RiverOfInk
 >
@@ -138,6 +138,7 @@
 
 - [ ] Shop HUD 由 J 在有效 Shop Room 中打开，Esc 和 `关闭` 均可关闭。
 - [x] PIE 控制台执行 `DebugShowShop` 可绕过玩家距离/重叠检查直接打开同一套 Shop HUD；该入口只绕过展示前置条件，购买仍遵循商店房与经济校验。2026-09-08 独立运行日志已确认 `Offers=5` 和 `Reason=debug`。
+- [x] PIE 控制台执行 `DebugAddPureInk 1000` 可通过 Economy Subsystem 增加 1000 纯墨并刷新 HUD；金额必须为正数，调试变更使用独立的 `Debug` 变更原因，不改变正常经济事务。
 - [ ] 面板中央竖向显示，五个商品行全部可见，顺序与 ItemId 表一致。
 - [ ] 标题为 `墨铺`，余额显示为 `纯墨 {Balance}`，不出现 `INK EXCHANGE`、`Pure Ink` 等旧英文文案。
 - [ ] 只有一个全局 `购买` 按钮，不存在三个横向购买按钮。
@@ -169,6 +170,8 @@
 进入 PIE 后，在控制台执行 `DebugShowShop` 可直接显示商店 HUD；关闭后可再次执行。该命令用于布局、透明通道、文字安全区和交互验收，不改变 `bRequireShopRoom`，也不绕过 `PurchaseItem` 的经济规则。
 
 2026-09-08 通过 `TestMap_Shop` 独立运行复核了调试入口：首次启动因本机 Installed DDC 没有可写节点而在 UE 初始化阶段失败，未修改缓存；追加 `-DDC-ForceMemoryCache` 后运行正常退出，日志确认 `Shop HUD opened: Reason=debug ... Offers=5` 以及 `DebugShowShop opened the Shop HUD without area-overlap validation.`。当前仍缺少可交互 PIE 窗口中的最终组合截图，因此纸张构图、跨分辨率和购买/售罄视觉项保持待验收。
+
+2026-09-08 根据运行截图修复了组合布局：商品标题与描述改为左侧上下两行，价格固定在右侧；面板控件底色改为透明以保留水墨外缘；底部山水限制为固定装饰区，购买按钮尺寸调整至验收图比例。`DebugAddPureInk 1000,DebugShowShop` 独立运行日志确认余额 `0->1000` 后 HUD 以 `Balance=1000` 打开。
 
 实现完成后按项目 `AGENTS.md` 执行验证：
 

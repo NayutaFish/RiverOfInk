@@ -32,6 +32,10 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugShowShop();
 
+	/** Development-only PIE helper: add positive Pure Ink to the current wallet. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugAddPureInk(int32 Amount = 100);
+
 	/**
 	 * Development-only PIE helper: show one legal reward by title or modifier identifier.
 	 * StackCount applies that many modifier stacks in one debug reward; form rewards require 1.

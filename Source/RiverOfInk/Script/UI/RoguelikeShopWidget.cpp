@@ -173,13 +173,16 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	ReferenceSize->SetContent(ReferenceCanvas);
 
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ShopPanel"));
-	Panel->SetBrushColor(FLinearColor(0.82f, 0.79f, 0.73f, 0.98f));
+	// The imported panel already contains the paper and ink-wash silhouette.
+	// Keep the widget background transparent so its alpha fringe is not boxed
+	// in by an opaque cream rectangle.
+	Panel->SetBrushColor(FLinearColor::Transparent);
 	Panel->SetPadding(FMargin(0.0f));
 	if (UCanvasPanelSlot* PanelSlot = ReferenceCanvas->AddChildToCanvas(Panel))
 	{
 		PanelSlot->SetAnchors(FAnchors(0.5f, 0.5f));
 		PanelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-		PanelSlot->SetSize(FVector2D(620.0f, 900.0f));
+		PanelSlot->SetSize(FVector2D(670.0f, 960.0f));
 	}
 
 	PanelTexture = LoadShopTexture(TEXT("/Game/RawContent/UI/Shop/T_UI_ShopHUD_Panel.T_UI_ShopHUD_Panel"));
@@ -221,7 +224,10 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 		UImage* FooterImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ShopLandscapeFooter"));
 		FooterImage->SetBrushFromTexture(FooterTexture, true);
 		FooterImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (UOverlaySlot* FooterSlot = PanelOverlay->AddChildToOverlay(FooterImage))
+		USizeBox* FooterSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopLandscapeFooterSize"));
+		FooterSize->SetHeightOverride(150.0f);
+		FooterSize->SetContent(FooterImage);
+		if (UOverlaySlot* FooterSlot = PanelOverlay->AddChildToOverlay(FooterSize))
 		{
 			FooterSlot->SetHorizontalAlignment(HAlign_Fill);
 			FooterSlot->SetVerticalAlignment(VAlign_Bottom);
@@ -231,7 +237,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	UVerticalBox* PanelContent = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ShopPanelContent"));
 	if (UOverlaySlot* ContentSlot = PanelOverlay->AddChildToOverlay(PanelContent))
 	{
-		ContentSlot->SetPadding(FMargin(48.0f, 42.0f, 48.0f, 26.0f));
+		ContentSlot->SetPadding(FMargin(92.0f, 90.0f, 92.0f, 34.0f));
 		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
 		ContentSlot->SetVerticalAlignment(VAlign_Fill);
 	}
@@ -239,7 +245,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	UHorizontalBox* Header = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ShopHeader"));
 	if (UVerticalBoxSlot* HeaderSlot = PanelContent->AddChildToVerticalBox(Header))
 	{
-		HeaderSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 12.0f));
+		HeaderSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 14.0f));
 	}
 
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopTitle"));
@@ -287,6 +293,16 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 		Header->AddChildToHorizontalBox(SealSize);
 	}
 
+	// The reference composition leaves a deliberate breathing space between
+	// the balance header and the first offer row. Keep it as a real layout slot
+	// so the five-row stack does not jump when a row becomes sold out.
+	USizeBox* OfferTopSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopOfferTopSpacer"));
+	OfferTopSpacer->SetHeightOverride(100.0f);
+	if (UVerticalBoxSlot* SpacerSlot = PanelContent->AddChildToVerticalBox(OfferTopSpacer))
+	{
+		SpacerSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+	}
+
 	UVerticalBox* OfferList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ShopOfferList"));
 	if (UVerticalBoxSlot* OfferListSlot = PanelContent->AddChildToVerticalBox(OfferList))
 	{
@@ -320,22 +336,31 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 			RowContentSlot->SetVerticalAlignment(VAlign_Center);
 		}
 
+		UVerticalBox* OfferTextStack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), *FString::Printf(TEXT("ShopItem%dTextStack"), SlotIndex));
+		USizeBox* OfferTextSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *FString::Printf(TEXT("ShopItem%dTextSize"), SlotIndex));
+		OfferTextSize->SetWidthOverride(340.0f);
+		OfferTextSize->SetContent(OfferTextStack);
+		if (UHorizontalBoxSlot* OfferTextSlot = RowContent->AddChildToHorizontalBox(OfferTextSize))
+		{
+			OfferTextSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
 		UTextBlock* ItemTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *FString::Printf(TEXT("ShopItem%dTitle"), SlotIndex));
 		SetTextStyle(ItemTitle, 24, FLinearColor(0.12f, 0.10f, 0.08f, 1.0f), ETextJustify::Left);
-		USizeBox* ItemTitleSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *FString::Printf(TEXT("ShopItem%dTitleSize"), SlotIndex));
-		ItemTitleSize->SetWidthOverride(160.0f);
-		ItemTitleSize->SetContent(ItemTitle);
-		RowContent->AddChildToHorizontalBox(ItemTitleSize);
+		if (UVerticalBoxSlot* ItemTitleSlot = OfferTextStack->AddChildToVerticalBox(ItemTitle))
+		{
+			ItemTitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+		}
 		ItemTitles.Add(ItemTitle);
 
 		UTextBlock* DescriptionText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *FString::Printf(TEXT("ShopItem%dDescriptionText"), SlotIndex));
 		DescriptionText->SetAutoWrapText(true);
-		DescriptionText->SetWrapTextAt(280.0f);
+		DescriptionText->SetWrapTextAt(340.0f);
 		SetTextStyle(DescriptionText, 18, FLinearColor(0.25f, 0.22f, 0.18f, 1.0f), ETextJustify::Left);
 		USizeBox* DescriptionSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *FString::Printf(TEXT("ShopItem%dDescriptionSize"), SlotIndex));
-		DescriptionSize->SetWidthOverride(280.0f);
+		DescriptionSize->SetWidthOverride(340.0f);
 		DescriptionSize->SetContent(DescriptionText);
-		RowContent->AddChildToHorizontalBox(DescriptionSize);
+		OfferTextStack->AddChildToVerticalBox(DescriptionSize);
 		DescriptionTexts.Add(DescriptionText);
 
 		UHorizontalBox* CostRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), *FString::Printf(TEXT("ShopItem%dPureInkRow"), SlotIndex));
@@ -425,8 +450,8 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 
 	USizeBox* PurchaseButtonSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ShopPurchaseButtonSize"));
-	PurchaseButtonSize->SetWidthOverride(330.0f);
-	PurchaseButtonSize->SetHeightOverride(66.0f);
+	PurchaseButtonSize->SetWidthOverride(440.0f);
+	PurchaseButtonSize->SetHeightOverride(72.0f);
 	PurchaseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ShopPurchaseButton"));
 	PurchaseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	UOverlay* PurchaseOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ShopPurchaseButtonOverlay"));
@@ -446,7 +471,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	}
 	PurchaseButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopPurchaseButtonText"));
 	PurchaseButtonText->SetText(FText::FromString(TEXT("购买")));
-	SetTextStyle(PurchaseButtonText, 25, FLinearColor(0.92f, 0.90f, 0.85f, 1.0f));
+	SetTextStyle(PurchaseButtonText, 27, FLinearColor(0.92f, 0.90f, 0.85f, 1.0f));
 	if (UOverlaySlot* PurchaseTextSlot = PurchaseOverlay->AddChildToOverlay(PurchaseButtonText))
 	{
 		PurchaseTextSlot->SetHorizontalAlignment(HAlign_Center);
@@ -475,7 +500,7 @@ void URoguelikeShopWidget::BuildDefaultWidgetTree()
 	CloseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	CloseButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ShopCloseButtonText"));
 	CloseButtonText->SetText(FText::FromString(TEXT("关闭")));
-	SetTextStyle(CloseButtonText, 18, FLinearColor(0.28f, 0.25f, 0.21f, 1.0f));
+	SetTextStyle(CloseButtonText, 20, FLinearColor(0.28f, 0.25f, 0.21f, 1.0f));
 	CloseButton->SetContent(CloseButtonText);
 	CloseButton->OnClicked.AddDynamic(this, &URoguelikeShopWidget::HandleCloseShop);
 	if (UVerticalBoxSlot* CloseSlot = PanelContent->AddChildToVerticalBox(CloseButton))
