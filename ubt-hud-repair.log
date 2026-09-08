@@ -1,0 +1,58 @@
+Log started at 09/04/2026 14:48:58 (2026-09-04T06:48:58Z)
+Resolved project argument D:\project\UE\RiverOfInk\RiverOfInk.uproject to D:\project\UE\RiverOfInk\RiverOfInk.uproject
+Log file: D:\project\UE\RiverOfInk\ubt-hud-repair.log
+
+Setting temp directory to 'C:\Users\23586\AppData\Local\Temp\UnrealBuildTool\9f0bc9d2'
+    Registering build platform: UnrealBuildTool.AndroidPlatformFactory
+    Registering build platform: UnrealBuildTool.IOSPlatformFactory
+    Registering build platform: UnrealBuildTool.LinuxPlatformFactory
+    Registering build platform: UnrealBuildTool.MacPlatformFactory
+    Registering build platform: UnrealBuildTool.TVOSPlatformFactory
+    Registering build platform: UnrealBuildTool.WindowsPlatformFactory
+Found Windows 10 SDK root at C:\Program Files\Windows Kits\10 (1)
+Found Windows 10 SDK root at C:\Program Files (x86)\Windows Kits\10 (2)
+Found Windows 10 SDK version 10.0.26100.0 at C:\Program Files (x86)\Windows Kits\10
+Found Universal CRT version 10.0.26100.0 at C:\Program Files (x86)\Windows Kits\10
+Win64 Installed SDK(s): MinVersion_Sdk=10.0.19041.0, MaxVersion_Sdk=10.9.99999.0, CurrentVersion_Sdk=10.0.26100.0, Version_AutoSdk=10.0.22621.0, CurrentVersion_AutoSdk=
+        Registering build platform: Win64 - buildable: True
+    Registering build platform: UnrealBuildTool.VisionOSPlatformFactory
+Command line: D:\UELibrary\UE_5.8\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll RiverOfInkEditor Win64 Development -Project=D:\project\UE\RiverOfInk\RiverOfInk.uproject -WaitMutex -NoHotReload -Session=HudRepairBuild -NoUBA -XmlConfigCache=D:\project\UE\RiverOfInk\Intermediate\Build\XmlConfigCache.bin -Log=D:\project\UE\RiverOfInk\ubt-hud-repair.log
+Determining max actions to execute in parallel (8 physical cores, 16 logical cores)
+  Executing up to 8 processes, one per physical core
+Using 'git status' to determine working set for adaptive non-unity build (D:\project\UE\RiverOfInk).
+No config file at C:\ProgramData\Unreal Engine\UnrealBuildTool\BuildConfiguration.xml
+No config file at C:\Users\23586\AppData\Local\Unreal Engine\UnrealBuildTool\BuildConfiguration.xml
+No config file at C:\Users\23586\Documents\Unreal Engine\UnrealBuildTool\BuildConfiguration.xml
+Configuration will be read from:
+  C:\Users\23586\AppData\Roaming\Unreal Engine\UnrealBuildTool\BuildConfiguration.xml
+Skipping D:\UELibrary\UE_5.8\Engine\Intermediate\Build\BuildRules\UE5Rules.dll: File is installed
+Skipping D:\UELibrary\UE_5.8\Engine\Intermediate\Build\BuildRules\UE5ProgramRules.dll: File is installed
+Unhandled 1 aggregate exceptions
+Unhandled exception: Exception: UBA executor is not expected to be invoked from a recursive UBT call.
+   at UnrealBuildTool.UBAExecutor.Init(IEnumerable`1 targetDescriptors, ILogger logger)
+   at System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+WriteFileIfChanged() wrote 0 changed files of 0 requested writes.
+
+Timeline:
+[  0.000]  +0.276 Main
+   0.021          [  0.021]  +0.050 Apply XmlConfig
+   0.083          [  0.083]  +0.086 AddTelemetry
+   0.193          [  0.193]  +0.083 RegisterPlatforms
+[  0.287]  +0.019 ParseCommandLine
+[  0.357]  +0.111 LoadMakefile
+   0.367          [  0.009]  +0.021 EngineRulesPlugins
+   0.390          [  0.033]  +0.003 EngineRulesFetchDirs
+   0.402          [  0.045]  +0.008 EngineRulesAssembly
+   0.410          [  0.053]  +0.000 ProgramRulesAssembly
+   0.411          [  0.054]  +0.041 ProjectRulesAssembly
+   0.453          [  0.096]  +0.145 CreateTargetRules
+   0.477             0.120          [  0.023]  +0.000 FindPlugins
+   0.488             0.131          [  0.034]  +0.040 MakefileValid
+[  0.615]  +0.002 TelemetryService.FlushEvents
+[  0.620]
+
+Result: Failed (OtherCompilationError)
+Total execution time: 0.62 seconds
