@@ -8,6 +8,7 @@
 #include "RoguelikeShopManager.generated.h"
 
 class APlayerCharacter;
+class APlayerController;
 class UBoxComponent;
 class UPrimitiveComponent;
 class UStaticMeshComponent;
@@ -72,6 +73,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Roguelike|Shop|Interaction")
 	void CloseShop();
 
+	/** Development-only entry point: open the same Shop HUD without area-overlap validation. */
+	bool DebugOpenShop(APlayerController* InPlayerController);
+
 	/**
 	 * Whitebox switch for data-only tests. Production Shop Rooms keep this true;
 	 * a future test map may disable it without changing EconomySubsystem rules.
@@ -92,6 +96,7 @@ private:
 	bool IsInteractionAvailable() const;
 	void AddDefaultOffersIfUnset();
 	bool ApplyImmediateItemEffect(const FShopItemDefinition& Item);
+	bool OpenShopForController(APlayerController* PlayerController, const TCHAR* OpenReason);
 	void RegisterPlayerIfAlreadyInsideShopArea();
 	void ShowInteractionPrompt(APlayerCharacter* InPlayer);
 	void HideInteractionPrompt();

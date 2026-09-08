@@ -1,6 +1,6 @@
 # 墨铺 Shop HUD｜美术资产工单
 
-> 状态：待美术资产制作与导入
+> 状态：已实施并导入，待运行时验收
 >
 > 项目：RiverOfInk
 >
@@ -126,6 +126,17 @@
 5. 资产导入后的提交记录。
 
 美术工单不修改 `RoguelikeShopWidget`、`RoguelikeShopManager`、经济系统或输入逻辑。技术层负责把文本、商品状态、选中态和购买事务叠加到这些素材上。
+
+本次交付已按清单生成并导入以下 RGBA PNG / UE `.uasset` 对：
+
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_Panel.png` / `.uasset`，`2048 × 2880`；
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_LandscapeFooter.png` / `.uasset`，`2048 × 512`；
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_PurchaseButton.png` / `.uasset`，`1536 × 256`；
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_PureInkDrop.png` / `.uasset`，`256 × 256`；
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_Seal.png` / `.uasset`，`512 × 512`；
+- `Content/RawContent/UI/Shop/T_UI_ShopHUD_RowDivider.png` / `.uasset`，`2048 × 64`。
+
+透明区域已通过 alpha 通道复检；验收截图仍只保留在 `Content/reference/`，没有作为运行时面板纹理使用。
 
 ## 8. 完成定义
 

@@ -7,6 +7,7 @@
 #include "Player/PlayerCharacter.h"
 #include "Player/ProjectileTargetingComponent.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "RoguelikeSystem/RoguelikeShopManager.h"
 #include "RiverOfInk.h"
 
 ARiverOfInkPlayerController::ARiverOfInkPlayerController()
@@ -103,6 +104,30 @@ void ARiverOfInkPlayerController::DebugSelectFirstReward()
 	}
 
 	UE_LOG(LogRoguelike, Warning, TEXT("DebugSelectFirstReward found no RoguelikeRewardManager."));
+}
+
+void ARiverOfInkPlayerController::DebugShowShop()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<ARoguelikeShopManager> It(GetWorld()); It; ++It)
+	{
+		if (ARoguelikeShopManager* ShopManager = *It)
+		{
+			if (ShopManager->DebugOpenShop(this))
+			{
+				UE_LOG(LogRoguelike, Log,
+					TEXT("DebugShowShop opened the Shop HUD without area-overlap validation."));
+			}
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning,
+		TEXT("DebugShowShop found no RoguelikeShopManager in the current world."));
 }
 
 void ARiverOfInkPlayerController::DebugShowSpecificReward(const FString& RewardIdentifier, int32 StackCount)

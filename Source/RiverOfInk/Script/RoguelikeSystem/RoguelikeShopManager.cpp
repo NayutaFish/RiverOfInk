@@ -230,10 +230,45 @@ bool ARoguelikeShopManager::TryOpenShop(APlayerCharacter* InPlayer)
 		return false;
 	}
 
+	return OpenShopForController(PlayerController, TEXT("interaction"));
+}
+
+bool ARoguelikeShopManager::DebugOpenShop(APlayerController* InPlayerController)
+{
+	if (!IsValid(InPlayerController))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("Debug shop opening failed: PlayerController is unavailable."));
+		return false;
+	}
+
+	// Keep the debug route focused on presentation. PurchaseItem and
+	// CanPurchaseItem continue to enforce the normal room/economy contracts.
+	AddDefaultOffersIfUnset();
+	return OpenShopForController(InPlayerController, TEXT("debug"));
+}
+
+bool ARoguelikeShopManager::OpenShopForController(
+	APlayerController* PlayerController,
+	const TCHAR* OpenReason)
+{
+	if (!IsValid(PlayerController))
+	{
+		return false;
+	}
+
+	if (ActiveShopWidget && ActiveShopWidget->IsInViewport())
+	{
+		ActiveShopWidget->FocusFirstPurchase();
+		return true;
+	}
+
 	ActiveShopWidget = CreateWidget<URoguelikeShopWidget>(PlayerController, URoguelikeShopWidget::StaticClass());
 	if (!ActiveShopWidget)
 	{
-		UE_LOG(LogRoguelike, Error, TEXT("Shop interaction failed: Shop HUD creation returned null."));
+		UE_LOG(LogRoguelike, Error,
+			TEXT("Shop HUD creation failed: Reason=%s."),
+			OpenReason ? OpenReason : TEXT("unknown"));
 		return false;
 	}
 
@@ -253,8 +288,9 @@ bool ARoguelikeShopManager::TryOpenShop(APlayerCharacter* InPlayer)
 	ActiveShopWidget->FocusFirstPurchase();
 
 	UE_LOG(LogRoguelike, Log,
-		TEXT("Shop HUD opened: Player=%s Offers=%d Balance=%d."),
-		*GetNameSafe(InPlayer),
+		TEXT("Shop HUD opened: Reason=%s PlayerController=%s Offers=%d Balance=%d."),
+		OpenReason ? OpenReason : TEXT("unknown"),
+		*GetNameSafe(PlayerController),
 		ShopItems.Num(),
 		GetCurrentPureInkBalance());
 	return true;

@@ -137,6 +137,7 @@
 ### 7.1 数据与布局
 
 - [ ] Shop HUD 由 J 在有效 Shop Room 中打开，Esc 和 `关闭` 均可关闭。
+- [ ] PIE 控制台执行 `DebugShowShop` 可绕过玩家距离/重叠检查直接打开同一套 Shop HUD；该入口只绕过展示前置条件，购买仍遵循商店房与经济校验。
 - [ ] 面板中央竖向显示，五个商品行全部可见，顺序与 ItemId 表一致。
 - [ ] 标题为 `墨铺`，余额显示为 `纯墨 {Balance}`，不出现 `INK EXCHANGE`、`Pure Ink` 等旧英文文案。
 - [ ] 只有一个全局 `购买` 按钮，不存在三个横向购买按钮。
@@ -160,6 +161,12 @@
 - [ ] 购买、关闭和焦点操作不会触发角色移动、攻击或技能输入。
 
 ## 8. 验证与提交要求
+
+### 8.0 美术资产与调试入口
+
+正式 Shop UI 资产已经接入 `Source/RiverOfInk/Script/UI/RoguelikeShopWidget.cpp` 的 `/Game/RawContent/UI/Shop/` 路径。资产缺失时仍保留中性回退，以便工程在不完整 checkout 下启动。
+
+进入 PIE 后，在控制台执行 `DebugShowShop` 可直接显示商店 HUD；关闭后可再次执行。该命令用于布局、透明通道、文字安全区和交互验收，不改变 `bRequireShopRoom`，也不绕过 `PurchaseItem` 的经济规则。
 
 实现完成后按项目 `AGENTS.md` 执行验证：
 
