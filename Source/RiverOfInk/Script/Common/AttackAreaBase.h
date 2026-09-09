@@ -95,6 +95,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
 	FString HitSoundName = TEXT("AttackHit");
 
+	/** 生成时播放的音效名称（对应 AudioDataAsset 配置表中的键名，留空则静默） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX")
+	FString BirthSoundName;
+
+	/** 出生后延迟播放音效的时间（秒，默认 0，即立即播放） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|FX", meta = (ClampMin = "0.0", Units = "s"))
+	float BirthSoundPlayDelay = 0.0f;
+
 	/**
      * PIE 调试用 Hitbox 描线。显示的是 CollisionSphere 的真实世界半径，
      * 不参与碰撞，也不会改变攻击判定。
@@ -159,6 +167,9 @@ protected:
 private:
 	float ElapsedTime = 0.0f;
 
+	/** 延迟播放出生音效的计时器句柄 */
+	FTimerHandle BirthSoundTimerHandle;
+
 	/** 障碍物检测（射线，只查 WorldStatic，不依赖碰撞通道） */
 	void PerformObstacleScan(float DeltaTime);
 
@@ -184,4 +195,8 @@ private:
 
 	/** Prevent a persistent melee area from resolving its attack more than once. */
 	bool bAttackDamageResolved = false;
+
+	/** 在出生后延迟指定时间播放的音效（在 BeginPlay 的定时器回调中使用） */
+	UFUNCTION()
+	void PlayBirthSound();
 };

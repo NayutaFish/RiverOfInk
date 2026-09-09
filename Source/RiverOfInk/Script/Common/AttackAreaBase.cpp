@@ -63,6 +63,25 @@ void AAttackAreaBase::BeginPlay()
 	ElapsedTime = 0.0f;
 	CollisionSphere->SetSphereRadius(Radius);
 	UpdateDebugHitboxVisualization();
+
+	// 延迟播放出生音效
+	if (!BirthSoundName.IsEmpty() && BirthSoundPlayDelay > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(BirthSoundTimerHandle, this,
+			&AAttackAreaBase::PlayBirthSound, BirthSoundPlayDelay, false);
+	}
+	else if (!BirthSoundName.IsEmpty())
+	{
+		PlayBirthSound();
+	}
+}
+
+void AAttackAreaBase::PlayBirthSound()
+{
+	if (!BirthSoundName.IsEmpty())
+	{
+		FAudioManager::Play(BirthSoundName, true);
+	}
 }
 
 void AAttackAreaBase::Tick(float DeltaTime)
