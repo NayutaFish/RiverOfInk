@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "Core/SettlementDataRecorder.h"
 #include "Player/PlayerCharacter.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
@@ -23,6 +24,10 @@ void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	CurrentRunState = ERoguelikeRunState::MainMenu;
 	LastTransitionReason = ERoguelikeRunTransitionReason::None;
 	ConfigureDefaultWhiteboxRoomsIfUnset();
+
+	// 新的游戏会话（含 PIE 重进）：清掉上一局残留的静态结算数据，
+	// 否则结算/统计数值会跨会话继续累加。
+	USettlementDataRecorder::Reset();
 
 	const int32 Seed = RandomSeed != 0 ? RandomSeed : FMath::Rand();
 	RoomRandomStream.Initialize(Seed);
@@ -451,6 +456,11 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 	{
 		return false;
 	}
+
+	// 新一局开始：结算数据从 0 重新累计。
+	// 注意这里（以及"回到准备房间"那条路径刻意不清）—— Result/主菜单阶段仍可读取本局数据，
+	// 直到下一局真正开始才会被清空。
+	USettlementDataRecorder::Reset();
 
 	ResetRunProgress();
 

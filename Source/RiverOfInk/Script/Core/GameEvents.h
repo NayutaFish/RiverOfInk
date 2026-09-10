@@ -271,3 +271,63 @@ struct FCombatRoomClearedEvent
 {
 	FCombatRoomClearedEvent() = default;
 };
+
+// ====================
+// 精英敌人死亡事件（仅当敌人 isElite == true 时通报）
+// ====================
+
+struct FOnEliteEnemyDiedEvent
+{
+	/** 死亡的精英敌人 */
+	TObjectPtr<AEnemyBase> Victim = nullptr;
+
+	FOnEliteEnemyDiedEvent() = default;
+
+	FOnEliteEnemyDiedEvent(AEnemyBase* InVictim)
+		: Victim(InVictim)
+	{
+	}
+};
+
+// ====================
+// 非玩家单位受到玩家伤害事件
+// ====================
+
+struct FOnNonPlayerTakeDamageFromPlayer
+{
+	/** 本次受到的最终伤害（结算防御/倍率之后真正扣掉的血量） */
+	float FinalDamage = 0.0f;
+
+	FOnNonPlayerTakeDamageFromPlayer() = default;
+
+	FOnNonPlayerTakeDamageFromPlayer(float InFinalDamage)
+		: FinalDamage(InFinalDamage)
+	{
+	}
+};
+
+// ====================
+// 获得商店货币事件（纯墨收入）
+// ====================
+
+struct FShopCurrencyGainedEvent
+{
+	/** 本次获得的货币数量（正数） */
+	int32 Amount = 0;
+
+	FShopCurrencyGainedEvent() = default;
+
+	FShopCurrencyGainedEvent(int32 InAmount)
+		: Amount(InAmount)
+	{
+	}
+};
+
+// ====================
+// 完成一次商店购买事件
+// ====================
+
+struct FShopPurchaseCompletedEvent
+{
+	FShopPurchaseCompletedEvent() = default;
+};

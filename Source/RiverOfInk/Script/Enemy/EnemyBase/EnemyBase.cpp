@@ -599,6 +599,13 @@ void AEnemyBase::TakeDamageContext(const FDamageContext& InContext, AAttackAreaB
 			MaxHealth);
 	}
 
+	// 玩家对非玩家单位造成的伤害：通报一次，供结算统计（只统计真正掉血的命中）
+	if (FinalDamage > 0 && Cast<APlayerCharacter>(Context.SourceActor) != nullptr)
+	{
+		FEventBus::Publish<FOnNonPlayerTakeDamageFromPlayer>(
+			FOnNonPlayerTakeDamageFromPlayer(static_cast<float>(FinalDamage)));
+	}
+
 	// Keep this raw damage event for existing systems such as the temporary
 	// bonus-damage buff. State interruption is handled by OnHardBreak below.
 	if (Context.bIsDirectDamage)
@@ -745,6 +752,12 @@ void AEnemyBase::HandleDeadState()
 	// 通告敌人死亡（携带致死伤害信息与来源攻击区域）。经济子系统在此处
 	// 完成 EnemyDrop 交易；Dead 状态本身不直接依赖经济模块。
 	FEventBus::Publish<FNonPlayerDiedEvent>(FNonPlayerDiedEvent(this, LastDamageInfo, LastAttackArea));
+
+	// 精英敌人：额外通报一次专属死亡事件，供结算/统计等系统使用
+	if (isElite)
+	{
+		FEventBus::Publish<FOnEliteEnemyDiedEvent>(FOnEliteEnemyDiedEvent(this));
+	}
 
 	if (DeathDestroyDelay <= KINDA_SMALL_NUMBER)
 	{

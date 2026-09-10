@@ -6,6 +6,8 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -198,6 +200,9 @@ bool ARoguelikeShopManager::PurchaseItem(FName ItemId)
 		Item->Cost,
 		NewBalance);
 	OnPurchaseCompleted.Broadcast(ItemId, Item->Cost, NewBalance);
+
+	// 完成一次商店购买（只有真正成功、且道具效果已生效才会走到这里；回退路径在上面已 return）
+	FEventBus::Publish<FShopPurchaseCompletedEvent>(FShopPurchaseCompletedEvent());
 	return true;
 }
 

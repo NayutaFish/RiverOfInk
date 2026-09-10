@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -95,6 +95,14 @@ protected:
 	/** Gameplay-owned rank consumed by the shared Enemy Health widget. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Identity")
 	EEnemyRank EnemyRank = EEnemyRank::Normal;
+
+	/**
+	 * 是否视为精英敌人（在编辑器里直接勾选）。
+	 * 死亡时会额外通报 FOnEliteEnemyDiedEvent，供结算/统计使用。
+	 * 与 EnemyRank 相互独立：需要"精英"语义时请把两者一并设置。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Identity")
+	bool isElite = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Stats", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;

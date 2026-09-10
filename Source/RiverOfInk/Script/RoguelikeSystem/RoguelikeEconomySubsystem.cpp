@@ -231,6 +231,13 @@ bool URoguelikeEconomySubsystem::ApplyBalanceDelta(int32 Delta, EPureInkChangeRe
 	const int32 PreviousBalance = Wallet.Balance;
 	Wallet.Balance = static_cast<int32>(ProposedBalance);
 	OnPureInkChanged.Broadcast(PreviousBalance, Wallet.Balance, Delta, Reason);
+
+	// 获得商店货币（纯墨收入）：只统计真正的收入，商店购买失败的回退退款不计入
+	if (Delta > 0 && Reason != EPureInkChangeReason::ShopPurchase)
+	{
+		FEventBus::Publish<FShopCurrencyGainedEvent>(FShopCurrencyGainedEvent(Delta));
+	}
+
 	UE_LOG(LogRoguelike, Log,
 		TEXT("Pure Ink changed: Old=%d New=%d Delta=%d Reason=%d."),
 		PreviousBalance,
