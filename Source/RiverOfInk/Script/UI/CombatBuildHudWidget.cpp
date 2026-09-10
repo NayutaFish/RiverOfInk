@@ -611,8 +611,10 @@ void UCombatBuildHudWidget::SetBuildEntry(const FBuildHistoryEntry* Entry, bool 
 	// Keep the imported 1024x1024 texture from becoming the widget desired
 	// size. The outer ScaleBox/SizeBox owns the HUD footprint.
 	IconImage->SetBrushFromTexture(IconTexture, false);
-	const float IconSize = bRecent ? RecentIconSize : PreviousIconSize;
-	IconImage->SetDesiredSizeOverride(FVector2D(IconSize, IconSize));
+	// 注意：不要命名为 IconSize —— 同一 unity 编译单元里 RoguelikeRewardOptionWidget.cpp
+	// 的匿名命名空间已有同名常量，局部同名会触发 C4459（本项目按错误处理）。
+	const float ResolvedIconSize = bRecent ? RecentIconSize : PreviousIconSize;
+	IconImage->SetDesiredSizeOverride(FVector2D(ResolvedIconSize, ResolvedIconSize));
 	IconImage->SetColorAndOpacity(bRecent
 		? FLinearColor::White
 		: FLinearColor(1.0f, 1.0f, 1.0f, PreviousIconOpacity));
