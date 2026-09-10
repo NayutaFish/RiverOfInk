@@ -5,6 +5,7 @@
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "Player/PlayerState/PlayerState_Attack1.h"
 #include "Player/PlayerState/PlayerState_Attack2.h"
+#include "Player/PlayerState/PlayerState_Dash.h"
 #include "Player/PlayerState/PlayerState_HitBack.h"
 #include "Player/PlayerState/PlayerState_Skill1.h"
 #include "Player/PlayerState/PlayerState_Skill2.h"
@@ -26,12 +27,15 @@ void UPlayerState_Idle::OnEnter_Implementation()
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (!Input) return;
 
+	CachedInput = Input;
+
 	Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Idle::OnMoveInput);
 	Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Idle::OnMoveInput);
 	Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Idle::OnLmb);
 	Input->OnRmbDelegate.AddUObject(this, &UPlayerState_Idle::OnRmb);
 	Input->OnQDelegate.AddUObject(this, &UPlayerState_Idle::OnQ);
 	Input->OnEDelegate.AddUObject(this, &UPlayerState_Idle::OnE);
+	Input->OnSpaceDelegate.AddUObject(this, &UPlayerState_Idle::OnSpace);
 }
 
 void UPlayerState_Idle::OnExit_Implementation()
@@ -44,15 +48,37 @@ void UPlayerState_Idle::OnExit_Implementation()
 	// 取消订阅
 	Player->OnTakeDirectDamage.RemoveDynamic(this, &UPlayerState_Idle::OnTakeDirectDamage);
 
-	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
-	if (!Input) return;
+	UPlayerInputComponent* Input = CachedInput.Get();
+	if (Input)
+	{
+		Input->OnMoveXDelegate.RemoveAll(this);
+		Input->OnMoveYDelegate.RemoveAll(this);
+		Input->OnLmbDelegate.RemoveAll(this);
+		Input->OnRmbDelegate.RemoveAll(this);
+		Input->OnQDelegate.RemoveAll(this);
+		Input->OnEDelegate.RemoveAll(this);
+		Input->OnSpaceDelegate.RemoveAll(this);
+	}
 
-	Input->OnMoveXDelegate.RemoveAll(this);
-	Input->OnMoveYDelegate.RemoveAll(this);
-	Input->OnLmbDelegate.RemoveAll(this);
-	Input->OnRmbDelegate.RemoveAll(this);
-	Input->OnQDelegate.RemoveAll(this);
-	Input->OnEDelegate.RemoveAll(this);
+	CachedInput = nullptr;
+}
+
+void UPlayerState_Idle::Update_Implementation(float DeltaTime)
+{
+	Super::Update_Implementation(DeltaTime);
+
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || Player->IsDead())
+	{
+		return;
+	}
+
+	// 输入缓冲（哈迪斯式预输入）：冲刺在冷却时按下的空格会留到冷却结束，
+	// 这里负责在“允许的最早时刻”把它补上，避免站着按空格没反应。
+	if (Player->bCanDash && CachedInput && CachedInput->ConsumeBufferedInput(EPlayerBufferedInput::Dash))
+	{
+		Player->SwitchState(UPlayerState_Dash::StaticClass());
+	}
 }
 
 void UPlayerState_Idle::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -109,4 +135,26 @@ void UPlayerState_Idle::OnE()
 	if (!Player || !Player->SkillComponent) return;
 
 	Player->RequestSkill2Input();
+}
+
+void UPlayerState_Idle::OnSpace()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player)
+	{
+		return;
+	}
+
+	// 冲刺在冷却：按键留在输入缓冲里，冷却结束后由 Update 补上（不再直接吞掉）
+	if (!Player->bCanDash)
+	{
+		return;
+	}
+
+	if (CachedInput)
+	{
+		CachedInput->ClearBufferedInput(EPlayerBufferedInput::Dash);
+	}
+
+	Player->SwitchState(UPlayerState_Dash::StaticClass());
 }

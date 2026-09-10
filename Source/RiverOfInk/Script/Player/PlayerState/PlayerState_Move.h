@@ -7,6 +7,8 @@
 #include "Core/GlobalStructs.h"
 #include "PlayerState_Move.generated.h"
 
+class UPlayerInputComponent;
+
 /**
  * 移动状态：处理 WASD 移动和 Shift 疾跑，鼠标左键切换到攻击；
  * 受直接性伤害时切 HitBack
@@ -52,4 +54,8 @@ private:
 	/** 当前移动输入轴值，每帧在 Update 中统一应用，保证移动平滑。 */
 	float CurrentMoveX = 0.0f;
 	float CurrentMoveY = 0.0f;
+
+	/** 缓存的输入组件（OnEnter 取一次；输入缓冲需要每帧查询） */
+	UPROPERTY(Transient)
+	TObjectPtr<UPlayerInputComponent> CachedInput;
 };

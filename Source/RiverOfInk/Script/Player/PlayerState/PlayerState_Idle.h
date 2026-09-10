@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -7,8 +7,10 @@
 #include "Core/GlobalStructs.h"
 #include "PlayerState_Idle.generated.h"
 
+class UPlayerInputComponent;
+
 /**
- * 待机状态：检测移动输入后切换到移动状态，鼠标左键切换到攻击；
+ * 待机状态：检测移动输入后切换到移动状态，鼠标左键切换到攻击，空格冲刺；
  * 受直接性伤害时切 HitBack
  */
 UCLASS(meta = (BlueprintSpawnableComponent))
@@ -19,6 +21,7 @@ class RIVEROFINK_API UPlayerState_Idle : public UStateBase
 protected:
 	virtual void OnEnter_Implementation() override;
 	virtual void OnExit_Implementation() override;
+	virtual void Update_Implementation(float DeltaTime) override;
 
 	/** 受直接性伤害：切入击退状态 */
 	UFUNCTION()
@@ -30,4 +33,9 @@ private:
 	void OnRmb();
 	void OnQ();
 	void OnE();
+	void OnSpace();
+
+	/** 缓存的输入组件（OnEnter 取一次，避免每帧查找） */
+	UPROPERTY(Transient)
+	TObjectPtr<UPlayerInputComponent> CachedInput;
 };

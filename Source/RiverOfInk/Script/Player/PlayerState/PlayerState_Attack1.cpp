@@ -260,6 +260,12 @@ void UPlayerState_Attack1::OnSpace()
 	bAttackQueued = false;
 	AttackInputBufferAge = -1.0f;
 
+	// 这次冲刺已经即时响应，清掉输入缓冲里的记录，避免之后被补发成第二次冲刺
+	if (UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>())
+	{
+		Input->ClearBufferedInput(EPlayerBufferedInput::Dash);
+	}
+
 	if (CurrentPhase == EPlayerAttackPhase::Recovery)
 	{
 		// 后摇阶段蒙太奇基本已播完，沿用原有收尾方式。

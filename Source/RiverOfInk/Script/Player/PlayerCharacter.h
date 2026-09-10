@@ -201,6 +201,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float SprintSpeed = 900.0f;
 
+	/**
+	 * 从静止加速到当前移动速度上限所需的时间（秒）。
+	 * 代码按 v / t 反算 CharacterMovement 的 MaxAcceleration，所以走速、疾跑速度、Buff 加成变化时
+	 * 起步时间都保持不变（默认 0.2s，哈迪斯式“几乎立刻到满速”）；设为 0 表示不干预 MaxAcceleration。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0", Units = "s"))
+	float MoveRampUpTime = 0.2f;
+
+	/**
+	 * 按当前走/跑速度（含 Buff 加成）刷新 MaxWalkSpeed，并按 MoveRampUpTime 反算 MaxAcceleration。
+	 * 移动状态每帧调用，以便即时吃到速度类 Buff 的变化。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void RefreshMovementTuning();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting = false;
 

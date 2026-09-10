@@ -189,6 +189,70 @@ FVector UPlayerInputComponent::GetMoveWorldDirection() const
 	return Direction;
 }
 
+// ──────────────────────────────
+// 输入缓冲（预输入）
+// ──────────────────────────────
+
+void UPlayerInputComponent::BufferInput(EPlayerBufferedInput Input)
+{
+	if (Input == EPlayerBufferedInput::None || InputBufferWindow <= 0.0f)
+	{
+		return;
+	}
+
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	BufferedInputTimes.Add(Input, Now);
+}
+
+bool UPlayerInputComponent::HasBufferedInput(EPlayerBufferedInput Input) const
+{
+	if (Input == EPlayerBufferedInput::None || InputBufferWindow <= 0.0f)
+	{
+		return false;
+	}
+
+	const double* FoundTime = BufferedInputTimes.Find(Input);
+	if (!FoundTime)
+	{
+		return false;
+	}
+
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	return (Now - *FoundTime) <= static_cast<double>(InputBufferWindow);
+}
+
+bool UPlayerInputComponent::ConsumeBufferedInput(EPlayerBufferedInput Input)
+{
+	if (Input == EPlayerBufferedInput::None || InputBufferWindow <= 0.0f)
+	{
+		return false;
+	}
+
+	double PressedTime = 0.0;
+	if (!BufferedInputTimes.RemoveAndCopyValue(Input, PressedTime))
+	{
+		return false;
+	}
+
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	return (Now - PressedTime) <= static_cast<double>(InputBufferWindow);
+}
+
+void UPlayerInputComponent::ClearBufferedInput(EPlayerBufferedInput Input)
+{
+	if (Input == EPlayerBufferedInput::None)
+	{
+		return;
+	}
+
+	BufferedInputTimes.Remove(Input);
+}
+
+void UPlayerInputComponent::ClearAllBufferedInputs()
+{
+	BufferedInputTimes.Reset();
+}
+
 void UPlayerInputComponent::OnShift(const FInputActionValue& Value)
 {
 	CurrentShiftValue = Value.Get<float>();
@@ -217,26 +281,31 @@ void UPlayerInputComponent::DispatchLmb()
 		return;
 	}
 	LastLmbDispatchTime = Now;
+	BufferInput(EPlayerBufferedInput::Attack1);
 	OnLmbDelegate.Broadcast();
 }
 
 void UPlayerInputComponent::OnRmb()
 {
+	BufferInput(EPlayerBufferedInput::Attack2);
 	OnRmbDelegate.Broadcast();
 }
 
 void UPlayerInputComponent::OnSpace()
 {
+	BufferInput(EPlayerBufferedInput::Dash);
 	OnSpaceDelegate.Broadcast();
 }
 
 void UPlayerInputComponent::OnQ()
 {
+	BufferInput(EPlayerBufferedInput::Skill1);
 	OnQDelegate.Broadcast();
 }
 
 void UPlayerInputComponent::OnE()
 {
+	BufferInput(EPlayerBufferedInput::Skill2);
 	OnEDelegate.Broadcast();
 }
 

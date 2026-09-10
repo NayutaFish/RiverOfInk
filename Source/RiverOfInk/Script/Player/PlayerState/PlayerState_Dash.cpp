@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Dash.h"
 #include "RiverOfInk.h"
@@ -57,12 +57,14 @@ void UPlayerState_Dash::OnEnter_Implementation()
 		}
 	}
 
-	// 订阅 WASD 输入，跟踪退出时是否有移动
+	// 订阅 WASD 输入，跟踪退出时是否有移动；同时订阅左键做 dash-attack 取消
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (Input)
 	{
+		CachedInput = Input;
 		Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Dash::OnMoveX);
 		Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Dash::OnMoveY);
+		Input->OnLmbDelegate.AddUObject(this, &UPlayerState_Dash::OnLmb);
 	}
 
 	// 冲刺期间锁定朝向（不让 CMC 按移动输入自行转向）
@@ -77,13 +79,16 @@ void UPlayerState_Dash::OnEnter_Implementation()
 		Player->SetActorRotation(FRotator(0.0f, InputDirection.Rotation().Yaw, 0.0f));
 	}
 
-	// 速度 = 当前朝向 × n（朝向已在上面按输入方向校正）
-	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * 5500.0f;
+	// 速度 = 当前朝向 × 起手速度（朝向已在上面按输入方向校正）
+	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * DashInitialSpeed;
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Player Dash started: Direction=%s Source=%s."),
+		TEXT("Player Dash started: Direction=%s Source=%s InitialSpeed=%.0f SustainSpeed=%.0f Duration=%.2f."),
 		*Player->GetActorForwardVector().ToCompactString(),
-		bHasInputDirection ? TEXT("MoveInput") : TEXT("ActorFacing"));
+		bHasInputDirection ? TEXT("MoveInput") : TEXT("ActorFacing"),
+		DashInitialSpeed,
+		DashSpeed,
+		DashDuration);
 
 	// ms 后检测退出
 	bHadMoveInput = false;
@@ -100,7 +105,7 @@ void UPlayerState_Dash::OnEnter_Implementation()
 		{
 			Player->SwitchState(UPlayerState_Idle::StaticClass());
 		}
-	}), 0.17f, false);
+	}), FMath::Max(DashDuration, KINDA_SMALL_NUMBER), false);
 }
 
 void UPlayerState_Dash::OnExit_Implementation()
@@ -123,12 +128,15 @@ void UPlayerState_Dash::OnExit_Implementation()
 	Player->GetCharacterMovement()->bOrientRotationToMovement = true;
 
 	// 取消订阅
-	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
+	UPlayerInputComponent* Input = CachedInput.Get();
 	if (Input)
 	{
 		Input->OnMoveXDelegate.RemoveAll(this);
 		Input->OnMoveYDelegate.RemoveAll(this);
+		Input->OnLmbDelegate.RemoveAll(this);
 	}
+
+	CachedInput = nullptr;
 
 	// 取消计时器
 	if (GetWorld())
@@ -145,7 +153,33 @@ void UPlayerState_Dash::Update_Implementation(float DeltaTime)
 	if (!Player) return;
 
 	// 持续保持冲刺速度，抵消摩擦减速
-	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * 2800.0f;
+	Player->GetCharacterMovement()->Velocity = Player->GetActorForwardVector() * DashSpeed;
+}
+
+void UPlayerState_Dash::OnLmb()
+{
+	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+	if (!Player || !bAllowDashAttackCancel)
+	{
+		return;
+	}
+
+	// 普攻也在冷却：不做取消，把这次左键留给输入缓冲（之后回到 Move/Idle 时可按需消费）
+	if (!Player->bCanAttack1)
+	{
+		return;
+	}
+
+	// 哈迪斯式 dash-attack：冲刺途中按左键立刻转入普攻。
+	// 冲刺的 OnExit 会负责收尾（bIsDashing、冲刺冷却、朝向恢复、计时器清理），
+	// 所以这里直接请求普攻即可，不需要手动停冲刺。
+	if (CachedInput)
+	{
+		CachedInput->ClearBufferedInput(EPlayerBufferedInput::Attack1);
+	}
+
+	UE_LOG(LogRiverOfInk, Log, TEXT("Player Dash canceled into normal attack (dash-attack)."));
+	Player->RequestNormalAttack();
 }
 
 void UPlayerState_Dash::OnMoveX(float Value)

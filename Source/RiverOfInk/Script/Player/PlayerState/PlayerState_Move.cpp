@@ -38,6 +38,8 @@ void UPlayerState_Move::OnEnter_Implementation()
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (!Input) return;
 
+	CachedInput = Input;
+
 	// 状态切换期间 Shift 的按下/松开收不到事件（订阅刚建立），这里按输入组件的缓存状态恢复疾跑。
 	Player->SetSprinting(Input->IsSprintHeld());
 
@@ -61,7 +63,7 @@ void UPlayerState_Move::OnExit_Implementation()
 	// 取消订阅
 	Player->OnTakeDirectDamage.RemoveDynamic(this, &UPlayerState_Move::OnTakeDirectDamage);
 
-	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
+	UPlayerInputComponent* Input = CachedInput.Get();
 	if (Input)
 	{
 		Input->OnMoveXDelegate.RemoveAll(this);
@@ -74,9 +76,10 @@ void UPlayerState_Move::OnExit_Implementation()
 		Input->OnEDelegate.RemoveAll(this);
 	}
 
-	// 离开移动状态时把速度上限复位（仍按住 Shift 时保留疾跑速度，避免下一帧被走速覆盖）
-	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
-		Player->IsSprinting() ? Player->SprintSpeed : Player->WalkSpeed);
+	CachedInput = nullptr;
+
+	// 离开移动状态时把速度上限/加速度复位（仍按住 Shift 时保留疾跑速度，避免下一帧被走速覆盖）
+	Player->RefreshMovementTuning();
 }
 
 void UPlayerState_Move::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -94,12 +97,19 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
+	// 输入缓冲（哈迪斯式预输入）：冲刺冷却期间按下的空格会留在缓冲里，
+	// 冷却一结束就在这里补发，避免“按了没反应”的断手感。
+	if (Player->bCanDash && CachedInput && CachedInput->ConsumeBufferedInput(EPlayerBufferedInput::Dash))
+	{
+		Player->SwitchState(UPlayerState_Dash::StaticClass());
+		return;
+	}
+
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
 	if (!Movement) return;
 
-	// 按疾跑状态设置速度上限（原来无条件写成 WalkSpeed，会把疾跑覆盖掉）
-	Movement->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
-		Player->IsSprinting() ? Player->SprintSpeed : Player->WalkSpeed);
+	// 速度上限 + 起步加速度（0.2s 到满速）一起刷新，吃得到疾跑与速度类 Buff 的变化
+	Player->RefreshMovementTuning();
 
 	// 每帧根据当前输入轴值合成移动方向，保证持续、平滑地移动。
 	// 等距映射：A/D 沿世界 (-1,1)，W/S 沿世界 (1,1)，两轴互相正交。
@@ -182,10 +192,18 @@ void UPlayerState_Move::OnE()
 void UPlayerState_Move::OnSpace()
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
-	if (Player && Player->bCanDash)
+	if (!Player || !Player->bCanDash)
 	{
-		Player->SwitchState(UPlayerState_Dash::StaticClass());
+		// 冲刺在冷却中：把按键留在输入缓冲里，冷却结束后由 Update 补发
+		return;
 	}
+
+	if (CachedInput)
+	{
+		CachedInput->ClearBufferedInput(EPlayerBufferedInput::Dash);
+	}
+
+	Player->SwitchState(UPlayerState_Dash::StaticClass());
 }
 
 void UPlayerState_Move::OnShift(float Value)

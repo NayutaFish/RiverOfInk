@@ -221,10 +221,8 @@ bool APlayerCharacter::ApplyRuntimeData(const FPlayerRuntimeData& InRuntimeData)
 		HealthComponent->RefreshRuntimeModifiers();
 	}
 
-	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
-	{
-		MovementComponent->MaxWalkSpeed = GetEffectiveMoveSpeed(bIsSprinting ? SprintSpeed : WalkSpeed);
-	}
+	// 速度上限与起步加速度一起刷新（起步时间由 MoveRampUpTime 决定）
+	RefreshMovementTuning();
 
 	return bAppliedAllComponents;
 }
@@ -244,7 +242,8 @@ void APlayerCharacter::BeginPlay()
 		HealthComponent->OnTakeDirectDamage.AddDynamic(this, &APlayerCharacter::HandleHealthDirectDamage);
 		HealthComponent->InitializeHealth();
 	}
-	GetCharacterMovement()->MaxWalkSpeed = GetEffectiveMoveSpeed(WalkSpeed);
+	// 速度上限 + 起步加速度（0.2s 到满速的默认手感）
+	RefreshMovementTuning();
 
 	// Defaults are initialized first. A later level-spawned Pawn restores the
 	// snapshot held by the GameInstance subsystem instead of replacing it with
@@ -1260,15 +1259,33 @@ void APlayerCharacter::SetSprinting(bool bInSprinting)
 
 	// 立刻按疾跑/走路速度刷新；否则要等下一次移动状态 Update 才生效，
 	// 而移动状态每帧都会重设 MaxWalkSpeed，容易把疾跑覆盖掉。
-	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
-	{
-		MovementComponent->MaxWalkSpeed = GetEffectiveMoveSpeed(bIsSprinting ? SprintSpeed : WalkSpeed);
-	}
+	RefreshMovementTuning();
 
 	UE_LOG(LogRiverOfInk, Verbose,
-		TEXT("Player sprint %s: MaxWalkSpeed=%.1f."),
+		TEXT("Player sprint %s: MaxWalkSpeed=%.1f MaxAcceleration=%.1f."),
 		bIsSprinting ? TEXT("started") : TEXT("stopped"),
-		GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeed : 0.0f);
+		GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeed : 0.0f,
+		GetCharacterMovement() ? GetCharacterMovement()->MaxAcceleration : 0.0f);
+}
+
+void APlayerCharacter::RefreshMovementTuning()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!MovementComponent)
+	{
+		return;
+	}
+
+	// 1) 速度上限：走路 / 疾跑（含 Buff 加成后的有效值）
+	const float TargetSpeed = GetEffectiveMoveSpeed(bIsSprinting ? SprintSpeed : WalkSpeed);
+	MovementComponent->MaxWalkSpeed = TargetSpeed;
+
+	// 2) 起步加速度：让“0 → 满速”正好花 MoveRampUpTime 秒（a = v / t）。
+	//    地面摩擦力还会再拖一点点，觉得起步仍偏慢就把 MoveRampUpTime 调小（例如 0.12~0.15）。
+	if (MoveRampUpTime > KINDA_SMALL_NUMBER)
+	{
+		MovementComponent->MaxAcceleration = FMath::Max(TargetSpeed / MoveRampUpTime, 1.0f);
+	}
 }
 
 void APlayerCharacter::StartDashCooldown()

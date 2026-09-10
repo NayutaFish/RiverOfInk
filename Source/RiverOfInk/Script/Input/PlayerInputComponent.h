@@ -14,6 +14,18 @@ class UInputMappingContext;
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnPlayerInputAxis, float);
 DECLARE_MULTICAST_DELEGATE(FOnPlayerInputAction);
 
+/** 参与“预输入缓冲”的玩家操作。 */
+UENUM(BlueprintType)
+enum class EPlayerBufferedInput : uint8
+{
+	None		UMETA(DisplayName = "None"),
+	Dash		UMETA(DisplayName = "Dash (Space)"),
+	Attack1		UMETA(DisplayName = "Normal Attack (LMB)"),
+	Attack2		UMETA(DisplayName = "Secondary (RMB)"),
+	Skill1		UMETA(DisplayName = "Skill 1 (Q)"),
+	Skill2		UMETA(DisplayName = "Skill 2 (E)")
+};
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API UPlayerInputComponent : public UActorComponent
 {
@@ -43,6 +55,33 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Input|Move", meta = (ClampMin = "0.0", ClampMax = "0.9"))
 	float MoveAxisDeadZone = 0.2f;
+
+	// ── 输入缓冲（预输入 / input buffering）──
+
+	/** 记录一次操作请求（同类型刷新时间戳）；状态在“允许的最早时刻”消费它，避免按键被吞掉。 */
+	void BufferInput(EPlayerBufferedInput Input);
+
+	/** 该操作的缓冲是否仍在窗口内（不消费）。 */
+	UFUNCTION(BlueprintPure, Category = "Input|Buffer")
+	bool HasBufferedInput(EPlayerBufferedInput Input) const;
+
+	/** 消费该操作的缓冲：仍在窗口内返回 true 并清除；已过期返回 false（同样清除）。 */
+	UFUNCTION(BlueprintCallable, Category = "Input|Buffer")
+	bool ConsumeBufferedInput(EPlayerBufferedInput Input);
+
+	/** 主动丢弃该操作的缓冲（例如已经即时响应过，避免之后重复触发）。 */
+	UFUNCTION(BlueprintCallable, Category = "Input|Buffer")
+	void ClearBufferedInput(EPlayerBufferedInput Input);
+
+	/** 丢弃全部缓冲。 */
+	void ClearAllBufferedInputs();
+
+	/**
+	 * 输入缓冲窗口（秒）：决定“提前按下的键”能被保留多久。
+	 * 0.2~0.3 秒是动作游戏的常见区间；设为 0 即关闭缓冲（按键会被吞）。
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Buffer", meta = (ClampMin = "0.0", Units = "s"))
+	float InputBufferWindow = 0.25f;
 
 	/**
 	 * 当前移动输入合成的世界方向；无输入时返回零向量。
@@ -74,6 +113,9 @@ protected:
 
 	/** 缓存的疾跑键轴值（OnShift 持续刷新）。 */
 	float CurrentShiftValue = 0.0f;
+
+	/** 各操作最近一次按下的世界时间（秒）；不存在该键 = 没有缓冲。 */
+	TMap<EPlayerBufferedInput, double> BufferedInputTimes;
 
 	/** 规范化单轴输入：同轴正反键抵消 + 死区。 */
 	float SanitizeMoveAxis(float RawValue) const;
