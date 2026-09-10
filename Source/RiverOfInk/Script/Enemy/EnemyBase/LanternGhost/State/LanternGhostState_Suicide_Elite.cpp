@@ -126,13 +126,13 @@ void ULanternGhostState_Suicide_Elite::ExecuteAttack()
 		return;
 	}
 
-	// 存活召唤物已达上限：本次召唤作废（不播特效、不生成小怪），但必须正常回到追击，
-	// 否则精英怪会卡在攻击状态什么都不做。
+	// 存活召唤物还够多时不再补充：只有存活数 <= MaxAliveSummonCount 时才召唤。
+	// 作废时也必须正常回到追击，否则精英怪会卡在攻击状态什么都不做。
 	const int32 AliveSummons = RefreshAliveSummonCount();
-	if (AliveSummons >= MaxAliveSummonCount)
+	if (AliveSummons > MaxAliveSummonCount)
 	{
 		UE_LOG(LogRiverOfInk, Log,
-			TEXT("Enemy %s elite summon skipped: alive summons %d/%d reached the cap; returning to Chase."),
+			TEXT("Enemy %s elite summon skipped: alive summons %d > refill limit %d; returning to Chase."),
 			*Enemy->GetName(),
 			AliveSummons,
 			MaxAliveSummonCount);

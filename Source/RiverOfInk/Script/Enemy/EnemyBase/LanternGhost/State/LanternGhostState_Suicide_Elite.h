@@ -16,7 +16,7 @@ class UNiagaraSystem;
  * 攻击执行时沿自身朝向取“左前”和“右前”两个落点，
  * 先在这两个落点播放 summonVFX 特效，再生成 summonEnemyBase 小怪。
  * 落点会做地面贴合与占位检测，取不到合适位置时按回退缩放取更近的落点。
- * 存活召唤物数量达到 MaxAliveSummonCount 时本次召唤作废。
+ * 存活召唤物数量超过 MaxAliveSummonCount 时本次召唤作废。
  */
 UCLASS(meta = (BlueprintSpawnableComponent))
 class RIVEROFINK_API ULanternGhostState_Suicide_Elite : public UEnemyState_Attack
@@ -89,12 +89,12 @@ public:
 	bool bKillSummonsOnOwnerDeath = true;
 
 	/**
-	 * 场上存活召唤物数量上限。
-	 * 准备召唤时，若当前存活数量 >= 该值，则本次召唤直接作废（不播特效、不生成小怪）。
-	 * 设为 0 表示完全禁止召唤。
+	 * 允许重新召唤的存活召唤物上限。
+	 * 准备召唤时，只有当前存活数量 <= 该值才会召唤；超过该值则本次召唤直接作废（不播特效、不生成小怪）。
+	 * 默认 2 = “小怪 ≤2 只时才重新召唤”；设为 -1 表示完全禁止召唤。
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Suicide|Summon", meta = (ClampMin = "0"))
-	int32 MaxAliveSummonCount = 4;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Suicide|Summon", meta = (ClampMin = "-1"))
+	int32 MaxAliveSummonCount = 2;
 
 	/** 当前存活的召唤物数量（只统计，不修改登记表） */
 	UFUNCTION(BlueprintPure, Category = "Enemy|Suicide|Summon")
