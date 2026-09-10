@@ -13,9 +13,12 @@ class AEnemyBase;
  * 远程精英灯笼怪攻击状态。
  *
  * 每次进入该状态（即每次蓄力结束）执行**一种**攻击方式，三种方式依次循环，三次蓄力攻击构成一轮：
- *   模式 0：左右两侧各一枚贝塞尔曲线射弹打向目标，连续发射 2 次，两次间隔 1 秒；
- *   模式 1：朝目标方向发射 3 枚直线散射射弹（相邻夹角 30 度），连续发射 3 次，每次间隔 1 秒；
+ *   模式 0：左右两侧各一枚贝塞尔曲线射弹打向**自身朝向**，连续发射 2 次，两次间隔 1 秒；
+ *   模式 1：朝**自身朝向**发射 3 枚直线散射射弹（相邻夹角 30 度），连续发射 3 次，每次间隔 1 秒；
  *   模式 2：以自身为中心、面朝方向为前，前/后/左/右/左前/左后/右前/右后八个方向各一枚直线射弹。
+ *
+ * 三种方式的弹道方向**全部以自身朝向为准**，不会锁定玩家当前位置：
+ * 攻击状态会把朝向锁定在“进入攻击时面向目标”的方向，之后玩家靠走位即可躲开弹幕。
  *
  * 序列期间的每一发之间用计时器排程；状态被硬值打断/切换时会把排程全部清理，不会补发。
  */
@@ -66,6 +69,13 @@ public:
 	/** 贝塞尔控制点 P1 沿 起点->终点 方向的比例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Ranged Elite|Bezier", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BezierP1PositionRate = 0.3f;
+
+	/**
+	 * 贝塞尔弹终点相对自身的“前向距离”：终点 = 自身位置 + 朝向 × 该值。
+	 * 不再取玩家当前位置，弹道方向完全由自身朝向决定；到达终点后剩余时间沿切线直线飞出，所以这个值只需给一个合理的作用距离。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Ranged Elite|Bezier", meta = (ClampMin = "0.0", Units = "cm"))
+	float BezierTargetForwardDistance = 1200.0f;
 
 	/** 初始速度倍率（仅对灯笼怪远程专用贝塞尔子类生效）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Ranged Elite|Bezier", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -142,8 +152,13 @@ private:
 	/** 按当前模式发射一次（模式 0 一次 = 两枚贝塞尔；模式 1 一次 = 一组散射；模式 2 一次 = 整圈）。 */
 	void FireOnce(AEnemyBase& Enemy);
 
-	void FireBezierVolley(AEnemyBase& Enemy, const FVector& TargetLocation);
-	void FireSpreadBurst(AEnemyBase& Enemy, float AimYaw);
+	/** 两侧贝塞尔连发：弹道与终点都以 FacingYaw 为准。 */
+	void FireBezierVolley(AEnemyBase& Enemy, float FacingYaw);
+
+	/** 直线散射：以 FacingYaw 为中心对称展开。 */
+	void FireSpreadBurst(AEnemyBase& Enemy, float FacingYaw);
+
+	/** 八方向环形：以 FacingYaw 为“前”。 */
 	void FireRingBurst(AEnemyBase& Enemy, float FacingYaw);
 
 	/** 生成一枚直线射弹（方向由 Yaw 决定）。 */

@@ -9,7 +9,6 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-#include "Player/PlayerCharacter.h"
 #include "RiverOfInk.h"
 #include "TimerManager.h"
 
@@ -25,9 +24,6 @@ namespace
 		SpreadBurst = 1,
 		RingBurst = 2
 	};
-
-	/** 没有有效目标时，用一个较远的假目标位置作为贝塞尔终点。 */
-	constexpr float BezierFallbackTargetDistance = 1200.0f;
 
 	const TCHAR* GetModeName(int32 Mode)
 	{
@@ -170,43 +166,28 @@ void ULanternGhostState_Ranged_Elite::PerformShotStep()
 
 void ULanternGhostState_Ranged_Elite::FireOnce(AEnemyBase& Enemy)
 {
-	// 攻击状态期间基类每帧把朝向锁到目标方向，所以这里取到的就是“自己面朝方向”
-	const FRotator FacingRotation = Enemy.GetActorRotation();
-	float AimYaw = FacingRotation.Yaw;
-
-	// 目标方向（用于散射的朝向与贝塞尔的终点）
-	FVector TargetLocation = Enemy.GetActorLocation() + FacingRotation.Vector() * BezierFallbackTargetDistance;
-	if (const APlayerCharacter* Target = Enemy.GetCombatTarget())
-	{
-		TargetLocation = Target->GetActorLocation();
-
-		FVector ToTarget = TargetLocation - Enemy.GetActorLocation();
-		ToTarget.Z = 0.0f;
-		if (!ToTarget.IsNearlyZero())
-		{
-			AimYaw = ToTarget.Rotation().Yaw;
-		}
-	}
+	// 三种攻击方式全部以“自身朝向”为准：攻击状态期间基类会把朝向锁定在
+	// “进入攻击时面向目标”的方向，此后不再跟随玩家移动，玩家可以靠走位躲开弹幕。
+	const float FacingYaw = Enemy.GetActorRotation().Yaw;
 
 	switch (ActiveAttackMode)
 	{
 	case static_cast<int32>(ELanternGhostRangedEliteMode::SpreadBurst):
-		FireSpreadBurst(Enemy, AimYaw);
+		FireSpreadBurst(Enemy, FacingYaw);
 		break;
 
 	case static_cast<int32>(ELanternGhostRangedEliteMode::RingBurst):
-		// 环形以自身面朝方向为“前”，与目标方向解耦
-		FireRingBurst(Enemy, FacingRotation.Yaw);
+		FireRingBurst(Enemy, FacingYaw);
 		break;
 
 	case static_cast<int32>(ELanternGhostRangedEliteMode::BezierVolley):
 	default:
-		FireBezierVolley(Enemy, TargetLocation);
+		FireBezierVolley(Enemy, FacingYaw);
 		break;
 	}
 }
 
-void ULanternGhostState_Ranged_Elite::FireBezierVolley(AEnemyBase& Enemy, const FVector& TargetLocation)
+void ULanternGhostState_Ranged_Elite::FireBezierVolley(AEnemyBase& Enemy, float FacingYaw)
 {
 	UWorld* World = GetWorld();
 	const TSubclassOf<AAttackAreaBase> ResolvedClass = ResolveBezierClass(Enemy);
@@ -215,11 +196,11 @@ void ULanternGhostState_Ranged_Elite::FireBezierVolley(AEnemyBase& Enemy, const 
 		return;
 	}
 
+	// 终点 = 自身位置 + 朝向 × 前向距离，不取玩家当前位置
+	const FRotator SpawnRotation(0.0f, FacingYaw, 0.0f);
 	const FVector SpawnLocation = Enemy.GetActorLocation();
-	FVector ToTarget = TargetLocation - SpawnLocation;
-	ToTarget.Z = 0.0f;
-
-	const FRotator SpawnRotation = ToTarget.IsNearlyZero() ? Enemy.GetActorRotation() : ToTarget.Rotation();
+	const FVector TargetLocation = SpawnLocation
+		+ SpawnRotation.Vector() * FMath::Max(0.0f, BezierTargetForwardDistance);
 	const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
 	const TSubclassOf<AAttackAreaBase_Bezier> BezierClass(ResolvedClass);
 
@@ -271,7 +252,7 @@ void ULanternGhostState_Ranged_Elite::FireBezierVolley(AEnemyBase& Enemy, const 
 		BezierSideOffset);
 }
 
-void ULanternGhostState_Ranged_Elite::FireSpreadBurst(AEnemyBase& Enemy, float AimYaw)
+void ULanternGhostState_Ranged_Elite::FireSpreadBurst(AEnemyBase& Enemy, float FacingYaw)
 {
 	const TSubclassOf<AAttackAreaBase> ResolvedClass = ResolveStraightClass(Enemy);
 	if (!ResolvedClass)
@@ -280,8 +261,8 @@ void ULanternGhostState_Ranged_Elite::FireSpreadBurst(AEnemyBase& Enemy, float A
 	}
 
 	const int32 ProjectileCount = FMath::Max(1, SpreadProjectileCount);
-	// 以目标方向为中心对称展开，相邻夹角 SpreadAngleStep
-	const float StartYaw = AimYaw - SpreadAngleStep * (ProjectileCount - 1) * 0.5f;
+	// 以自身朝向为中心对称展开，相邻夹角 SpreadAngleStep
+	const float StartYaw = FacingYaw - SpreadAngleStep * (ProjectileCount - 1) * 0.5f;
 
 	for (int32 Index = 0; Index < ProjectileCount; ++Index)
 	{
@@ -293,7 +274,7 @@ void ULanternGhostState_Ranged_Elite::FireSpreadBurst(AEnemyBase& Enemy, float A
 		*Enemy.GetName(),
 		ProjectileCount,
 		SpreadAngleStep,
-		AimYaw);
+		FacingYaw);
 }
 
 void ULanternGhostState_Ranged_Elite::FireRingBurst(AEnemyBase& Enemy, float FacingYaw)
