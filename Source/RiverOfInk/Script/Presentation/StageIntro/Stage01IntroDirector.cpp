@@ -8,6 +8,15 @@
 #include "CameraManager/CameraManager.h"
 #include "CineCameraActor.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/ContentWidget.h"
+#include "Components/Image.h"
+#include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
+#include "Engine/Font.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
@@ -19,6 +28,126 @@
 #include "MovieSceneSequencePlayer.h"
 #include "Presentation/StageIntro/InkOverlay.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
+#include "Styling/SlateBrush.h"
+
+namespace
+{
+	static const TCHAR* MainMenuTitleTexturePath =
+		TEXT("/Game/RawContent/UI/MainMenuHUD/T_UI_MainMenuHUD_Title_MoranKaifeng.T_UI_MainMenuHUD_Title_MoranKaifeng");
+	static const TCHAR* MainMenuButtonTexturePath =
+		TEXT("/Game/RawContent/UI/MainMenuHUD/T_UI_MainMenuHUD_Button_Normal.T_UI_MainMenuHUD_Button_Normal");
+	static const TCHAR* MainMenuFocusTexturePath =
+		TEXT("/Game/RawContent/UI/MainMenuHUD/T_UI_MainMenuHUD_Button_Focus.T_UI_MainMenuHUD_Button_Focus");
+	static const TCHAR* MainMenuInkPanelTexturePath =
+		TEXT("/Game/RawContent/UI/MainMenuHUD/T_UI_MainMenuHUD_InkPanel.T_UI_MainMenuHUD_InkPanel");
+	static const TCHAR* MainMenuFontPath =
+		TEXT("/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
+
+	UTextBlock* FindTextBlockRecursive(UWidget* Root)
+	{
+		if (!IsValid(Root))
+		{
+			return nullptr;
+		}
+
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(Root))
+		{
+			return TextBlock;
+		}
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Root))
+		{
+			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+			{
+				if (UTextBlock* TextBlock = FindTextBlockRecursive(Panel->GetChildAt(ChildIndex)))
+				{
+					return TextBlock;
+				}
+			}
+		}
+
+		if (UContentWidget* Content = Cast<UContentWidget>(Root))
+		{
+			return FindTextBlockRecursive(Content->GetContent());
+		}
+
+		return nullptr;
+	}
+
+	UCanvasPanel* FindCanvasPanelRecursive(UWidget* Root)
+	{
+		if (!IsValid(Root))
+		{
+			return nullptr;
+		}
+
+		if (UCanvasPanel* Canvas = Cast<UCanvasPanel>(Root))
+		{
+			return Canvas;
+		}
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Root))
+		{
+			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+			{
+				if (UCanvasPanel* Canvas = FindCanvasPanelRecursive(Panel->GetChildAt(ChildIndex)))
+				{
+					return Canvas;
+				}
+			}
+		}
+
+		if (UContentWidget* Content = Cast<UContentWidget>(Root))
+		{
+			return FindCanvasPanelRecursive(Content->GetContent());
+		}
+
+		return nullptr;
+	}
+
+	UButton* FindButtonByName(const TArray<UButton*>& Buttons, const TCHAR* ButtonName)
+	{
+		for (UButton* Button : Buttons)
+		{
+			if (IsValid(Button) && Button->GetName().Equals(ButtonName, ESearchCase::IgnoreCase))
+			{
+				return Button;
+			}
+		}
+		return nullptr;
+	}
+
+	UButton* FindButtonByLabel(const TArray<UButton*>& Buttons, const TCHAR* Label)
+	{
+		for (UButton* Button : Buttons)
+		{
+			if (UTextBlock* TextBlock = FindTextBlockRecursive(Button))
+			{
+				if (TextBlock->GetText().ToString().Equals(Label, ESearchCase::CaseSensitive))
+				{
+					return Button;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	FSlateBrush MakeMainMenuBrush(UTexture2D* Texture, const FLinearColor& Tint)
+	{
+		FSlateBrush Brush;
+		if (!IsValid(Texture))
+		{
+			return Brush;
+		}
+
+		Brush.SetResourceObject(Texture);
+		Brush.ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		Brush.Tiling = ESlateBrushTileType::NoTile;
+		Brush.TintColor = FSlateColor(Tint);
+		return Brush;
+	}
+}
 
 AStage01IntroDirector::AStage01IntroDirector()
 {
@@ -35,6 +164,7 @@ void AStage01IntroDirector::BeginPlay()
 	IntroState = EStage01IntroState::Idle;
 	bIntroPlaying = false;
 	bTravelRequested = false;
+	HudFadeElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
 
 	ResolveSceneReferences();
@@ -85,6 +215,12 @@ void AStage01IntroDirector::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	MaintainIntroCameraOwnership();
+
+	if (IntroState == EStage01IntroState::HudFading)
+	{
+		UpdateMainMenuHudFade(DeltaTime);
+		return;
+	}
 
 	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
 	{
@@ -259,6 +395,7 @@ bool AStage01IntroDirector::CreateSequencePlayer()
 bool AStage01IntroDirector::PlayIntro()
 {
 	if (bIntroPlaying || IntroState == EStage01IntroState::Playing
+		|| IntroState == EStage01IntroState::HudFading
 		|| IntroState == EStage01IntroState::Fading
 		|| IntroState == EStage01IntroState::Traveling)
 	{
@@ -274,6 +411,7 @@ bool AStage01IntroDirector::PlayIntro()
 
 	bIntroPlaying = true;
 	bTravelRequested = false;
+	HudFadeElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
 	IntroState = EStage01IntroState::Playing;
 	ClearIntroTimers();
@@ -488,6 +626,7 @@ void AStage01IntroDirector::AbortIntro()
 	ResetIntroCamera();
 	bIntroPlaying = false;
 	bTravelRequested = false;
+	HudFadeElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
 	IntroState = EStage01IntroState::Failed;
 
@@ -512,6 +651,287 @@ void AStage01IntroDirector::AbortIntro()
 
 	RestoreMainMenuAfterFailure();
 	UE_LOG(LogTemp, Error, TEXT("Stage01 intro aborted; MainMenu input was restored."));
+}
+
+void AStage01IntroDirector::ApplyMainMenuHudArt(UUserWidget* MenuWidget)
+{
+	if (!IsValid(MenuWidget) || !MenuWidget->WidgetTree)
+	{
+		return;
+	}
+
+	UTexture2D* TitleTexture = LoadObject<UTexture2D>(nullptr, MainMenuTitleTexturePath);
+	UTexture2D* NormalButtonTexture = LoadObject<UTexture2D>(nullptr, MainMenuButtonTexturePath);
+	UTexture2D* FocusButtonTexture = LoadObject<UTexture2D>(nullptr, MainMenuFocusTexturePath);
+	UTexture2D* InkPanelTexture = LoadObject<UTexture2D>(nullptr, MainMenuInkPanelTexturePath);
+	UFont* MainMenuFont = LoadObject<UFont>(nullptr, MainMenuFontPath);
+
+	if (!IsValid(TitleTexture))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Stage01 main menu HUD title texture could not be loaded: %s."), MainMenuTitleTexturePath);
+	}
+	if (!IsValid(NormalButtonTexture))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Stage01 main menu HUD normal button texture could not be loaded: %s."), MainMenuButtonTexturePath);
+	}
+	if (!IsValid(FocusButtonTexture))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Stage01 main menu HUD focus texture could not be loaded; reusing the normal button texture."));
+		FocusButtonTexture = NormalButtonTexture;
+	}
+	if (!IsValid(MainMenuFont))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Stage01 main menu HUD font could not be loaded: %s."), MainMenuFontPath);
+	}
+	if (!IsValid(InkPanelTexture))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Stage01 main menu HUD ink panel texture could not be loaded: %s; continuing without the optional panel."),
+			MainMenuInkPanelTexturePath);
+	}
+
+	TArray<UButton*> Buttons;
+	MenuWidget->WidgetTree->ForEachWidget([&Buttons](UWidget* Widget)
+	{
+		if (UButton* Button = Cast<UButton>(Widget))
+		{
+			Buttons.Add(Button);
+		}
+	});
+
+	if (Buttons.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Stage01 main menu HUD art found no buttons in widget '%s'."), *MenuWidget->GetName());
+		return;
+	}
+
+	// Prefer the actual labels, then fall back to the stable names in the
+	// authored WBP. This keeps the art pass independent from Blueprint layout
+	// coordinates while preserving the existing button events.
+	UButton* StartButton = FindButtonByLabel(Buttons, TEXT("开始游戏"));
+	UButton* SettingsButton = FindButtonByLabel(Buttons, TEXT("设置"));
+	UButton* QuitButton = FindButtonByLabel(Buttons, TEXT("退出游戏"));
+	if (!IsValid(StartButton))
+	{
+		StartButton = FindButtonByName(Buttons, TEXT("Button_41"));
+	}
+	if (!IsValid(SettingsButton))
+	{
+		SettingsButton = FindButtonByName(Buttons, TEXT("Button_89"));
+	}
+	if (!IsValid(QuitButton))
+	{
+		QuitButton = FindButtonByName(Buttons, TEXT("Button_168"));
+	}
+	if (!IsValid(StartButton) && !BoundNewGameButtons.IsEmpty())
+	{
+		StartButton = BoundNewGameButtons[0].Get();
+	}
+
+	TArray<UButton*> OrderedButtons;
+	OrderedButtons.Reserve(3);
+	if (IsValid(StartButton))
+	{
+		OrderedButtons.AddUnique(StartButton);
+	}
+	if (IsValid(SettingsButton))
+	{
+		OrderedButtons.AddUnique(SettingsButton);
+	}
+	if (IsValid(QuitButton))
+	{
+		OrderedButtons.AddUnique(QuitButton);
+	}
+	for (UButton* Button : Buttons)
+	{
+		if (OrderedButtons.Num() >= 3)
+		{
+			break;
+		}
+		OrderedButtons.AddUnique(Button);
+	}
+
+	UCanvasPanel* RootCanvas = FindCanvasPanelRecursive(MenuWidget->WidgetTree->RootWidget);
+	if (!IsValid(RootCanvas))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Stage01 main menu HUD art could not find a CanvasPanel in widget '%s'; keeping authored slots."),
+			*MenuWidget->GetName());
+	}
+
+	if (IsValid(RootCanvas) && IsValid(InkPanelTexture))
+	{
+		UImage* InkPanelImage = Cast<UImage>(
+			MenuWidget->WidgetTree->FindWidget(FName(TEXT("MainMenuInkPanel"))));
+		if (!IsValid(InkPanelImage))
+		{
+			InkPanelImage = MenuWidget->WidgetTree->ConstructWidget<UImage>(
+				UImage::StaticClass(),
+				FName(TEXT("MainMenuInkPanel")));
+		}
+
+		if (IsValid(InkPanelImage))
+		{
+			InkPanelImage->RemoveFromParent();
+			InkPanelImage->SetBrushFromTexture(InkPanelTexture, false);
+			InkPanelImage->SetColorAndOpacity(FLinearColor::White);
+			InkPanelImage->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+			InkPanelImage->SetRenderScale(FVector2D(-1.0f, 1.0f));
+			InkPanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+			if (UCanvasPanelSlot* InkPanelSlot = RootCanvas->AddChildToCanvas(InkPanelImage))
+			{
+				InkPanelSlot->SetAnchors(FAnchors(0.0f, 0.5f));
+				InkPanelSlot->SetAlignment(FVector2D(0.0f, 0.5f));
+				InkPanelSlot->SetPosition(FVector2D(0.0f, 0.0f));
+				InkPanelSlot->SetSize(FVector2D(520.0f, 924.0f));
+				InkPanelSlot->SetZOrder(5);
+			}
+		}
+	}
+
+	if (IsValid(RootCanvas) && IsValid(TitleTexture))
+	{
+		UImage* TitleImage = Cast<UImage>(
+			MenuWidget->WidgetTree->FindWidget(FName(TEXT("MainMenuTitleArt"))));
+		if (!IsValid(TitleImage))
+		{
+			TitleImage = MenuWidget->WidgetTree->ConstructWidget<UImage>(
+				UImage::StaticClass(),
+				FName(TEXT("MainMenuTitleArt")));
+		}
+
+		if (IsValid(TitleImage))
+		{
+			TitleImage->RemoveFromParent();
+			TitleImage->SetBrushFromTexture(TitleTexture, false);
+			TitleImage->SetColorAndOpacity(FLinearColor::White);
+			TitleImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+			if (UCanvasPanelSlot* TitleSlot = RootCanvas->AddChildToCanvas(TitleImage))
+			{
+				TitleSlot->SetAnchors(FAnchors(0.0f, 0.5f));
+				TitleSlot->SetAlignment(FVector2D(0.0f, 0.5f));
+				TitleSlot->SetPosition(FVector2D(64.0f, -190.0f));
+				TitleSlot->SetSize(FVector2D(500.0f, 200.0f));
+				TitleSlot->SetZOrder(10);
+			}
+		}
+	}
+
+	const TCHAR* ButtonLabels[] = { TEXT("开始游戏"), TEXT("设置"), TEXT("退出游戏") };
+	const FVector2D ButtonPositions[] =
+	{
+		FVector2D(84.0f, -24.0f),
+		FVector2D(84.0f, 71.0f),
+		FVector2D(84.0f, 166.0f)
+	};
+	// Keep the 32px HUD text unchanged while giving the brush image a slightly
+	// larger frame and a little more breathing room around the label.
+	const FVector2D ButtonLayoutSize(480.0f, 95.0f);
+	const FLinearColor InkTextColor(0.10f, 0.08f, 0.06f, 1.0f);
+	const FSlateBrush NormalBrush = MakeMainMenuBrush(
+		NormalButtonTexture,
+		FLinearColor::White);
+	const FSlateBrush FocusBrush = MakeMainMenuBrush(
+		FocusButtonTexture,
+		FLinearColor::White);
+	FSlateBrush HoverBrush = FocusBrush;
+	HoverBrush.TintColor = FSlateColor(FLinearColor(1.0f, 0.88f, 0.78f, 1.0f));
+
+	// The authored menu keeps the buttons in a non-Canvas panel. Move the
+	// existing button instances into the HUD canvas so the acceptance layout
+	// can be applied without replacing their click bindings or changing the
+	// scene/sequence layout.
+	if (IsValid(RootCanvas))
+	{
+		for (UButton* Button : OrderedButtons)
+		{
+			if (!IsValid(Button) || Button->GetParent() == RootCanvas)
+			{
+				continue;
+			}
+
+			Button->RemoveFromParent();
+			RootCanvas->AddChildToCanvas(Button);
+		}
+	}
+
+	for (int32 ButtonIndex = 0; ButtonIndex < OrderedButtons.Num() && ButtonIndex < 3; ++ButtonIndex)
+	{
+		UButton* Button = OrderedButtons[ButtonIndex];
+		if (!IsValid(Button))
+		{
+			continue;
+		}
+
+		FButtonStyle Style = Button->GetStyle();
+		// Normal must stay neutral even for Start Game; otherwise it looks
+		// hovered while the pointer is elsewhere. Focus is reserved for actual
+		// hover/press feedback.
+		Style.Normal = NormalBrush;
+		Style.Hovered = HoverBrush;
+		Style.Pressed = FocusBrush;
+		Style.Disabled = NormalBrush;
+		Style.NormalPadding = FMargin(0.0f);
+		Style.PressedPadding = FMargin(0.0f);
+		Button->SetStyle(Style);
+
+		if (UTextBlock* Label = FindTextBlockRecursive(Button))
+		{
+			if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(Button->GetContentSlot()))
+			{
+				ContentSlot->SetPadding(FMargin(0.0f));
+				ContentSlot->SetHorizontalAlignment(HAlign_Center);
+				ContentSlot->SetVerticalAlignment(VAlign_Center);
+			}
+
+			Label->SetText(FText::FromString(ButtonLabels[ButtonIndex]));
+			if (IsValid(MainMenuFont))
+			{
+				FSlateFontInfo FontInfo = Label->GetFont();
+				FontInfo.FontObject = MainMenuFont;
+				FontInfo.Size = 32;
+				Label->SetFont(FontInfo);
+			}
+			Label->SetColorAndOpacity(FSlateColor(InkTextColor));
+			Label->SetJustification(ETextJustify::Center);
+			Label->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("Stage01 main menu HUD button '%s' has no TextBlock label to style."),
+				*Button->GetName());
+		}
+
+		if (IsValid(RootCanvas))
+		{
+			if (UCanvasPanelSlot* ButtonSlot = Cast<UCanvasPanelSlot>(Button->Slot))
+			{
+				ButtonSlot->SetAnchors(FAnchors(0.0f, 0.5f));
+				ButtonSlot->SetAlignment(FVector2D(0.0f, 0.5f));
+				ButtonSlot->SetPosition(ButtonPositions[ButtonIndex]);
+				ButtonSlot->SetSize(ButtonLayoutSize);
+				ButtonSlot->SetZOrder(20 + ButtonIndex);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("Stage01 main menu HUD button '%s' is not attached through a CanvasPanelSlot; keeping its authored layout."),
+					*Button->GetName());
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("Stage01 main menu HUD art applied to '%s': title=%s inkPanel=%s buttons=%d font=%s; scene layout unchanged."),
+		*MenuWidget->GetName(),
+		IsValid(TitleTexture) ? TEXT("loaded") : TEXT("missing"),
+		IsValid(InkPanelTexture) ? TEXT("loaded") : TEXT("missing"),
+		OrderedButtons.Num(),
+		IsValid(MainMenuFont) ? TEXT("AaGuDianKeBenSongYouMoBan_2_Font") : TEXT("fallback"));
 }
 
 bool AStage01IntroDirector::TryBindMainMenu()
@@ -587,6 +1007,7 @@ bool AStage01IntroDirector::TryBindMainMenu()
 		if (!BoundNewGameButtons.IsEmpty())
 		{
 			BoundMainMenuWidget = Candidate;
+			ApplyMainMenuHudArt(Candidate);
 			bMainMenuBound = true;
 			GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
 			// The menu widget is created by the Level Blueprint. Explicitly
@@ -610,7 +1031,100 @@ bool AStage01IntroDirector::TryBindMainMenu()
 
 void AStage01IntroDirector::OnNewGameClicked()
 {
-	PlayIntro();
+	if (bIntroPlaying || IntroState == EStage01IntroState::HudFading
+		|| IntroState == EStage01IntroState::Playing
+		|| IntroState == EStage01IntroState::EffectPlaying
+		|| IntroState == EStage01IntroState::Fading
+		|| IntroState == EStage01IntroState::Traveling)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Stage01 intro rejected duplicate New Game click during transition."));
+		return;
+	}
+
+	BeginMainMenuHudFade();
+}
+
+void AStage01IntroDirector::BeginMainMenuHudFade()
+{
+	if (!IsValid(BoundMainMenuWidget))
+	{
+		// The click normally arrives only after TryBindMainMenu has completed.
+		// Keep the functional fallback safe if a custom caller invokes the flow
+		// without a bound widget.
+		PlayIntro();
+		return;
+	}
+
+	bIntroPlaying = false;
+	bTravelRequested = false;
+	HudFadeElapsed = 0.0f;
+	InkEffectElapsed = 0.0f;
+	IntroState = EStage01IntroState::HudFading;
+
+	// Lock input and camera ownership immediately, but keep the widget visible
+	// during the fade. SetMenuCinematicState collapses the widget by design, so
+	// restore visibility for this transition before rendering the first fade
+	// frame.
+	SetMenuCinematicState(true);
+	BoundMainMenuWidget->SetVisibility(ESlateVisibility::Visible);
+	BoundMainMenuWidget->SetRenderOpacity(1.0f);
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Stage01 New Game clicked; fading MainMenu HUD for %.2fs before starting the intro."),
+		FMath::Max(0.0f, MenuHudFadeDuration));
+
+	if (MenuHudFadeDuration <= KINDA_SMALL_NUMBER)
+	{
+		UpdateMainMenuHudFade(0.0f);
+	}
+}
+
+void AStage01IntroDirector::UpdateMainMenuHudFade(float DeltaTime)
+{
+	if (IntroState != EStage01IntroState::HudFading)
+	{
+		return;
+	}
+
+	if (!IsValid(BoundMainMenuWidget))
+	{
+		IntroState = EStage01IntroState::Idle;
+		PlayIntro();
+		return;
+	}
+
+	if (MenuHudFadeDuration <= KINDA_SMALL_NUMBER)
+	{
+		BoundMainMenuWidget->SetRenderOpacity(0.0f);
+		UE_LOG(LogTemp, Log, TEXT("Stage01 MainMenu HUD fade skipped; starting intro at authored K0."));
+		IntroState = EStage01IntroState::Idle;
+		PlayIntro();
+		return;
+	}
+
+	const float Duration = FMath::Max(KINDA_SMALL_NUMBER, MenuHudFadeDuration);
+	HudFadeElapsed = FMath::Min(
+		HudFadeElapsed + FMath::Max(0.0f, DeltaTime),
+		Duration);
+	const float Progress = FMath::Clamp(HudFadeElapsed / Duration, 0.0f, 1.0f);
+	// Ease both ends of the fade so the final portion settles gently instead
+	// of dropping sharply into zero opacity.
+	const float EasedProgress = FMath::InterpEaseInOut(
+		0.0f,
+		1.0f,
+		Progress,
+		FMath::Max(1.0f, MenuHudFadeEaseExponent));
+	BoundMainMenuWidget->SetRenderOpacity(1.0f - EasedProgress);
+
+	if (HudFadeElapsed >= Duration)
+	{
+		BoundMainMenuWidget->SetRenderOpacity(0.0f);
+		UE_LOG(LogTemp, Log, TEXT("Stage01 MainMenu HUD fade completed; starting intro at authored K0."));
+		IntroState = EStage01IntroState::Idle;
+		PlayIntro();
+	}
 }
 
 void AStage01IntroDirector::HandleMenuBindTimer()
@@ -627,8 +1141,17 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 {
 	if (IsValid(BoundMainMenuWidget))
 	{
-		BoundMainMenuWidget->SetVisibility(bCinematic ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		BoundMainMenuWidget->SetIsEnabled(!bCinematic);
+		if (bCinematic)
+		{
+			BoundMainMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+			BoundMainMenuWidget->SetIsEnabled(false);
+		}
+		else
+		{
+			BoundMainMenuWidget->SetRenderOpacity(1.0f);
+			BoundMainMenuWidget->SetVisibility(ESlateVisibility::Visible);
+			BoundMainMenuWidget->SetIsEnabled(true);
+		}
 	}
 
 	for (UButton* Button : BoundNewGameButtons)

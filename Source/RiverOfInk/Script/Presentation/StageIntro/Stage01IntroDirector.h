@@ -22,7 +22,8 @@ enum class EStage01IntroState : uint8
 	EffectPlaying,
 	Fading,
 	Traveling,
-	Failed
+	Failed,
+	HudFading
 };
 
 /** Owns the one-shot Stage 1 menu intro and the transition into RunFlow. */
@@ -68,6 +69,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.1"))
 	float FadeDuration = 0.45f;
 
+	/** Duration of the main-menu HUD fade before the intro sequence starts. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "0.0"))
+	float MenuHudFadeDuration = 1.5f;
+
+	/** Ease exponent for the HUD fade; 2.0 gives a smooth ease-in/ease-out curve. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Intro|Timing", meta = (ClampMin = "1.0"))
+	float MenuHudFadeEaseExponent = 2.0f;
+
 	/**
 	 * Deprecated. The intro no longer blends from the current PlayerController
 	 * view; it cuts to the authored K0 camera pose before playing the sequence.
@@ -112,11 +121,14 @@ private:
 	bool ResolveSceneReferences();
 	bool CreateSequencePlayer();
 	bool TryBindMainMenu();
+	void ApplyMainMenuHudArt(UUserWidget* MenuWidget);
 	void PrepareIntroCameraAtMenuStart();
 	void MaintainIntroCameraOwnership();
 	void SetIntroCameraOwnership(bool bOwnCamera);
 	void SetMenuCinematicState(bool bCinematic);
 	void RestoreMainMenuAfterFailure();
+	void BeginMainMenuHudFade();
+	void UpdateMainMenuHudFade(float DeltaTime);
 	void UpdateInkEffect(float DeltaTime);
 	void StartInkEffect();
 	void FinishInkEffect();
@@ -139,6 +151,7 @@ private:
 	FTimerHandle MainMenuBindTimer;
 	FTimerHandle FadeTimer;
 	FTransform InitialCameraTransform;
+	float HudFadeElapsed = 0.0f;
 	float InkEffectElapsed = 0.0f;
 	int32 MainMenuBindAttempts = 0;
 	bool bMainMenuBound = false;
