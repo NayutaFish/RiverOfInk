@@ -67,7 +67,7 @@ void UEnemyState_Charge::OnEnter_Implementation()
 			ChargeStartTimerHandle,
 			this,
 			&UEnemyState_Charge::BeginCharge,
-			FMath::Max(0.0f, Enemy->ChargeWindupTime),
+			FMath::Max(KINDA_SMALL_NUMBER, Enemy->ChargeWindupTime),
 			false);
 	}
 }
@@ -205,7 +205,7 @@ void UEnemyState_Charge::BeginCharge()
 			ChargeEndTimerHandle,
 			this,
 			&UEnemyState_Charge::EndActiveChargeByDuration,
-			FMath::Max(0.0f, Enemy->ChargeDuration),
+			FMath::Max(KINDA_SMALL_NUMBER, Enemy->ChargeDuration),
 			false);
 	}
 }
@@ -239,7 +239,7 @@ void UEnemyState_Charge::EndActiveCharge(const TCHAR* EndReason)
 			ChargeRecoveryTimerHandle,
 			this,
 			&UEnemyState_Charge::FinishRecovery,
-			FMath::Max(0.0f, Enemy->ChargeRecoveryTime),
+			FMath::Max(KINDA_SMALL_NUMBER, Enemy->ChargeRecoveryTime),
 			false);
 	}
 }

@@ -38,9 +38,10 @@ void UEnemyState_HitBack::OnEnter_Implementation()
 	// 击退结束后回到追击
 	if (UWorld* World = GetWorld())
 	{
+		// rate <= 0 的计时器会被 SetTimer 丢弃，受减速/抗性影响归零时同样要保证能回到 Chase
 		World->GetTimerManager().SetTimer(HitBackTimerHandle, this,
 			&UEnemyState_HitBack::OnHitBackEnd,
-			Enemy->HitBackDuration * Enemy->GetControlResistMultiplier(),
+			FMath::Max(KINDA_SMALL_NUMBER, Enemy->HitBackDuration * Enemy->GetControlResistMultiplier()),
 			false);
 	}
 }

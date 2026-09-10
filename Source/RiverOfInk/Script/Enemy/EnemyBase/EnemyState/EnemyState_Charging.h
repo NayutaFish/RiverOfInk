@@ -8,6 +8,7 @@
 
 class UNiagaraSystem;
 class UNiagaraComponent;
+class AEnemyBase;
 
 /**
  * 通用蓄力状态：用于冲撞、射弹发射、自爆等需要前摇的攻击。
@@ -45,6 +46,13 @@ protected:
 private:
 	/** 倒计时结束：跳转到目标状态类 */
 	void FinishCharging();
+
+	/**
+	 * 目标状态无法进入时的回退：回到 Chase / TargetLost。
+	 * SwitchState 只查找已挂载的状态组件，缺组件时若不回退，
+	 * 敌人会永远停在蓄力状态（表现为“蓄力完就不动了”）。
+	 */
+	void FallBackToChase(AEnemyBase* Enemy);
 
 	UPROPERTY()
 	TObjectPtr<UNiagaraComponent> ChargeNiagaraComponent;

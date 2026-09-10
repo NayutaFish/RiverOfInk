@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Enemy/EnemyBase/LanternGhost/State/LanternGhostState_Ranged.h"
 #include "RiverOfInk.h"
@@ -130,7 +130,7 @@ CurrentWorld->GetTimerManager().SetTimer(
 BezierReturnHandle,
 this,
 &ULanternGhostState_Ranged::ReturnToChase,
-Enemy->AttackRecoveryTime,
+FMath::Max(KINDA_SMALL_NUMBER, Enemy->AttackRecoveryTime),
 false);
 }
 }

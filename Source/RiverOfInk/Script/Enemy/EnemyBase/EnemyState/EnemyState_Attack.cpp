@@ -51,8 +51,12 @@ void UEnemyState_Attack::OnEnter_Implementation()
 
 	if (UWorld* World = GetWorld())
 	{
+		// FTimerManager::SetTimer 在 rate <= 0 时会直接丢弃计时器（见 TimerManager.cpp 的 InRate > 0.f 分支），
+		// 所以前摇配成 0 的敌人会永远停在攻击状态、ExecuteAttack 一次都不执行。
+		// 这里的语义是“0 = 下一帧立刻执行”，因此抬到极小正数。
 		World->GetTimerManager().SetTimer(AttackDelayHandle, this,
-			&UEnemyState_Attack::ExecuteAttack, Enemy->AttackWindupTime, false);
+			&UEnemyState_Attack::ExecuteAttack,
+			FMath::Max(Enemy->AttackWindupTime, KINDA_SMALL_NUMBER), false);
 	}
 }
 
@@ -150,8 +154,10 @@ void UEnemyState_Attack::ExecuteAttack()
 
 	if (UWorld* World = GetWorld())
 	{
+		// 同上：后摇为 0 时也要保证计时器真的被创建，否则永远回不到 Chase。
 		World->GetTimerManager().SetTimer(ReturnHandle, this,
-			&UEnemyState_Attack::ReturnToChase, Enemy->AttackRecoveryTime, false);
+			&UEnemyState_Attack::ReturnToChase,
+			FMath::Max(Enemy->AttackRecoveryTime, KINDA_SMALL_NUMBER), false);
 	}
 }
 

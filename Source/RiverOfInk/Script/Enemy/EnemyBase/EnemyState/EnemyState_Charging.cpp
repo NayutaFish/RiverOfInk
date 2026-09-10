@@ -3,6 +3,8 @@
 #include "Enemy/EnemyBase/EnemyState/EnemyState_Charging.h"
 
 #include "Enemy/EnemyBase/EnemyBase.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_Chase.h"
+#include "Enemy/EnemyBase/EnemyState/EnemyState_TargetLost.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -43,11 +45,12 @@ void UEnemyState_Charging::OnEnter_Implementation()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ChargeFinishTimerHandle);
+		// 同样注意 rate <= 0 会被 SetTimer 丢弃：DurationTime=0 表示立刻结束蓄力。
 		World->GetTimerManager().SetTimer(
 			ChargeFinishTimerHandle,
 			this,
 			&UEnemyState_Charging::FinishCharging,
-			FMath::Max(0.0f, DurationTime),
+			FMath::Max(DurationTime, KINDA_SMALL_NUMBER),
 			false);
 	}
 }
@@ -102,14 +105,39 @@ void UEnemyState_Charging::FinishCharging()
 		return;
 	}
 
-	if (TargetStateClass)
-	{
-		Enemy->SwitchState(TargetStateClass);
-	}
-	else
+	if (!TargetStateClass)
 	{
 		UE_LOG(LogRiverOfInk, Warning,
-			TEXT("Enemy %s charging finished but TargetStateClass is not set."),
+			TEXT("Enemy %s charging finished but TargetStateClass is not set; returning to Chase."),
 			*Enemy->GetName());
+		FallBackToChase(Enemy);
+		return;
 	}
+
+	// SwitchState 只查找已挂载的状态组件；目标状态组件不在该敌人身上时，
+	// 直接调用会只留下一条警告并让敌人卡死在蓄力状态，所以这里主动回退。
+	if (!Enemy->FindComponentByClass(TargetStateClass))
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("Enemy %s charging finished but state component %s is missing on this enemy (add it in the enemy Blueprint); returning to Chase."),
+			*Enemy->GetName(),
+			*TargetStateClass->GetName());
+		FallBackToChase(Enemy);
+		return;
+	}
+
+	Enemy->SwitchState(TargetStateClass);
+}
+
+void UEnemyState_Charging::FallBackToChase(AEnemyBase* Enemy)
+{
+	if (!Enemy)
+	{
+		return;
+	}
+
+	Enemy->RefreshCombatTarget();
+	Enemy->SwitchState(Enemy->HasValidCombatTarget()
+		? UEnemyState_Chase::StaticClass()
+		: UEnemyState_TargetLost::StaticClass());
 }
