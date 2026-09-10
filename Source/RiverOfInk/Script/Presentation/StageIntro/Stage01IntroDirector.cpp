@@ -177,13 +177,31 @@ void AStage01IntroDirector::BeginPlay()
 	// does not depend on BeginPlay ordering between the map and the widget.
 	if (GetWorld())
 	{
-		GetWorld()->GetTimerManager().SetTimer(
-			MainMenuBindTimer,
-			this,
-			&AStage01IntroDirector::HandleMenuBindTimer,
-			0.10f,
-			true,
-			0.10f);
+		if (bPreviewOnly)
+		{
+			// MainMenu's Level Blueprint may still create WBP_MainMenu in the
+			// duplicated preview map. Remove it before the first preview frame.
+			ClearPreviewWidgets();
+			if (bAutoPlayOnBeginPlay)
+			{
+				GetWorld()->GetTimerManager().SetTimer(
+					AutoPlayTimer,
+					this,
+					&AStage01IntroDirector::HandleAutoPlayTimer,
+					FMath::Max(0.0f, AutoPlayDelay),
+					false);
+			}
+		}
+		else
+		{
+			GetWorld()->GetTimerManager().SetTimer(
+				MainMenuBindTimer,
+				this,
+				&AStage01IntroDirector::HandleMenuBindTimer,
+				0.10f,
+				true,
+				0.10f);
+		}
 	}
 }
 
@@ -202,6 +220,7 @@ void AStage01IntroDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
+		GetWorld()->GetTimerManager().ClearTimer(AutoPlayTimer);
 	}
 	SetIntroCameraOwnership(false);
 	ResetIntroCamera();
@@ -216,20 +235,26 @@ void AStage01IntroDirector::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	MaintainIntroCameraOwnership();
 
-	if (IntroState == EStage01IntroState::HudFading)
-	{
-		UpdateMainMenuHudFade(DeltaTime);
-		return;
-	}
-
-	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
+	if (!bIntroPlaying)
 	{
 		return;
 	}
 
-	UpdateInkEffect(DeltaTime);
+	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
+	if (IntroState == EStage01IntroState::Playing)
+	{
+		IntroElapsed += SafeDeltaTime;
+		if (!bInkEffectActive && !bInkEffectReadyToFinish && IntroElapsed >= InkEffectStartTime)
+		{
+			StartInkEffect();
+		}
+	}
+
+	if (bInkEffectActive)
+	{
+		UpdateInkEffect(SafeDeltaTime);
+	}
 }
-
 bool AStage01IntroDirector::ResolveSceneReferences()
 {
 	if (!IsValid(IntroSequence))
@@ -411,10 +436,17 @@ bool AStage01IntroDirector::PlayIntro()
 
 	bIntroPlaying = true;
 	bTravelRequested = false;
-	HudFadeElapsed = 0.0f;
+	IntroElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
+	bInkEffectActive = false;
+	bInkEffectReadyToFinish = false;
 	IntroState = EStage01IntroState::Playing;
 	ClearIntroTimers();
+
+	if (bPreviewOnly)
+	{
+		ClearPreviewWidgets();
+	}
 
 	if (IsValid(InkOverlay))
 	{
@@ -437,6 +469,13 @@ bool AStage01IntroDirector::PlayIntro()
 		}
 	}
 
+	if (bPreviewOnly && bPreviewUseStaticCamera)
+	{
+		// The isolated material check intentionally holds its straight-on camera.
+		// The production camera track remains untouched for the MainMenu intro.
+		UE_LOG(LogTemp, Log, TEXT("Stage01 static ink preview started."));
+		return true;
+	}
 	// Create the player only after the authored camera owns the PlayerController.
 	// This prevents Sequencer's pre-animated camera state from ever being seeded
 	// by the editor/PIE viewport.
@@ -478,20 +517,29 @@ void AStage01IntroDirector::HandleSequenceFinished()
 		return;
 	}
 
-	// The sequence owns only the camera track. Keep its authored K3 pose, then
-	// start the pollution effect as a separate phase on that locked camera.
-	StartInkEffect();
+	// The camera reaches K3 at the same moment the 0.8s + 3.5s ink beat is
+	// normally ready. If a designer lengthens the effect, hold the K3 camera
+	// while the remaining wet ink completes instead of restarting the effect.
+	IntroState = EStage01IntroState::EffectPlaying;
+	if (bInkEffectReadyToFinish)
+	{
+		FinishInkEffect();
+	}
+	else if (!bInkEffectActive)
+	{
+		StartInkEffect();
+	}
 }
-
 void AStage01IntroDirector::StartInkEffect()
 {
-	if (!bIntroPlaying || IntroState != EStage01IntroState::Playing)
+	if (!bIntroPlaying || bInkEffectActive || bInkEffectReadyToFinish
+		|| (IntroState != EStage01IntroState::Playing && IntroState != EStage01IntroState::EffectPlaying))
 	{
 		return;
 	}
 
 	InkEffectElapsed = 0.0f;
-	IntroState = EStage01IntroState::EffectPlaying;
+	bInkEffectActive = true;
 	if (IsValid(InkOverlay))
 	{
 		InkOverlay->SetInkProgress(0.0f);
@@ -500,18 +548,28 @@ void AStage01IntroDirector::StartInkEffect()
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("Stage01 camera track finished at K3; starting ink effect. Duration=%.2fs."),
+		TEXT("Stage01 starting layered ink at %.2fs. Duration=%.2fs."),
+		IntroElapsed,
 		FMath::Max(0.0f, InkEffectDuration));
 
 	if (InkEffectDuration <= KINDA_SMALL_NUMBER)
 	{
-		FinishInkEffect();
+		bInkEffectActive = false;
+		bInkEffectReadyToFinish = true;
+		if (bPreviewOnly && bPreviewUseStaticCamera && IntroState == EStage01IntroState::Playing)
+		{
+			IntroState = EStage01IntroState::EffectPlaying;
+			FinishInkEffect();
+		}
+		else if (IntroState == EStage01IntroState::EffectPlaying)
+		{
+			FinishInkEffect();
+		}
 	}
 }
-
 void AStage01IntroDirector::UpdateInkEffect(float DeltaTime)
 {
-	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
+	if (!bIntroPlaying || !bInkEffectActive)
 	{
 		return;
 	}
@@ -527,10 +585,19 @@ void AStage01IntroDirector::UpdateInkEffect(float DeltaTime)
 
 	if (InkEffectElapsed >= Duration)
 	{
-		FinishInkEffect();
+		bInkEffectActive = false;
+		bInkEffectReadyToFinish = true;
+		if (bPreviewOnly && bPreviewUseStaticCamera && IntroState == EStage01IntroState::Playing)
+		{
+			IntroState = EStage01IntroState::EffectPlaying;
+			FinishInkEffect();
+		}
+		else if (IntroState == EStage01IntroState::EffectPlaying)
+		{
+			FinishInkEffect();
+		}
 	}
 }
-
 void AStage01IntroDirector::FinishInkEffect()
 {
 	if (!bIntroPlaying || IntroState != EStage01IntroState::EffectPlaying)
@@ -543,6 +610,31 @@ void AStage01IntroDirector::FinishInkEffect()
 		InkOverlay->SetInkProgress(1.0f);
 	}
 
+	if (bPreviewOnly)
+	{
+		// The isolated preview never travels. When looping is enabled, a very
+		// short full-ink hold is followed by a clean-paper restart.
+		IntroState = EStage01IntroState::PreviewComplete;
+		bIntroPlaying = false;
+		InkEffectElapsed = FMath::Max(0.0f, InkEffectDuration);
+		ClearIntroTimers();
+
+		if (bPreviewLoop && bAutoPlayOnBeginPlay && GetWorld())
+		{
+			GetWorld()->GetTimerManager().SetTimer(
+				AutoPlayTimer,
+				this,
+				&AStage01IntroDirector::HandleAutoPlayTimer,
+				FMath::Max(0.0f, PreviewLoopDelay),
+				false);
+			UE_LOG(LogTemp, Log, TEXT("Stage01 ink preview full coverage; restarting after %.2fs."), PreviewLoopDelay);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("Stage01 ink preview complete; holding full coverage without travel."));
+		}
+		return;
+	}
 	IntroState = EStage01IntroState::Fading;
 	StartFadeToBlack();
 	UE_LOG(LogTemp, Log, TEXT("Stage01 ink effect finished; beginning fade before RunFlow travel."));
@@ -626,8 +718,10 @@ void AStage01IntroDirector::AbortIntro()
 	ResetIntroCamera();
 	bIntroPlaying = false;
 	bTravelRequested = false;
-	HudFadeElapsed = 0.0f;
+	IntroElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
+	bInkEffectActive = false;
+	bInkEffectReadyToFinish = false;
 	IntroState = EStage01IntroState::Failed;
 
 	if (IsValid(InkOverlay))
@@ -1010,7 +1104,7 @@ bool AStage01IntroDirector::TryBindMainMenu()
 			ApplyMainMenuHudArt(Candidate);
 			bMainMenuBound = true;
 			GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
-			// The menu widget is created by the Level Blueprint. Explicitly
+				// The menu widget is created by the Level Blueprint. Explicitly
 			// establish the UI input mode after binding so the first mouse click
 			// is not spent only giving Slate focus to the viewport.
 			SetMenuCinematicState(false);
@@ -1137,6 +1231,17 @@ void AStage01IntroDirector::HandleFadeTimer()
 	BeginTravelAfterFade();
 }
 
+void AStage01IntroDirector::HandleAutoPlayTimer()
+{
+	if (!bPreviewOnly || !bAutoPlayOnBeginPlay)
+	{
+		return;
+	}
+
+	ClearPreviewWidgets();
+	PlayIntro();
+}
+
 void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 {
 	if (IsValid(BoundMainMenuWidget))
@@ -1212,6 +1317,63 @@ void AStage01IntroDirector::RestoreMainMenuAfterFailure()
 	SetMenuCinematicState(false);
 }
 
+void AStage01IntroDirector::ClearPreviewWidgets()
+{
+	if (!bPreviewOnly || !GetWorld())
+	{
+		return;
+	}
+
+	TArray<UUserWidget*> Widgets;
+	UWidgetBlueprintLibrary::GetAllWidgetsOfClass(
+		GetWorld(),
+		Widgets,
+		UUserWidget::StaticClass(),
+		false);
+
+	for (UUserWidget* Widget : Widgets)
+	{
+		if (IsValid(Widget))
+		{
+			Widget->RemoveFromParent();
+		}
+	}
+}
+
+void AStage01IntroDirector::ResetPreview()
+{
+	if (!bPreviewOnly)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Stage01 ResetPreview() ignored because bPreviewOnly is false."));
+		return;
+	}
+
+	if (IsValid(SequencePlayer))
+	{
+		SequencePlayer->OnFinished.RemoveDynamic(this, &AStage01IntroDirector::OnSequenceFinished);
+		SequencePlayer->Stop();
+	}
+
+	ClearIntroTimers();
+	ClearPreviewWidgets();
+	ResetIntroCamera();
+	SetIntroCameraOwnership(true);
+	bIntroPlaying = false;
+	bTravelRequested = false;
+	IntroElapsed = 0.0f;
+	InkEffectElapsed = 0.0f;
+	bInkEffectActive = false;
+	bInkEffectReadyToFinish = false;
+	IntroState = EStage01IntroState::Idle;
+
+	if (IsValid(InkOverlay))
+	{
+		InkOverlay->SetInkProgress(0.0f);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Stage01 ink preview reset."));
+}
+
 void AStage01IntroDirector::ResetIntroCamera()
 {
 	if (IsValid(IntroCamera) && bInitialCameraTransformCached)
@@ -1225,5 +1387,6 @@ void AStage01IntroDirector::ClearIntroTimers()
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(FadeTimer);
+		GetWorld()->GetTimerManager().ClearTimer(AutoPlayTimer);
 	}
 }

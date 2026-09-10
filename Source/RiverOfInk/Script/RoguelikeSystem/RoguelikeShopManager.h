@@ -5,10 +5,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "RoguelikeSystem/RoguelikeEconomyTypes.h"
+#include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeShopManager.generated.h"
 
 class APlayerCharacter;
 class APlayerController;
+class ARoguelikeRewardManager;
 class UBoxComponent;
 class UPrimitiveComponent;
 class UStaticMeshComponent;
@@ -93,6 +95,12 @@ private:
 	const FShopItemDefinition* FindItem(FName ItemId) const;
 	bool IsShopRoomActive() const;
 	bool CanApplyItemEffect(const FShopItemDefinition& Item) const;
+	ARoguelikeRewardManager* FindRewardManager() const;
+	void BindRewardEvents(ARoguelikeRewardManager* InRewardManager);
+	void UnbindRewardEvents();
+
+	UFUNCTION()
+	void HandleRewardApplied(const FRoguelikeRewardOption& Reward);
 	bool IsInteractionAvailable() const;
 	void AddDefaultOffersIfUnset();
 	bool ApplyImmediateItemEffect(const FShopItemDefinition& Item);
@@ -137,8 +145,16 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<URoguelikeShopWidget> ActiveShopWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ARoguelikeRewardManager> BoundRewardManager;
+	bool bRewardEventSubscribed = false;
+	bool bShopRewardPending = false;
+
 	TWeakObjectPtr<APlayerCharacter> NearbyPlayer;
 
-	/** Map-local sold-out state; a new Shop Room creates a new manager. */
+	/**
+	 * Map-local sold-out state. A new Shop Room creates a new manager; closing
+	 * and reopening the HUD does not reset this set.
+	 */
 	TSet<FName> PurchasedItemIds;
 };

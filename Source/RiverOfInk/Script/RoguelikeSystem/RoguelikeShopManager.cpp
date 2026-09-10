@@ -12,8 +12,10 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
+#include "Player/Skill/SkillComponent.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "RoguelikeSystem/RoguelikeRewardWidget.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "RiverOfInk.h"
@@ -87,6 +89,7 @@ void ARoguelikeShopManager::BeginPlay()
 
 void ARoguelikeShopManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindRewardEvents();
 	CloseShop();
 	HideInteractionPrompt();
 	NearbyPlayer.Reset();
@@ -320,6 +323,59 @@ void ARoguelikeShopManager::CloseShop()
 	}
 }
 
+ARoguelikeRewardManager* ARoguelikeShopManager::FindRewardManager() const
+{
+	TArray<AActor*> RewardManagers;
+	UGameplayStatics::GetAllActorsOfClass(this, ARoguelikeRewardManager::StaticClass(), RewardManagers);
+	return RewardManagers.IsEmpty() ? nullptr : Cast<ARoguelikeRewardManager>(RewardManagers[0]);
+}
+
+void ARoguelikeShopManager::BindRewardEvents(ARoguelikeRewardManager* InRewardManager)
+{
+	if (bRewardEventSubscribed && BoundRewardManager.Get() == InRewardManager)
+	{
+		return;
+	}
+
+	UnbindRewardEvents();
+	if (!IsValid(InRewardManager))
+	{
+		return;
+	}
+
+	BoundRewardManager = InRewardManager;
+	BoundRewardManager->OnRewardApplied.AddDynamic(this, &ARoguelikeShopManager::HandleRewardApplied);
+	bRewardEventSubscribed = true;
+}
+
+void ARoguelikeShopManager::UnbindRewardEvents()
+{
+	if (bRewardEventSubscribed && BoundRewardManager)
+	{
+		BoundRewardManager->OnRewardApplied.RemoveDynamic(this, &ARoguelikeShopManager::HandleRewardApplied);
+	}
+
+	bRewardEventSubscribed = false;
+	bShopRewardPending = false;
+	BoundRewardManager = nullptr;
+}
+
+void ARoguelikeShopManager::HandleRewardApplied(const FRoguelikeRewardOption& Reward)
+{
+	(void)Reward;
+	if (!bShopRewardPending)
+	{
+		return;
+	}
+
+	bShopRewardPending = false;
+	APlayerCharacter* Player = NearbyPlayer.Get();
+	if (IsValid(Player) && IsInteractionAvailable())
+	{
+		TryOpenShop(Player);
+	}
+}
+
 const FShopItemDefinition* ARoguelikeShopManager::FindItem(FName ItemId) const
 {
 	return ShopItems.FindByPredicate(
@@ -342,6 +398,18 @@ bool ARoguelikeShopManager::IsShopRoomActive() const
 
 bool ARoguelikeShopManager::CanApplyItemEffect(const FShopItemDefinition& Item) const
 {
+	if (Item.EffectType == EShopItemEffectType::ImmediateRewardChoice)
+	{
+		const APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+		const ARoguelikeRewardManager* RewardManager = FindRewardManager();
+		return IsValid(Player)
+			&& Player->SkillComponent
+			&& IsValid(RewardManager)
+			&& RewardManager->RewardWidgetClass != nullptr
+			&& FMath::IsFinite(Item.EffectValue)
+			&& Item.EffectValue > 0.0f;
+	}
+
 	if (Item.EffectType == EShopItemEffectType::TemporaryStatBoost)
 	{
 		const APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
@@ -425,13 +493,13 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		ShopItems.Add(MoveTemp(TemporaryBoost));
 	};
 
-	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 250 生命"), 5, 250.0f);
-	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 500 生命"), 10, 500.0f);
-	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 1000 生命"), 18, 1000.0f);
+	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 25 生命"), 5, 25.0f);
+	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 50 生命"), 10, 50.0f);
+	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 100 生命"), 18, 100.0f);
 	AddTemporaryOffer(
 		TEXT("shop_temp_walk_speed"),
 		TEXT("疾流"),
-		TEXT("移速 +120 · 持续 2 个战斗房间"),
+		TEXT("移速 +120，持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::WalkSpeed,
 		120.0f,
@@ -440,12 +508,23 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 	AddTemporaryOffer(
 		TEXT("shop_temp_defense"),
 		TEXT("墨甲"),
-		TEXT("防御 +15 · 持续 2 个战斗房间"),
+		TEXT("防御 +15，持续 2 个战斗房间"),
 		12,
 		EPlayerRuntimeStat::Defense,
 		15.0f,
 		1.0f,
 		2);
+	FShopItemDefinition BuildChoice;
+	BuildChoice.ItemId = TEXT("shop_build_choice");
+	BuildChoice.Title = FText::FromString(TEXT("墨引"));
+	BuildChoice.Description = FText::FromString(TEXT("触发 1 次构筑选择"));
+	BuildChoice.Cost = 15;
+	BuildChoice.EffectType = EShopItemEffectType::ImmediateRewardChoice;
+	BuildChoice.EffectValue = 1.0f;
+	BuildChoice.StatType = EPlayerRuntimeStat::MaxHealth;
+	BuildChoice.EffectMultiplier = 1.0f;
+	BuildChoice.CombatRoomDuration = 0;
+	ShopItems.Add(MoveTemp(BuildChoice));
 }
 
 bool ARoguelikeShopManager::ApplyImmediateItemEffect(const FShopItemDefinition& Item)
@@ -495,6 +574,32 @@ bool ARoguelikeShopManager::ApplyImmediateItemEffect(const FShopItemDefinition& 
 			static_cast<int32>(Item.StatType),
 			Item.CombatRoomDuration);
 		return bApplied;
+	}
+
+	if (Item.EffectType == EShopItemEffectType::ImmediateRewardChoice)
+	{
+		ARoguelikeRewardManager* RewardManager = FindRewardManager();
+		APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+		if (!IsValid(RewardManager) || !IsValid(Player))
+		{
+			return false;
+		}
+
+		BindRewardEvents(RewardManager);
+		bShopRewardPending = true;
+		CloseShop();
+		if (!RewardManager->ShowRewardForShopPurchase())
+		{
+			bShopRewardPending = false;
+			UnbindRewardEvents();
+			TryOpenShop(Player);
+			return false;
+		}
+
+		UE_LOG(LogRoguelike, Log,
+			TEXT("Shop build-choice effect opened: ItemId=%s."),
+			*Item.ItemId.ToString());
+		return true;
 	}
 
 	UE_LOG(LogRoguelike, Warning,

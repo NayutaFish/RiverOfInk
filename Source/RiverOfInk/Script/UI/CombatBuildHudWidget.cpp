@@ -110,10 +110,17 @@ void UCombatBuildHudWidget::RefreshBuildHistory()
 		StopLatestBuildFeedback(false);
 		LastDisplayedHistoryCount = 0;
 		bHasDisplayedLatest = false;
+		// Keep the compact HUD available from the start of a run. The detail
+		// modal is intentionally not gated by build history, so the B prompt
+		// must remain visible even while both build slots are empty.
+		SetBuildEntry(nullptr, true);
+		SetBuildEntry(nullptr, false);
 		if (RootSizeBox)
 		{
-			RootSizeBox->SetVisibility(ESlateVisibility::Collapsed);
+			RootSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
+		UE_LOG(LogSkill, Verbose,
+			TEXT("Combat build HUD has no acquired builds; keeping the detail prompt available."));
 		return;
 	}
 
