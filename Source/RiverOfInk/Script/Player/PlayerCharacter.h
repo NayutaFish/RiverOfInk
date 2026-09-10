@@ -69,6 +69,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void EndAttack();
 
+	/**
+	 * 中断当前攻击：停止攻击蒙太奇（带 AttackCancelBlendOutTime 淡出）并复位动作状态。
+	 * EndAttack 只复位动作状态、不会停蒙太奇，所以前摇/有效帧被打断（例如冲刺取消普攻）时必须用这个。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Attack")
+	void CancelAttack();
+
 	/** 普攻请求；由普攻管理组件决定进入哪个 attackStage 的 PlayerState_Attack1。 */
 	UFUNCTION(BlueprintCallable, Category = "Player|Attack")
 	void RequestNormalAttack();
@@ -100,6 +107,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "State")
 	bool IsSprinting() const { return bIsSprinting; }
+
+	/** 疾跑开关（按住 Shift）；切换时立刻刷新 MaxWalkSpeed，不依赖某帧谁来重设。 */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void SetSprinting(bool bInSprinting);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Skill")
 	TObjectPtr<USkillComponent> SkillComponent;
@@ -271,9 +282,6 @@ private:
 
 	// 统一切换角色动作状态
 	void SetActionState(EHikariActionState NewState);
-
-	// 取消当前攻击
-	void CancelAttack();
 
 	/** Modal state captured before the details HUD switches to UI-only input. */
 	bool bCombatBuildDetailsOpen = false;

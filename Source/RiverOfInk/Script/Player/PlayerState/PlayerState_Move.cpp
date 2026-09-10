@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Player/PlayerState/PlayerState_Move.h"
 #include "RiverOfInk.h"
@@ -38,6 +38,9 @@ void UPlayerState_Move::OnEnter_Implementation()
 	UPlayerInputComponent* Input = Player->FindComponentByClass<UPlayerInputComponent>();
 	if (!Input) return;
 
+	// 状态切换期间 Shift 的按下/松开收不到事件（订阅刚建立），这里按输入组件的缓存状态恢复疾跑。
+	Player->SetSprinting(Input->IsSprintHeld());
+
 	Input->OnMoveXDelegate.AddUObject(this, &UPlayerState_Move::OnMoveX);
 	Input->OnMoveYDelegate.AddUObject(this, &UPlayerState_Move::OnMoveY);
 	Input->OnShiftDelegate.AddUObject(this, &UPlayerState_Move::OnShift);
@@ -71,7 +74,9 @@ void UPlayerState_Move::OnExit_Implementation()
 		Input->OnEDelegate.RemoveAll(this);
 	}
 
-	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(Player->WalkSpeed);
+	// 离开移动状态时把速度上限复位（仍按住 Shift 时保留疾跑速度，避免下一帧被走速覆盖）
+	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
+		Player->IsSprinting() ? Player->SprintSpeed : Player->WalkSpeed);
 }
 
 void UPlayerState_Move::OnTakeDirectDamage(const FTakeDamageInfo& DamageInfo)
@@ -89,9 +94,15 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 	APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
 	if (!Player) return;
 
-	Player->GetCharacterMovement()->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(Player->WalkSpeed);
+	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
+	if (!Movement) return;
+
+	// 按疾跑状态设置速度上限（原来无条件写成 WalkSpeed，会把疾跑覆盖掉）
+	Movement->MaxWalkSpeed = Player->GetEffectiveMoveSpeed(
+		Player->IsSprinting() ? Player->SprintSpeed : Player->WalkSpeed);
 
 	// 每帧根据当前输入轴值合成移动方向，保证持续、平滑地移动。
+	// 等距映射：A/D 沿世界 (-1,1)，W/S 沿世界 (1,1)，两轴互相正交。
 	const FVector XDir = (FVector::RightVector - FVector::ForwardVector).GetSafeNormal();
 	const FVector YDir = (FVector::ForwardVector + FVector::RightVector).GetSafeNormal();
 	FVector InputVector = XDir * CurrentMoveX + YDir * CurrentMoveY;
@@ -103,6 +114,22 @@ void UPlayerState_Move::Update_Implementation(float DeltaTime)
 			InputVector = InputVector.GetSafeNormal();
 		}
 		Player->AddMovementInput(InputVector, 1.0f);
+	}
+
+	// 轴向速度归零：没有输入的轴，速度里沿该轴的分量立刻清零。
+	// 例如同时按 A+D 时横向速度直接归零（而不是慢慢滑停），只保留仍在按的那个轴。
+	if (bCancelVelocityOnNeutralAxis)
+	{
+		FVector Velocity = Movement->Velocity;
+		if (FMath::IsNearlyZero(CurrentMoveX))
+		{
+			Velocity -= XDir * FVector::DotProduct(Velocity, XDir);
+		}
+		if (FMath::IsNearlyZero(CurrentMoveY))
+		{
+			Velocity -= YDir * FVector::DotProduct(Velocity, YDir);
+		}
+		Movement->Velocity = Velocity;
 	}
 
 	// 无输入一段时间后切回 Idle
@@ -165,6 +192,11 @@ void UPlayerState_Move::OnShift(float Value)
 {
 	LastShiftTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
+	// 按住即疾跑（Triggered 持续触发；松开 Completed 广播 0）
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+	{
+		Player->SetSprinting(Value > 0.5f);
+	}
 }
 
 void UPlayerState_Move::OnLmb()

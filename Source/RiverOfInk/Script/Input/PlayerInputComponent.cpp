@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Input/PlayerInputComponent.h"
 #include "RiverOfInk.h"
@@ -127,6 +127,10 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnMoveY);
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnMoveY);
 
+	// 疾跑（Shift 按住）：Triggered 持续触发、Completed 松开时广播 0。
+	EnhancedInput->BindAction(ShiftAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnShift);
+	EnhancedInput->BindAction(ShiftAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnShift);
+
 	// 动作（Started = 按下的瞬间触发一次）
 	EnhancedInput->BindAction(LmbAction, ETriggerEvent::Started, this, &UPlayerInputComponent::OnLmb);
 	EnhancedInput->BindAction(RmbAction, ETriggerEvent::Started, this, &UPlayerInputComponent::OnRmb);
@@ -145,17 +149,50 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 
 void UPlayerInputComponent::OnMoveX(const FInputActionValue& Value)
 {
-	OnMoveXDelegate.Broadcast(Value.Get<float>());
+	CurrentMoveX = SanitizeMoveAxis(Value.Get<float>());
+	OnMoveXDelegate.Broadcast(CurrentMoveX);
 }
 
 void UPlayerInputComponent::OnMoveY(const FInputActionValue& Value)
 {
-	OnMoveYDelegate.Broadcast(Value.Get<float>());
+	CurrentMoveY = SanitizeMoveAxis(Value.Get<float>());
+	OnMoveYDelegate.Broadcast(CurrentMoveY);
+}
+
+float UPlayerInputComponent::SanitizeMoveAxis(float RawValue) const
+{
+	// 同轴正反键同时按下（SOCD neutral）：增强输入会把同一条轴上的多个按键映射相加，
+	// A=-1 + D=+1 本身就是 0；如果映射被配成同号则会得到 |值|>1，
+	// 这里统一按“反向抵消”处理成 0，保证“AD / WS 同时按 → 该轴不产生移动”。
+	if (FMath::Abs(RawValue) > 1.0f)
+	{
+		return 0.0f;
+	}
+
+	// 死区：手柄摇杆的轻微漂移不产生移动；键盘 ±1 不受影响。
+	return FMath::Abs(RawValue) < MoveAxisDeadZone ? 0.0f : RawValue;
+}
+
+FVector UPlayerInputComponent::GetMoveWorldDirection() const
+{
+	// 与 UPlayerState_Move / Attack1 / Attack2 内的合成算法保持一致：
+	// A/D 沿世界 (-1,1,0)，W/S 沿世界 (1,1,0)，即固定的等距方向映射。
+	const FVector XDir = (FVector::RightVector - FVector::ForwardVector).GetSafeNormal();
+	const FVector YDir = (FVector::ForwardVector + FVector::RightVector).GetSafeNormal();
+
+	FVector Direction = XDir * CurrentMoveX + YDir * CurrentMoveY;
+	if (Direction.SizeSquared() > 1.0f)
+	{
+		Direction = Direction.GetSafeNormal();
+	}
+
+	return Direction;
 }
 
 void UPlayerInputComponent::OnShift(const FInputActionValue& Value)
 {
-	OnShiftDelegate.Broadcast(Value.Get<float>());
+	CurrentShiftValue = Value.Get<float>();
+	OnShiftDelegate.Broadcast(CurrentShiftValue);
 }
 
 // ──────────────────────────────

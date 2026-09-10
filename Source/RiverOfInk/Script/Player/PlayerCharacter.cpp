@@ -1249,6 +1249,28 @@ void APlayerCharacter::Die()
 	Destroy();
 }
 
+void APlayerCharacter::SetSprinting(bool bInSprinting)
+{
+	if (bIsSprinting == bInSprinting)
+	{
+		return;
+	}
+
+	bIsSprinting = bInSprinting;
+
+	// 立刻按疾跑/走路速度刷新；否则要等下一次移动状态 Update 才生效，
+	// 而移动状态每帧都会重设 MaxWalkSpeed，容易把疾跑覆盖掉。
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->MaxWalkSpeed = GetEffectiveMoveSpeed(bIsSprinting ? SprintSpeed : WalkSpeed);
+	}
+
+	UE_LOG(LogRiverOfInk, Verbose,
+		TEXT("Player sprint %s: MaxWalkSpeed=%.1f."),
+		bIsSprinting ? TEXT("started") : TEXT("stopped"),
+		GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeed : 0.0f);
+}
+
 void APlayerCharacter::StartDashCooldown()
 {
 	bCanDash = false;

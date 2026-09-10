@@ -235,10 +235,16 @@ void UPlayerState_Attack1::OnSpace()
 		return;
 	}
 
-	if (!bAllowDashCancelInRecovery || CurrentPhase != EPlayerAttackPhase::Recovery)
+	// 冲刺取消：后摇用 bAllowDashCancelInRecovery 控制，前摇/有效帧用 bAllowDashCancelInEarlyPhases 控制。
+	// 默认三个阶段都允许，玩家按下空格（冲刺）即可立刻中断普攻进入冲刺状态。
+	const bool bPhaseAllowsDashCancel = (CurrentPhase == EPlayerAttackPhase::Recovery)
+		? bAllowDashCancelInRecovery
+		: bAllowDashCancelInEarlyPhases;
+
+	if (!bPhaseAllowsDashCancel)
 	{
 		UE_LOG(LogRiverOfInk, Verbose,
-			TEXT("Player Attack1 dash cancel ignored: Phase=%s."),
+			TEXT("Player Attack1 dash cancel ignored: Phase=%s is not dash-cancelable."),
 			*UEnum::GetValueAsString(CurrentPhase));
 		return;
 	}
@@ -249,10 +255,28 @@ void UPlayerState_Attack1::OnSpace()
 		return;
 	}
 
+	// 丢弃缓存的续招输入，走“被中断退出”路径：
+	// OnExit 会清理攻击计时器与伤害范围，并因为 bCompletedNormally=false 而进入普攻冷却。
 	bAttackQueued = false;
 	AttackInputBufferAge = -1.0f;
-	Player->EndAttack();
-	UE_LOG(LogRiverOfInk, Log, TEXT("Player Attack1 recovery canceled into Dash: Step=%d."), ComboStep);
+
+	if (CurrentPhase == EPlayerAttackPhase::Recovery)
+	{
+		// 后摇阶段蒙太奇基本已播完，沿用原有收尾方式。
+		Player->EndAttack();
+	}
+	else
+	{
+		// 前摇 / 有效帧被打断时攻击蒙太奇还在挥砍，必须显式断掉，
+		// 否则冲刺过程中会继续播放普攻动作。
+		Player->CancelAttack();
+	}
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Player Attack1 canceled into Dash: Phase=%s Step=%d."),
+		*UEnum::GetValueAsString(CurrentPhase),
+		ComboStep);
+
 	Player->SwitchState(UPlayerState_Dash::StaticClass());
 }
 

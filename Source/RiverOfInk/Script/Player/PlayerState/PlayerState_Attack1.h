@@ -140,6 +140,14 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|DashCancel", meta = (AllowPrivateAccess = "true"))
 	bool bAllowDashCancelInRecovery = true;
 
+	/**
+	 * 前摇 / 有效帧阶段是否也允许 Space 取消普通攻击并进入冲刺。
+	 * 开启后玩家在普攻的任何阶段都能用冲刺中断（用于靠冲刺位移 / 无敌帧躲伤害），
+	 * 代价是本次普攻的伤害范围会被立刻销毁、攻击进入冷却。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|DashCancel", meta = (AllowPrivateAccess = "true"))
+	bool bAllowDashCancelInEarlyPhases = true;
+
 	/** 普通攻击挥砍特效；二段未配置专用特效时复用此资源。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|VFX", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> AttackVFX;

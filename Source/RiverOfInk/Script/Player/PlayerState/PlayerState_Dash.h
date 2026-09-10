@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -18,6 +18,10 @@ protected:
 	virtual void OnEnter_Implementation() override;
 	virtual void OnExit_Implementation() override;
 	virtual void Update_Implementation(float DeltaTime) override;
+
+	/** 冲刺无敌窗口时长（秒）；0 表示冲刺期间不给无敌。默认与冲刺持续时间（0.3s，硬编码）一致。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dash|Invulnerability", meta = (ClampMin = "0.0", Units = "s"))
+	float DashInvulnerabilityDuration = 0.3f;
 
 private:
 	void OnMoveX(float Value);

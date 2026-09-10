@@ -38,6 +38,14 @@ private:
 	void OnQ();
 	void OnE();
 
+	/**
+	 * 轴向速度归零：某个轴没有输入时，立刻抹掉速度里沿该轴的分量。
+	 * 开启后松开方向键（或同轴正反键同时按下，例如 A+D）该轴向速度直接归零，
+	 * 不会沿旧方向继续滑行，换向也更利落；关闭则恢复“靠摩擦力减速”的旧手感。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Move|Feel", meta = (AllowPrivateAccess = "true"))
+	bool bCancelVelocityOnNeutralAxis = true;
+
 	float LastInputTime = 0.0f;
 	float LastShiftTime = 0.0f;
 
