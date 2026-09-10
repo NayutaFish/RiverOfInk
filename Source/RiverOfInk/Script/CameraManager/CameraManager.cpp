@@ -20,13 +20,19 @@ ACameraManager::ACameraManager()
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->SetUsingAbsoluteRotation(true);   // 弹簧臂自身保持固定旋转（俯视角）
 	CameraBoom->TargetArmLength = 1600.f;         // 相机距离目标 1600 单位（高度差约 800，原为 400）
-	CameraBoom->SetRelativeRotation(FRotator(-60.f, 45.f, 0.f)); // 俯视 60 度 + Yaw 45 度对齐 WASD 移动方向
+	CameraBoom->SetRelativeRotation(FRotator(-40.f, 45.f, 0.f)); // 俯视 45 度 + Yaw 45 度对齐 WASD 移动方向（接近等距视角）
 	CameraBoom->bDoCollisionTest = false;
 
 	// ── 创建摄像机 ──
 	TopDownCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
 	TopDownCameraComponent->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	TopDownCameraComponent->bUsePawnControlRotation = false;  // 相机不随控制器转
+
+	// ── 固定为正交投影（接近等距视角），并缩小过大的取景范围 ──
+	// 使用 UCameraComponent 正式接口；在构造函数中直接落在 CDO 默认值上，PIE 重启后仍生效。
+	TopDownCameraComponent->SetProjectionMode(ECameraProjectionMode::Orthographic);
+	TopDownCameraComponent->SetOrthoWidth(1550.f);
+
 }
 
 void ACameraManager::BeginPlay()
