@@ -126,6 +126,20 @@ void ULanternGhostState_Suicide_Elite::ExecuteAttack()
 		return;
 	}
 
+	// 存活召唤物已达上限：本次召唤作废（不播特效、不生成小怪），但必须正常回到追击，
+	// 否则精英怪会卡在攻击状态什么都不做。
+	const int32 AliveSummons = RefreshAliveSummonCount();
+	if (AliveSummons >= MaxAliveSummonCount)
+	{
+		UE_LOG(LogRiverOfInk, Log,
+			TEXT("Enemy %s elite summon skipped: alive summons %d/%d reached the cap; returning to Chase."),
+			*Enemy->GetName(),
+			AliveSummons,
+			MaxAliveSummonCount);
+		ReturnToChase();
+		return;
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -447,11 +461,39 @@ void ULanternGhostState_Suicide_Elite::SpawnPendingSummons()
 	PendingSummonTransforms.Reset();
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("LanternGhost elite %s summoned %d/%d minions (Class=%s)."),
+		TEXT("LanternGhost elite %s summoned %d/%d minions (Class=%s). AliveSummons=%d/%d."),
 		*Enemy->GetName(),
 		SpawnedCount,
 		RequestedCount,
-		*ClassToSpawn->GetName());
+		*ClassToSpawn->GetName(),
+		GetAliveSummonCount(),
+		MaxAliveSummonCount);
+}
+
+int32 ULanternGhostState_Suicide_Elite::GetAliveSummonCount() const
+{
+	int32 AliveCount = 0;
+	for (const TObjectPtr<AEnemyBase>& Summoned : SummonedEnemies)
+	{
+		if (IsValid(Summoned) && !Summoned->bIsDead)
+		{
+			++AliveCount;
+		}
+	}
+
+	return AliveCount;
+}
+
+int32 ULanternGhostState_Suicide_Elite::RefreshAliveSummonCount()
+{
+	// 死亡后的召唤物还要走一段溶解/延迟销毁，这里一并从登记表里剔除，
+	// 之后 SummonedEnemies 里剩下的就是真正还活着的。
+	SummonedEnemies.RemoveAll([](const TObjectPtr<AEnemyBase>& Summoned)
+	{
+		return !IsValid(Summoned) || Summoned->bIsDead;
+	});
+
+	return SummonedEnemies.Num();
 }
 
 FTransform ULanternGhostState_Suicide_Elite::MakeNonBlockingSpawnTransform(
