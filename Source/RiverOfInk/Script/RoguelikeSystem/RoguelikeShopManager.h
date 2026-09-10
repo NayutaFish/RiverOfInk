@@ -9,11 +9,8 @@
 #include "RoguelikeShopManager.generated.h"
 
 class APlayerCharacter;
-<<<<<<< HEAD
-class ARoguelikeRewardManager;
-=======
 class APlayerController;
->>>>>>> f3f42ed48e860dcaddd581106e9caca47b408964
+class ARoguelikeRewardManager;
 class UBoxComponent;
 class UPrimitiveComponent;
 class UStaticMeshComponent;
