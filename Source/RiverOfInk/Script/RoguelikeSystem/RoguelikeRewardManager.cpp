@@ -4,6 +4,8 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Common/HealthComponent.h"
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
@@ -627,8 +629,49 @@ void ARoguelikeRewardManager::FinishRewardSelection()
 	CloseRewardUI();
 	UE_LOG(LogRoguelike, Log, TEXT("Reward UI closed after selection feedback; gameplay input restored."));
 	OnRewardApplied.Broadcast(CompletedReward);
+
+	// 记录"玩家清场后选到的增益"：标识由枚举名组成，标题用于显示，按选择顺序由订阅方累计
+	FEventBus::Publish<FRewardSelectedEvent>(FRewardSelectedEvent(
+		BuildRewardIdentifier(CompletedReward),
+		CompletedReward.Title,
+		FMath::Max(1, CompletedReward.StackDelta)));
+
 	PendingSelectedReward = FRoguelikeRewardOption();
 	bRewardSelectionInProgress = false;
+}
+
+FString ARoguelikeRewardManager::BuildRewardIdentifier(const FRoguelikeRewardOption& Reward)
+{
+	// UEnum::GetNameStringByValue 返回枚举短名（如 "AddProjectile"），是稳定且与调试别名一致的 ASCII 标识
+	const auto EnumName = [](const UEnum* Enum, int64 Value) -> FString
+	{
+		return Enum ? Enum->GetNameStringByValue(Value) : FString(TEXT("Unknown"));
+	};
+
+	switch (Reward.RewardType)
+	{
+	case ERoguelikeRewardType::Modifier:
+		return FString::Printf(TEXT("Modifier.%s"),
+			*EnumName(StaticEnum<ESkillModifierID>(), static_cast<int64>(Reward.ModifierID)));
+
+	case ERoguelikeRewardType::ChangeSkillForm:
+		return FString::Printf(TEXT("ChangeSkillForm.%s.%s"),
+			*EnumName(StaticEnum<EPlayerSkillID>(), static_cast<int64>(Reward.SkillID)),
+			*EnumName(StaticEnum<EPlayerSkillForm>(), static_cast<int64>(Reward.TargetSkillForm)));
+
+	case ERoguelikeRewardType::Currency:
+		return TEXT("Currency");
+
+	case ERoguelikeRewardType::Health:
+		return TEXT("Health");
+
+	case ERoguelikeRewardType::GainSkill:
+	case ERoguelikeRewardType::UpgradeSkill:
+	default:
+		return FString::Printf(TEXT("%s.%s"),
+			*EnumName(StaticEnum<ERoguelikeRewardType>(), static_cast<int64>(Reward.RewardType)),
+			*EnumName(StaticEnum<EPlayerSkillID>(), static_cast<int64>(Reward.SkillID)));
+	}
 }
 
 bool ARoguelikeRewardManager::ResolvePlayer()

@@ -114,6 +114,9 @@ private:
 	bool RejectDuplicateSkillFormSelection(
 		const FRoguelikeRewardOption& Option,
 		const TCHAR* DebugCommandName) const;
+
+	/** 用枚举名拼出奖励的稳定字符串标识（例如 "Modifier.ProjectileHoming"），供事件与结算记录使用。 */
+	static FString BuildRewardIdentifier(const FRoguelikeRewardOption& Reward);
 	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
 	void PopulateRewardPresentation(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;

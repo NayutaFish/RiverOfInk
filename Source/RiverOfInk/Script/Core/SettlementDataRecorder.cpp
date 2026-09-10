@@ -14,10 +14,9 @@
 int32 USettlementDataRecorder::NonPlayerDeathCount = 0;
 int32 USettlementDataRecorder::EliteEnemyDeathCount = 0;
 float USettlementDataRecorder::TotalDamageDealtToNonPlayer = 0.0f;
-int32 USettlementDataRecorder::DamageDealtHitCount = 0;
-float USettlementDataRecorder::HighestSingleHitDamage = 0.0f;
 int32 USettlementDataRecorder::TotalShopCurrencyGained = 0;
 int32 USettlementDataRecorder::ShopPurchaseCount = 0;
+TArray<FSettlementRewardPick> USettlementDataRecorder::RewardPicks;
 bool USettlementDataRecorder::bScreenDebugEnabled = true;
 
 bool USettlementDataRecorder::bInitialized = false;
@@ -26,11 +25,18 @@ FDelegateHandle USettlementDataRecorder::EliteEnemyDiedHandle;
 FDelegateHandle USettlementDataRecorder::NonPlayerTakeDamageHandle;
 FDelegateHandle USettlementDataRecorder::ShopCurrencyGainedHandle;
 FDelegateHandle USettlementDataRecorder::ShopPurchaseCompletedHandle;
+FDelegateHandle USettlementDataRecorder::RewardSelectedHandle;
 
 namespace
 {
 	/** 屏幕调试消息的固定 Key：相同 Key 会原地覆盖，保证屏幕只占一行。 */
 	constexpr uint64 SettlementScreenDebugKey = 0x5E7711;
+
+	/** 增益顺序列表的固定 Key（与上面那条分开，屏幕共占两行）。 */
+	constexpr uint64 SettlementRewardPicksScreenDebugKey = 0x5E7712;
+
+	/** 屏幕上最多展示多少条增益（超出的仍会记录，只是不打印）。 */
+	constexpr int32 MaxRewardPicksOnScreen = 12;
 
 	/**
 	 * 模块加载时自动完成订阅：静态类没有实例，用一个文件级静态对象做一次性初始化。
@@ -74,10 +80,13 @@ void USettlementDataRecorder::Initialize()
 	ShopPurchaseCompletedHandle = FEventBus::Subscribe<FShopPurchaseCompletedEvent>(
 		[](const FShopPurchaseCompletedEvent& Event) { HandleShopPurchaseCompleted(Event); });
 
+	RewardSelectedHandle = FEventBus::Subscribe<FRewardSelectedEvent>(
+		[](const FRewardSelectedEvent& Event) { HandleRewardSelected(Event); });
+
 	bInitialized = true;
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("SettlementDataRecorder initialized: subscribed to combat and shop events."));
+		TEXT("SettlementDataRecorder initialized: subscribed to combat, shop and reward events."));
 }
 
 void USettlementDataRecorder::Shutdown()
@@ -92,6 +101,7 @@ void USettlementDataRecorder::Shutdown()
 	FEventBus::Unsubscribe<FOnNonPlayerTakeDamageFromPlayer>(NonPlayerTakeDamageHandle);
 	FEventBus::Unsubscribe<FShopCurrencyGainedEvent>(ShopCurrencyGainedHandle);
 	FEventBus::Unsubscribe<FShopPurchaseCompletedEvent>(ShopPurchaseCompletedHandle);
+	FEventBus::Unsubscribe<FRewardSelectedEvent>(RewardSelectedHandle);
 
 	bInitialized = false;
 }
@@ -101,15 +111,15 @@ void USettlementDataRecorder::Reset()
 	NonPlayerDeathCount = 0;
 	EliteEnemyDeathCount = 0;
 	TotalDamageDealtToNonPlayer = 0.0f;
-	DamageDealtHitCount = 0;
-	HighestSingleHitDamage = 0.0f;
 	TotalShopCurrencyGained = 0;
 	ShopPurchaseCount = 0;
+	RewardPicks.Reset();
 
 	UE_LOG(LogRiverOfInk, Log, TEXT("SettlementDataRecorder reset."));
 
 	// 重置也算一次数据更新，同步刷新屏幕快照（归零）
 	PrintSnapshotToScreen();
+	PrintRewardPicksToScreen();
 }
 
 void USettlementDataRecorder::PrintSnapshotToScreen()
@@ -137,11 +147,54 @@ void USettlementDataRecorder::PrintSnapshotToScreen()
 #endif
 }
 
-float USettlementDataRecorder::GetAverageDamagePerHit()
+void USettlementDataRecorder::PrintRewardPicksToScreen()
 {
-	return DamageDealtHitCount > 0
-		? TotalDamageDealtToNonPlayer / static_cast<float>(DamageDealtHitCount)
-		: 0.0f;
+#if !UE_BUILD_SHIPPING
+	if (!bScreenDebugEnabled)
+	{
+		return;
+	}
+
+	if (!GEngine)
+	{
+		return;
+	}
+
+	// 标签依然是 ASCII（屏幕调试字体不一定带中文字形）；奖励名用 Title，中文可能显示成方块，
+	// 但 EventBus/结算界面读的是 FString DisplayName，不受影响。
+	const int32 ShownCount = FMath::Min(RewardPicks.Num(), MaxRewardPicksOnScreen);
+
+	FString PicksText;
+	for (int32 Index = 0; Index < ShownCount; ++Index)
+	{
+		const FSettlementRewardPick& Pick = RewardPicks[Index];
+
+		if (Index > 0)
+		{
+			PicksText += TEXT(" > ");
+		}
+
+		PicksText += Pick.RewardId.IsEmpty() ? FString(TEXT("<unknown>")) : Pick.RewardId;
+
+		if (Pick.StackCount > 1)
+		{
+			PicksText += FString::Printf(TEXT("x%d"), Pick.StackCount);
+		}
+	}
+
+	if (RewardPicks.Num() > ShownCount)
+	{
+		PicksText += FString::Printf(TEXT(" ... (+%d)"), RewardPicks.Num() - ShownCount);
+	}
+
+	const FString Message = FString::Printf(
+		TEXT("[Settlement] Picks(%d): %s"),
+		RewardPicks.Num(),
+		PicksText.IsEmpty() ? TEXT("-") : *PicksText);
+
+	GEngine->AddOnScreenDebugMessage(
+		SettlementRewardPicksScreenDebugKey, 5.0f, FColor::Yellow, Message, false);
+#endif
 }
 
 // ──────────────────────────────
@@ -166,15 +219,13 @@ void USettlementDataRecorder::HandleEliteEnemyDied(const FOnEliteEnemyDiedEvent&
 
 void USettlementDataRecorder::HandleNonPlayerTakeDamageFromPlayer(const FOnNonPlayerTakeDamageFromPlayer& Event)
 {
-	// 0 伤害的命中不计入统计（只统计真正掉血的命中）
+	// 只累计真正掉血的伤害
 	if (Event.FinalDamage <= 0.0f)
 	{
 		return;
 	}
 
 	TotalDamageDealtToNonPlayer += Event.FinalDamage;
-	++DamageDealtHitCount;
-	HighestSingleHitDamage = FMath::Max(HighestSingleHitDamage, Event.FinalDamage);
 
 	PrintSnapshotToScreen();
 }
@@ -197,4 +248,23 @@ void USettlementDataRecorder::HandleShopPurchaseCompleted(const FShopPurchaseCom
 
 	++ShopPurchaseCount;
 	PrintSnapshotToScreen();
+}
+
+void USettlementDataRecorder::HandleRewardSelected(const FRewardSelectedEvent& Event)
+{
+	// 只追加、不合并也不排序：结算界面要还原玩家实际的清场选择顺序
+	FSettlementRewardPick& NewPick = RewardPicks.AddDefaulted_GetRef();
+	NewPick.RewardId = Event.RewardId;
+	NewPick.DisplayName = Event.Title.ToString();
+	NewPick.StackCount = FMath::Max(1, Event.StackCount);
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("SettlementDataRecorder reward pick #%d recorded: id=%s title=%s stack=%d"),
+		RewardPicks.Num(),
+		*NewPick.RewardId,
+		*NewPick.DisplayName,
+		NewPick.StackCount);
+
+	PrintSnapshotToScreen();
+	PrintRewardPicksToScreen();
 }

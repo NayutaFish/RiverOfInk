@@ -331,3 +331,33 @@ struct FShopPurchaseCompletedEvent
 {
 	FShopPurchaseCompletedEvent() = default;
 };
+
+// ====================
+// 玩家选定清场奖励（增益）事件
+// ====================
+
+struct FRewardSelectedEvent
+{
+	/**
+	 * 奖励的稳定字符串标识，由枚举名拼成，例如：
+	 *   "Modifier.ProjectileHoming" / "Modifier.AddProjectile"
+	 *   "ChangeSkillForm.TripleProjectile.NullRing"
+	 *   "GainSkill.CircularSlash" / "Currency" / "Health"
+	 */
+	FString RewardId;
+
+	/** 卡面标题（本地化显示名，例如 "引墨"） */
+	FText Title;
+
+	/** 本次叠加层数：词条类奖励为实际叠加数，其它类型为 1。 */
+	int32 StackCount = 1;
+
+	FRewardSelectedEvent() = default;
+
+	FRewardSelectedEvent(const FString& InRewardId, const FText& InTitle, int32 InStackCount)
+		: RewardId(InRewardId)
+		, Title(InTitle)
+		, StackCount(InStackCount)
+	{
+	}
+};
