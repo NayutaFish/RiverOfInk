@@ -283,11 +283,11 @@ public:
 
 	/** 冲撞阶段水平速度。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0"))
-	float ChargeSpeed = 1400.0f;
+	float ChargeSpeed = 2800.0f;
 
-	/** 冲撞阶段最长持续时间。 */
+	/** 冲撞阶段最长持续时间（与 ChargeSpeed 成对使用：速度 ×2、时长 ÷2，冲撞距离不变）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0", Units = "s"))
-	float ChargeDuration = 0.75f;
+	float ChargeDuration = 0.375f;
 
 	/** 冲撞结束后的停顿时间，结束后回到 Chase。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Charge", meta = (ClampMin = "0.0", Units = "s"))

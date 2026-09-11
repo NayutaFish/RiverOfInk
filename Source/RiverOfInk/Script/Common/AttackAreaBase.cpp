@@ -98,18 +98,7 @@ void AAttackAreaBase::Tick(float DeltaTime)
 	// 近战：持续检查重叠范围内是否仍有未结算目标（不会漏掉生成时已在范围内的目标）
 	if (bIsMeleeAttack)
 	{
-		TArray<AActor*> Overlapping;
-		CollisionSphere->GetOverlappingActors(Overlapping);
-		for (AActor* Other : Overlapping)
-		{
-			if (!IsValid(Other) || HitActors.Contains(Other) || !IsValidTarget(Other))
-			{
-				continue;
-			}
-
-			HitActors.Add(Other);
-			ApplyDamage(Other);
-		}
+		ApplyDamageToOverlappingTargets();
 	}
 
 	ElapsedTime += DeltaTime;
@@ -155,6 +144,32 @@ void AAttackAreaBase::Tick(float DeltaTime)
 				FMath::Max(0.1f, DebugHitboxLineThickness));
 		}
 	}
+}
+
+int32 AAttackAreaBase::ApplyDamageToOverlappingTargets()
+{
+	if (!CollisionSphere)
+	{
+		return 0;
+	}
+
+	TArray<AActor*> Overlapping;
+	CollisionSphere->GetOverlappingActors(Overlapping);
+
+	int32 AppliedCount = 0;
+	for (AActor* Other : Overlapping)
+	{
+		if (!IsValid(Other) || HitActors.Contains(Other) || !IsValidTarget(Other))
+		{
+			continue;
+		}
+
+		HitActors.Add(Other);
+		ApplyDamage(Other);
+		++AppliedCount;
+	}
+
+	return AppliedCount;
 }
 
 void AAttackAreaBase::UpdateDebugHitboxVisualization()

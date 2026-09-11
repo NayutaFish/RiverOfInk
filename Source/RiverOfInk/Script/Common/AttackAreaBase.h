@@ -143,6 +143,22 @@ protected:
 	/** 统一销毁入口，带原因屏幕输出 */
 	void Disappear(EAttackAreaDisappearReason Reason);
 
+	/**
+	 * 对当前重叠范围内、尚未结算过的有效目标各结算一次伤害，返回结算次数。
+	 *
+	 * 近战判定每帧都走这里；子类在“切换判定模式”的瞬间也可以手动调一次：
+	 * 例如绕行中的法球改为发射时，玩家可能本来就贴在法球上，只等 BeginOverlap 会漏掉这一下。
+	 */
+	int32 ApplyDamageToOverlappingTargets();
+
+	/**
+	 * 清空命中表，让攻击区域可以重新对同一个目标结算伤害。
+	 *
+	 * 用于“先持续存在、后转为射弹”这类两段式攻击：例如绕行中的法球已经接触过玩家，
+	 * 发射时清一次，飞行命中的那一下才会重新结算。
+	 */
+	void ResetHitActors() { HitActors.Reset(); }
+
 	/** 同步线框球体的尺寸和可见性；线框球体不会参与碰撞。 */
 	void UpdateDebugHitboxVisualization();
 
