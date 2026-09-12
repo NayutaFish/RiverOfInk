@@ -16,9 +16,11 @@
 #include "Components/TextBlock.h"
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRewardOptionWidget.h"
+#include "TimerManager.h"
 
 namespace
 {
@@ -57,6 +59,12 @@ void URoguelikeRewardWidget::NativeConstruct()
 
 void URoguelikeRewardWidget::NativeDestruct()
 {
+	// 宽限期计时器不能留到界面销毁之后（回调会打到已经失效的 widget 上）。
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(InputGraceTimerHandle);
+	}
+
 	SelectionFinishedCallback.Unbind();
 	for (URoguelikeRewardOptionWidget* OptionWidget : OptionWidgets)
 	{
@@ -145,8 +153,43 @@ void URoguelikeRewardWidget::SetupRewardOptions(
 	}
 
 	SetSelectionLocked(false);
+
+	// 输入宽限期：界面刚出现的这段时间里不接收选择输入，避免刚清完场手还按在左键上误选。
+	// 只锁"选择"，卡面/悬停动画照常；计时结束后自动恢复。
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(InputGraceTimerHandle);
+	}
+
+	if (InputGracePeriod > KINDA_SMALL_NUMBER)
+	{
+		SetSelectionLocked(true);
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				InputGraceTimerHandle,
+				this,
+				&URoguelikeRewardWidget::HandleInputGraceFinished,
+				InputGracePeriod,
+				false);
+		}
+		else
+		{
+			SetSelectionLocked(false);
+		}
+	}
+
 	ForceLayoutPrepass();
-	UE_LOG(LogRoguelike, Log, TEXT("Reward widget generated dynamically: Count=%d."), OptionWidgets.Num());
+	UE_LOG(LogRoguelike, Log,
+		TEXT("Reward widget generated dynamically: Count=%d InputGrace=%.2fs."),
+		OptionWidgets.Num(),
+		InputGracePeriod);
+}
+
+void URoguelikeRewardWidget::HandleInputGraceFinished()
+{
+	SetSelectionLocked(false);
+	UE_LOG(LogRoguelike, Verbose, TEXT("Reward input grace period ended; selection input restored."));
 }
 
 void URoguelikeRewardWidget::SelectOption(int32 OptionIndex)

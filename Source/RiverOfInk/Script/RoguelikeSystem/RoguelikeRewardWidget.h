@@ -78,6 +78,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Selection", meta = (ClampMin = "0.05", ClampMax = "2.0"))
 	float FadeOutDuration = 0.455f;
 
+	/**
+	 * 界面出现后的输入宽限期（秒）：这段时间内奖励卡不接收选择输入（鼠标点不动、确认键也按不动），
+	 * 用来防止刚清完场手还按在左键上就误选一张卡。0 = 不设宽限期。
+	 * 只屏蔽选择输入，不影响看卡面 / 悬停动画 / 键盘导航焦点。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Input", meta = (ClampMin = "0.0", Units = "s"))
+	float InputGracePeriod = 1.2f;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -89,6 +97,9 @@ private:
 	void HandleSelectionFinished();
 	void HandleOptionHovered(int32 OptionIndex);
 	void HandleOptionUnhovered(int32 OptionIndex);
+
+	/** 输入宽限期结束：恢复奖励卡的选择输入。 */
+	void HandleInputGraceFinished();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> RootCanvas;
@@ -117,4 +128,7 @@ private:
 	FSimpleDelegate SelectionFinishedCallback;
 	bool bSelectionLocked = false;
 	bool bNativeTreeBuilt = false;
+
+	/** 输入宽限期计时器。 */
+	FTimerHandle InputGraceTimerHandle;
 };
