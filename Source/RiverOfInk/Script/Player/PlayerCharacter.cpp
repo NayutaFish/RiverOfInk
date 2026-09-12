@@ -478,6 +478,28 @@ void APlayerCharacter::CreateCombatBuildHudWidget()
 		*GetName(), CombatBuildHudWidget->IsInViewport() ? TEXT("true") : TEXT("false"));
 }
 
+void APlayerCharacter::SetGameplayHudVisible(bool bVisible)
+{
+	if (!bVisible)
+	{
+		CloseCombatBuildDetails();
+	}
+
+	const ESlateVisibility Visibility = bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+	if (HealthWidget)
+	{
+		HealthWidget->SetVisibility(Visibility);
+	}
+	if (SkillWidget)
+	{
+		SkillWidget->SetVisibility(Visibility);
+	}
+	if (CombatBuildHudWidget)
+	{
+		CombatBuildHudWidget->SetVisibility(Visibility);
+	}
+}
+
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);

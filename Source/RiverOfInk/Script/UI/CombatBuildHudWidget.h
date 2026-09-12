@@ -91,6 +91,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "180.0", ClampMax = "420.0"))
 	float PanelHeight = 250.0f;
 
+	/** Uniform presentation scale for the complete compact combat-build HUD. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance|Layout", meta = (ClampMin = "0.50", ClampMax = "1.00", UIMin = "0.50", UIMax = "1.00"))
+	float OverallHudScale = 0.85f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
 	FLinearColor PanelFallbackColor = FLinearColor(0.045f, 0.042f, 0.038f, 0.88f);
 

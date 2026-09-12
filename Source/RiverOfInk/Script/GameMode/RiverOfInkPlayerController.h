@@ -58,6 +58,14 @@ public:
 	UFUNCTION(exec, Category = "Debug")
 	void DebugPrepareTwoStageArc(float ForwardDistance = 140.0f);
 
+	/** Development-only PIE helper: finish the active run as a victory and open the Result HUD. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugFinishRunVictory();
+
+	/** Development-only PIE helper: trigger the normal player-death path and open the defeat Result HUD. */
+	UFUNCTION(exec, Category = "Debug")
+	void DebugTriggerPlayerDefeat();
+
 	/** Set this in a PIE instance to invoke the helper on the next controller tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bDebugKillAllEnemiesOnNextTick = false;

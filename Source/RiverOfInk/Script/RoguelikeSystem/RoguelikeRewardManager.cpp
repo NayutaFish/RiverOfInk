@@ -628,13 +628,14 @@ void ARoguelikeRewardManager::FinishRewardSelection()
 	const FRoguelikeRewardOption CompletedReward = PendingSelectedReward;
 	CloseRewardUI();
 	UE_LOG(LogRoguelike, Log, TEXT("Reward UI closed after selection feedback; gameplay input restored."));
-	OnRewardApplied.Broadcast(CompletedReward);
 
-	// 记录"玩家清场后选到的增益"：标识由枚举名组成，标题用于显示，按选择顺序由订阅方累计
+	// First persist the finished card event, then let room-flow observers enable
+	// an exit. A result triggered immediately after this callback must include
+	// this final, already-confirmed reward in its frozen snapshot.
 	FEventBus::Publish<FRewardSelectedEvent>(FRewardSelectedEvent(
 		BuildRewardIdentifier(CompletedReward),
-		CompletedReward.Title,
-		FMath::Max(1, CompletedReward.StackDelta)));
+		CompletedReward));
+	OnRewardApplied.Broadcast(CompletedReward);
 
 	PendingSelectedReward = FRoguelikeRewardOption();
 	bRewardSelectionInProgress = false;

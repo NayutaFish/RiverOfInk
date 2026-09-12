@@ -18,6 +18,7 @@ int32 USettlementDataRecorder::TotalShopCurrencyGained = 0;
 int32 USettlementDataRecorder::ShopPurchaseCount = 0;
 TArray<FSettlementRewardPick> USettlementDataRecorder::RewardPicks;
 bool USettlementDataRecorder::bScreenDebugEnabled = true;
+bool USettlementDataRecorder::bCollectionFrozen = false;
 
 bool USettlementDataRecorder::bInitialized = false;
 FDelegateHandle USettlementDataRecorder::NonPlayerDiedHandle;
@@ -108,6 +109,7 @@ void USettlementDataRecorder::Shutdown()
 
 void USettlementDataRecorder::Reset()
 {
+	bCollectionFrozen = false;
 	NonPlayerDeathCount = 0;
 	EliteEnemyDeathCount = 0;
 	TotalDamageDealtToNonPlayer = 0.0f;
@@ -120,6 +122,25 @@ void USettlementDataRecorder::Reset()
 	// 重置也算一次数据更新，同步刷新屏幕快照（归零）
 	PrintSnapshotToScreen();
 	PrintRewardPicksToScreen();
+}
+
+void USettlementDataRecorder::FreezeCollection()
+{
+	bCollectionFrozen = true;
+	UE_LOG(LogRiverOfInk, Log, TEXT("SettlementDataRecorder collection frozen for run result."));
+}
+
+FRoguelikeRunResultSnapshot USettlementDataRecorder::CaptureSnapshot()
+{
+	FRoguelikeRunResultSnapshot Snapshot;
+	Snapshot.bIsValid = true;
+	Snapshot.NonPlayerDeathCount = NonPlayerDeathCount;
+	Snapshot.EliteEnemyDeathCount = EliteEnemyDeathCount;
+	Snapshot.TotalDamageDealtToNonPlayer = TotalDamageDealtToNonPlayer;
+	Snapshot.TotalShopCurrencyGained = TotalShopCurrencyGained;
+	Snapshot.ShopPurchaseCount = ShopPurchaseCount;
+	Snapshot.RewardPicks = RewardPicks;
+	return Snapshot;
 }
 
 void USettlementDataRecorder::PrintSnapshotToScreen()
@@ -203,6 +224,11 @@ void USettlementDataRecorder::PrintRewardPicksToScreen()
 
 void USettlementDataRecorder::HandleNonPlayerDied(const FNonPlayerDiedEvent& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	(void)Event;
 
 	++NonPlayerDeathCount;
@@ -211,6 +237,11 @@ void USettlementDataRecorder::HandleNonPlayerDied(const FNonPlayerDiedEvent& Eve
 
 void USettlementDataRecorder::HandleEliteEnemyDied(const FOnEliteEnemyDiedEvent& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	(void)Event;
 
 	++EliteEnemyDeathCount;
@@ -219,6 +250,11 @@ void USettlementDataRecorder::HandleEliteEnemyDied(const FOnEliteEnemyDiedEvent&
 
 void USettlementDataRecorder::HandleNonPlayerTakeDamageFromPlayer(const FOnNonPlayerTakeDamageFromPlayer& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	// 只累计真正掉血的伤害
 	if (Event.FinalDamage <= 0.0f)
 	{
@@ -232,6 +268,11 @@ void USettlementDataRecorder::HandleNonPlayerTakeDamageFromPlayer(const FOnNonPl
 
 void USettlementDataRecorder::HandleShopCurrencyGained(const FShopCurrencyGainedEvent& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	if (Event.Amount <= 0)
 	{
 		return;
@@ -244,6 +285,11 @@ void USettlementDataRecorder::HandleShopCurrencyGained(const FShopCurrencyGained
 
 void USettlementDataRecorder::HandleShopPurchaseCompleted(const FShopPurchaseCompletedEvent& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	(void)Event;
 
 	++ShopPurchaseCount;
@@ -252,11 +298,23 @@ void USettlementDataRecorder::HandleShopPurchaseCompleted(const FShopPurchaseCom
 
 void USettlementDataRecorder::HandleRewardSelected(const FRewardSelectedEvent& Event)
 {
+	if (bCollectionFrozen)
+	{
+		return;
+	}
+
 	// 只追加、不合并也不排序：结算界面要还原玩家实际的清场选择顺序
 	FSettlementRewardPick& NewPick = RewardPicks.AddDefaulted_GetRef();
 	NewPick.RewardId = Event.RewardId;
 	NewPick.DisplayName = Event.Title.ToString();
 	NewPick.StackCount = FMath::Max(1, Event.StackCount);
+	NewPick.RewardType = Event.RewardType;
+	NewPick.SkillID = Event.SkillID;
+	NewPick.UpgradeType = Event.UpgradeType;
+	NewPick.TargetSkillForm = Event.TargetSkillForm;
+	NewPick.ModifierID = Event.ModifierID;
+	NewPick.CurrencyAmount = Event.CurrencyAmount;
+	NewPick.HealthRestoreAmount = Event.HealthRestoreAmount;
 
 	UE_LOG(LogRiverOfInk, Log,
 		TEXT("SettlementDataRecorder reward pick #%d recorded: id=%s title=%s stack=%d"),

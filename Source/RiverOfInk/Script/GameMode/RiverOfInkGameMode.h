@@ -10,6 +10,7 @@
 
 class ADemoRoomManager;
 class ARoguelikeRewardManager;
+class URoguelikeRunResultWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnRoguelikeRoomStateChanged,
@@ -26,6 +27,10 @@ class RIVEROFINK_API ARiverOfInkGameMode : public AGameModeBase
 
 public:
 	ARiverOfInkGameMode();
+
+	/** Native Result HUD class; projects may supply a visual Blueprint subclass later. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Run Result")
+	TSubclassOf<URoguelikeRunResultWidget> RunResultWidgetClass;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Room Flow")
 	ERoguelikeRoomState CurrentRoomState = ERoguelikeRoomState::Initializing;
@@ -61,6 +66,8 @@ protected:
 
 private:
 	void BindRoomActors();
+	void ShowRunResultHud();
+	void HideRunResultHud();
 	bool IsRoomTransitionAllowed(ERoguelikeRoomState NextState) const;
 
 	UPROPERTY(Transient)
@@ -68,4 +75,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ARoguelikeRewardManager> BoundRewardManager;
+
+	UPROPERTY(Transient)
+	TObjectPtr<URoguelikeRunResultWidget> RunResultWidget;
 };
