@@ -277,10 +277,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Interaction")
 	FKey ShopInteractionKey = EKeys::J;
 
+	/** 调试回血键（默认 H）：按下后走 UPlayerCheatCommands::HealPlayer（默认回 500）。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Cheat")
+	FKey CheatHealKey = EKeys::H;
+
 	TWeakObjectPtr<ARoguelikeShopManager> NearbyShopManager;
 
 	void Die();
 	void OnAttack();
+	/** 调试回血（按 H）：转发给 UPlayerCheatCommands::HealPlayer。 */
+	void CheatHealPlayer();
 // 攻击动画蒙太奇
 // 之后在 BP_Hikari 类默认值里指定为 AM_Hikari_Attack_01
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation")

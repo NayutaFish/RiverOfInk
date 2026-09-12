@@ -4,6 +4,7 @@
 #include "RiverOfInk.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
+#include "Core/PlayerCheatCommands.h"
 #include "Common/AttackAreaBase.h"
 #include "Common/CombatEffectComponent.h"
 #include "Common/CombatEffectTags.h"
@@ -811,6 +812,20 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 			this,
 			&APlayerCharacter::ToggleCombatBuildDetails);
 	}
+	if (PlayerInputComponent && CheatHealKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(
+			CheatHealKey,
+			IE_Pressed,
+			this,
+			&APlayerCharacter::CheatHealPlayer);
+	}
+}
+
+void APlayerCharacter::CheatHealPlayer()
+{
+	// 治疗逻辑在静态类里；这里只负责按键转发（默认 500）。
+	UPlayerCheatCommands::HealPlayer(this);
 }
 
 void APlayerCharacter::SetNearbyShopManager(ARoguelikeShopManager* InShopManager)
