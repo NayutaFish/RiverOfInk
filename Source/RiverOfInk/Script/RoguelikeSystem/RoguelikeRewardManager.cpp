@@ -1244,3 +1244,32 @@ void ARoguelikeRewardManager::PopulateRewardPresentation(FRoguelikeRewardOption&
 	}
 	Option.RewardIcon = LoadObject<UTexture2D>(nullptr, IconPath);
 }
+
+bool ARoguelikeRewardManager::ShowRewardForShopPurchase()
+{
+	return ShowRewardChoice(false, TEXT("shop purchase"));
+}
+
+bool ARoguelikeRewardManager::ShowRewardChoice(bool bMarkRewardShownForRoom, const TCHAR* TriggerName)
+{
+	if (ActiveRewardWidget)
+	{
+		UE_LOG(LogRoguelike, Verbose,
+			TEXT("Reward UI request ignored for %s: reward UI is already active."),
+			TriggerName ? TriggerName : TEXT("unknown"));
+		return false;
+	}
+
+	if (bMarkRewardShownForRoom)
+	{
+		ShowRewardAfterRoomClear();
+		return IsValid(ActiveRewardWidget);
+	}
+
+	const bool bPreviousRewardShownForRoom = bRewardShownForRoom;
+	bRewardShownForRoom = false;
+	ShowRewardAfterRoomClear();
+	const bool bRewardShown = IsValid(ActiveRewardWidget);
+	bRewardShownForRoom = bPreviousRewardShownForRoom;
+	return bRewardShown;
+}

@@ -31,6 +31,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	void ShowRewardAfterRoomClear();
 
+	/**
+	 * Show one immediate build-choice UI requested by a Shop Item. This does
+	 * not consume the room-clear reward gate, so the Shop can own its own
+	 * one-purchase-per-item rule.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Reward")
+	bool ShowRewardForShopPurchase();
+
 	UFUNCTION(BlueprintCallable, Category = "Reward")
 	TArray<FRoguelikeRewardOption> GenerateRewardOptions();
 
@@ -88,6 +96,7 @@ protected:
 
 private:
 	bool ResolvePlayer();
+	bool ShowRewardChoice(bool bMarkRewardShownForRoom, const TCHAR* TriggerName);
 	void EnsureExitTrigger();
 	bool ApplyReward(const FRoguelikeRewardOption& Reward);
 	void CloseRewardUI();
