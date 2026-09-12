@@ -1,0 +1,19 @@
+{
+  "ImportGroups": [
+    {
+      "GroupName": "ResultHudTextures",
+      "Filenames": [
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_Paper.png",
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_TownLeft.png",
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_TownRight.png",
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_TitleVictory.png",
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_TitleDefeat.png",
+        "D:/project/UE/RiverOfInk/Content/RawContent/UI/Result/T_UI_Result_PrimaryBrush.png"
+      ],
+      "DestinationPath": "/Game/RawContent/UI/Result",
+      "FactoryName": "TextureFactory",
+      "bReplaceExisting": true,
+      "bSkipReadOnly": false
+    }
+  ]
+}

@@ -11,6 +11,7 @@
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
+#include "UI/RoguelikeRunResultWidget.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "UObject/ConstructorHelpers.h"
@@ -31,6 +32,7 @@ ARiverOfInkGameMode::ARiverOfInkGameMode()
 	}
 	// 自带的 PlayerController：鼠标全程显示
 	PlayerControllerClass = ARiverOfInkPlayerController::StaticClass();
+	RunResultWidgetClass = URoguelikeRunResultWidget::StaticClass();
 }
 
 void ARiverOfInkGameMode::BeginPlay()
@@ -84,6 +86,8 @@ void ARiverOfInkGameMode::BeginPlay()
 
 void ARiverOfInkGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HideRunResultHud();
+
 	if (UGameInstance* GameInstance = GetGameInstance())
 	{
 		if (URoguelikeRunFlowSubsystem* RunFlow = GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>())
@@ -153,13 +157,62 @@ void ARiverOfInkGameMode::HandleRunStateChanged(
 
 	if (NewState == ERoguelikeRunState::InRoom)
 	{
+		HideRunResultHud();
 		TransitionRoomState(ERoguelikeRoomState::Entering);
 	}
-	else if (NewState == ERoguelikeRunState::LoadingRoom
-		&& CurrentRoomState == ERoguelikeRoomState::Completed)
+	else if (NewState == ERoguelikeRunState::Result)
 	{
-		TransitionRoomState(ERoguelikeRoomState::Exiting);
+		ShowRunResultHud();
 	}
+	else if (NewState == ERoguelikeRunState::LoadingRoom)
+	{
+		HideRunResultHud();
+		if (CurrentRoomState == ERoguelikeRoomState::Completed)
+		{
+			TransitionRoomState(ERoguelikeRoomState::Exiting);
+		}
+	}
+}
+
+void ARiverOfInkGameMode::ShowRunResultHud()
+{
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PlayerController)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Run result HUD could not open: PlayerController is unavailable."));
+		return;
+	}
+
+	if (!RunResultWidget)
+	{
+		TSubclassOf<URoguelikeRunResultWidget> WidgetClass = RunResultWidgetClass;
+		if (!WidgetClass)
+		{
+			WidgetClass = URoguelikeRunResultWidget::StaticClass();
+		}
+		RunResultWidget = CreateWidget<URoguelikeRunResultWidget>(PlayerController, WidgetClass);
+	}
+
+	if (!RunResultWidget)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Error, TEXT("Run result HUD creation failed."));
+		return;
+	}
+
+	RunResultWidget->OpenForCurrentRun();
+}
+
+void ARiverOfInkGameMode::HideRunResultHud()
+{
+	if (!RunResultWidget)
+	{
+		return;
+	}
+
+	RunResultWidget->CloseForTransition();
+	RunResultWidget->RemoveFromParent();
+	RunResultWidget = nullptr;
 }
 
 void ARiverOfInkGameMode::HandleRoomStarted()

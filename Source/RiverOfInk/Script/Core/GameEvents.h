@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Core/GlobalStructs.h"
+#include "Player/Skill/PlayerSkillTypes.h"
 
 class AActor;
 class AEnemyBase;
@@ -352,12 +353,38 @@ struct FRewardSelectedEvent
 	/** 本次叠加层数：词条类奖励为实际叠加数，其它类型为 1。 */
 	int32 StackCount = 1;
 
+	/**
+	 * Stable reward payload retained by settlement so result UI can resolve the
+	 * same Build icon as the in-run HUD without parsing localized card text.
+	 */
+	ERoguelikeRewardType RewardType = ERoguelikeRewardType::Modifier;
+	EPlayerSkillID SkillID = EPlayerSkillID::None;
+	ESkillUpgradeType UpgradeType = ESkillUpgradeType::None;
+	EPlayerSkillForm TargetSkillForm = EPlayerSkillForm::Default;
+	ESkillModifierID ModifierID = ESkillModifierID::None;
+	int32 CurrencyAmount = 0;
+	float HealthRestoreAmount = 0.0f;
+
 	FRewardSelectedEvent() = default;
 
 	FRewardSelectedEvent(const FString& InRewardId, const FText& InTitle, int32 InStackCount)
 		: RewardId(InRewardId)
 		, Title(InTitle)
 		, StackCount(InStackCount)
+	{
+	}
+
+	FRewardSelectedEvent(const FString& InRewardId, const FRoguelikeRewardOption& InReward)
+		: RewardId(InRewardId)
+		, Title(InReward.Title)
+		, StackCount(FMath::Max(1, InReward.StackDelta))
+		, RewardType(InReward.RewardType)
+		, SkillID(InReward.SkillID)
+		, UpgradeType(InReward.UpgradeType)
+		, TargetSkillForm(InReward.TargetSkillForm)
+		, ModifierID(InReward.ModifierID)
+		, CurrencyAmount(InReward.CurrencyAmount)
+		, HealthRestoreAmount(InReward.HealthRestoreAmount)
 	{
 	}
 };

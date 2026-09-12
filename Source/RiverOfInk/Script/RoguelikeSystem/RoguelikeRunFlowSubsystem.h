@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "Core/SettlementDataRecorder.h"
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "RoguelikeSystem/RoguelikeRunTypes.h"
@@ -10,6 +11,7 @@
 class ARoguelikeExitTrigger;
 class URoguelikeEconomySubsystem;
 class UWorld;
+struct FPlayerDiedEvent;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogRoguelikeRunFlow, Log, All);
 
@@ -79,6 +81,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Roguelike|Run Flow")
 	bool AdvanceToNextMajorStage();
 
+	/** Development-only PIE helper: finish the active run without traversing the remaining exits. */
+	bool DebugFinalizeRunForPIE(ERoguelikeRunOutcome Outcome);
+
+	/** Development-only PIE helper: adopt a directly opened test map as the active first room. */
+	bool DebugActivateCurrentMapForPIE(UWorld* CurrentWorld);
+
 	/** Called by a map GameMode after its world has begun play. */
 	bool NotifyRoomLoaded(UWorld* LoadedWorld);
 
@@ -93,6 +101,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow")
 	ERoguelikeRunOutcome GetRunOutcome() const { return RunOutcome; }
+
+	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow|Result")
+	bool HasResultSnapshot() const { return ResultSnapshot.bIsValid; }
+
+	const FRoguelikeRunResultSnapshot& GetResultSnapshot() const { return ResultSnapshot; }
 
 	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow")
 	int32 GetCurrentMajorStageIndex() const { return CurrentMajorStageIndex; }
@@ -138,6 +151,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Run Flow|Runtime")
 	ERoguelikeRunOutcome RunOutcome = ERoguelikeRunOutcome::None;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Run Flow|Result")
+	FRoguelikeRunResultSnapshot ResultSnapshot;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Run Flow|Runtime")
 	int32 CurrentMajorStageIndex = INDEX_NONE;
 
@@ -152,6 +168,8 @@ public:
 	FOnRoguelikeRunStateChanged OnRunStateChanged;
 
 private:
+	void HandlePlayerDefeated(const FPlayerDiedEvent& Event);
+	bool FinalizeCurrentRun(ERoguelikeRunOutcome Outcome, ERoguelikeRunTransitionReason Reason);
 	void ConfigureDefaultWhiteboxRoomsIfUnset();
 	void ResetRunProgress();
 	bool BeginNewRun(ERoguelikeRunTransitionReason Reason);
@@ -169,4 +187,6 @@ private:
 	bool CaptureCurrentPlayerRuntimeData();
 
 	FRandomStream RoomRandomStream;
+	FDelegateHandle PlayerDiedDelegateHandle;
+	bool bPlayerDiedSubscribed = false;
 };

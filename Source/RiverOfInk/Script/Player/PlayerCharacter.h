@@ -50,6 +50,9 @@ class RIVEROFINK_API APlayerCharacter : public ACharacter
 public:
 	APlayerCharacter();
 
+	/** Hide or restore only the in-run HUDs owned by this pawn. Result HUDs are managed by GameMode. */
+	void SetGameplayHudVisible(bool bVisible);
+
 	// 当前是否允许移动
 	UFUNCTION(BlueprintPure, Category = "State")
 	bool CanMove() const;

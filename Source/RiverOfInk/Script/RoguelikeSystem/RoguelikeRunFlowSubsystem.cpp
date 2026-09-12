@@ -6,6 +6,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "Core/SettlementDataRecorder.h"
 #include "Player/PlayerCharacter.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
@@ -14,6 +16,14 @@
 #include "UObject/SoftObjectPath.h"
 
 DEFINE_LOG_CATEGORY(LogRoguelikeRunFlow);
+
+namespace
+{
+	bool HasConfiguredTravelMap(const TSoftObjectPtr<UWorld>& MapAsset)
+	{
+		return !MapAsset.ToSoftObjectPath().GetLongPackageName().IsEmpty();
+	}
+}
 
 void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -32,6 +42,13 @@ void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	const int32 Seed = RandomSeed != 0 ? RandomSeed : FMath::Rand();
 	RoomRandomStream.Initialize(Seed);
 
+	PlayerDiedDelegateHandle = FEventBus::Subscribe<FPlayerDiedEvent>(
+		[this](const FPlayerDiedEvent& Event)
+		{
+			HandlePlayerDefeated(Event);
+		});
+	bPlayerDiedSubscribed = PlayerDiedDelegateHandle.IsValid();
+
 	UE_LOG(LogRoguelikeRunFlow, Log,
 		TEXT("Run flow initialized. State=%d Seed=%d."),
 		static_cast<int32>(CurrentRunState), Seed);
@@ -39,11 +56,97 @@ void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection
 
 void URoguelikeRunFlowSubsystem::Deinitialize()
 {
+	if (bPlayerDiedSubscribed)
+	{
+		FEventBus::Unsubscribe<FPlayerDiedEvent>(PlayerDiedDelegateHandle);
+		PlayerDiedDelegateHandle.Reset();
+		bPlayerDiedSubscribed = false;
+	}
+
 	ResetRunProgress();
 	CurrentRunState = ERoguelikeRunState::MainMenu;
 	LastTransitionReason = ERoguelikeRunTransitionReason::None;
 
 	Super::Deinitialize();
+}
+
+void URoguelikeRunFlowSubsystem::HandlePlayerDefeated(const FPlayerDiedEvent& Event)
+{
+	if (CurrentRunState != ERoguelikeRunState::InRoom)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Verbose,
+			TEXT("Player defeat ignored outside an active room. State=%d."),
+			static_cast<int32>(CurrentRunState));
+		return;
+	}
+
+	APlayerCharacter* DefeatedPlayer = Cast<APlayerCharacter>(Event.Player.Get());
+	if (!IsValid(DefeatedPlayer))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Verbose,
+			TEXT("Player defeat ignored because the event does not identify a valid player character."));
+		return;
+	}
+
+	if (APawn* ControlledPawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		if (ControlledPawn != DefeatedPlayer)
+		{
+			UE_LOG(LogRoguelikeRunFlow, Verbose,
+				TEXT("Player defeat ignored for an unpossessed pawn: %s."), *GetNameSafe(DefeatedPlayer));
+			return;
+		}
+	}
+
+	FinalizeCurrentRun(ERoguelikeRunOutcome::Defeat, ERoguelikeRunTransitionReason::PlayerDefeated);
+}
+
+bool URoguelikeRunFlowSubsystem::FinalizeCurrentRun(
+	ERoguelikeRunOutcome Outcome,
+	ERoguelikeRunTransitionReason Reason)
+{
+	if (CurrentRunState == ERoguelikeRunState::Result)
+	{
+		return true;
+	}
+
+	if (CurrentRunState != ERoguelikeRunState::InRoom
+		|| !IsTransitionAllowed(ERoguelikeRunState::Result))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Run finalization rejected. State=%d Outcome=%d Reason=%d."),
+			static_cast<int32>(CurrentRunState),
+			static_cast<int32>(Outcome),
+			static_cast<int32>(Reason));
+		return false;
+	}
+
+	// Result UI only reads the settlement snapshot, but preserve the final live
+	// player state for systems which already consume runtime-data snapshots.
+	if (!CaptureCurrentPlayerRuntimeData())
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Result finalization could not capture player runtime data; continuing with settlement data."));
+	}
+
+	ResultSnapshot = USettlementDataRecorder::CaptureSnapshot();
+	USettlementDataRecorder::FreezeCollection();
+	RunOutcome = Outcome;
+
+	if (!TransitionRunState(ERoguelikeRunState::Result, Reason))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Error,
+			TEXT("Run finalization could not enter Result after snapshot capture."));
+		return false;
+	}
+
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Run finalized. Outcome=%d Kills=%d Damage=%.0f Picks=%d."),
+		static_cast<int32>(RunOutcome),
+		ResultSnapshot.NonPlayerDeathCount,
+		ResultSnapshot.TotalDamageDealtToNonPlayer,
+		ResultSnapshot.RewardPicks.Num());
+	return true;
 }
 
 void URoguelikeRunFlowSubsystem::SetPreparationRoomMap(TSoftObjectPtr<UWorld> InPreparationRoomMap)
@@ -91,6 +194,16 @@ bool URoguelikeRunFlowSubsystem::LoadPreparationRoom()
 	{
 		UE_LOG(LogRoguelikeRunFlow, Warning,
 			TEXT("Preparation-room request rejected while a room is already loading."));
+		return false;
+	}
+
+	// Keep the visible Result and its frozen snapshot intact until the target is
+	// known to be configured. A bad return-map reference must not strand the
+	// player on a cleared page with disabled actions.
+	if (!HasConfiguredTravelMap(PreparationRoomMap))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Error,
+			TEXT("Preparation-room request rejected: the map is not configured."));
 		return false;
 	}
 
@@ -269,16 +382,9 @@ bool URoguelikeRunFlowSubsystem::AdvanceToNextMajorStage()
 	const int32 NextMajorStageIndex = CurrentMajorStageIndex + 1;
 	if (NextMajorStageIndex > LastMajorStageIndex)
 	{
-		if (!CaptureCurrentPlayerRuntimeData())
-		{
-			return false;
-		}
-
-		RunOutcome = ERoguelikeRunOutcome::Victory;
-		return TransitionRunState(
-			ERoguelikeRunState::Result,
-			ERoguelikeRunTransitionReason::RunCompleted
-		);
+		return FinalizeCurrentRun(
+			ERoguelikeRunOutcome::Victory,
+			ERoguelikeRunTransitionReason::RunCompleted);
 	}
 
 	TArray<FRoguelikeRoomDefinition> NextSequence;
@@ -316,6 +422,84 @@ bool URoguelikeRunFlowSubsystem::AdvanceToNextMajorStage()
 		*FirstRoom.RoomId.ToString(),
 		static_cast<int32>(FirstRoom.EncounterTier));
 	return true;
+}
+
+bool URoguelikeRunFlowSubsystem::DebugFinalizeRunForPIE(ERoguelikeRunOutcome Outcome)
+{
+	if (Outcome != ERoguelikeRunOutcome::Victory && Outcome != ERoguelikeRunOutcome::Defeat)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("PIE result helper rejected an invalid outcome %d."),
+			static_cast<int32>(Outcome));
+		return false;
+	}
+
+	const ERoguelikeRunTransitionReason Reason = Outcome == ERoguelikeRunOutcome::Victory
+		? ERoguelikeRunTransitionReason::RunCompleted
+		: ERoguelikeRunTransitionReason::PlayerDefeated;
+	return FinalizeCurrentRun(Outcome, Reason);
+}
+
+bool URoguelikeRunFlowSubsystem::DebugActivateCurrentMapForPIE(UWorld* CurrentWorld)
+{
+	if (CurrentRunState == ERoguelikeRunState::InRoom)
+	{
+		return true;
+	}
+
+	if (CurrentRunState != ERoguelikeRunState::MainMenu || !IsValid(CurrentWorld))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Direct-PIE room activation rejected. State=%d World=%s."),
+			static_cast<int32>(CurrentRunState),
+			*GetNameSafe(CurrentWorld));
+		return false;
+	}
+
+	TArray<FRoguelikeRoomDefinition> FirstMajorStageSequence;
+	if (!BuildRoomSequence(FirstMajorStageIndex, FirstMajorStageSequence))
+	{
+		return false;
+	}
+
+	const UPackage* WorldPackage = CurrentWorld->GetOutermost();
+	const FString CurrentPackageName = WorldPackage
+		? UWorld::RemovePIEPrefix(WorldPackage->GetName())
+		: FString();
+	const int32 CurrentRoomSequenceIndex = FirstMajorStageSequence.IndexOfByPredicate(
+		[&CurrentPackageName](const FRoguelikeRoomDefinition& Room)
+		{
+			return Room.RoomMap.ToSoftObjectPath().GetLongPackageName().Equals(
+				CurrentPackageName,
+				ESearchCase::CaseSensitive);
+		});
+	if (CurrentRoomSequenceIndex == INDEX_NONE)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Direct-PIE room activation rejected: World=%s is not in MajorStage=%d."),
+			*CurrentPackageName,
+			FirstMajorStageIndex);
+		return false;
+	}
+
+	CurrentMajorStageIndex = FirstMajorStageIndex;
+	CurrentRoomIndex = CurrentRoomSequenceIndex;
+	ActiveRoomSequence = MoveTemp(FirstMajorStageSequence);
+	if (!TransitionRunState(ERoguelikeRunState::LoadingRoom, ERoguelikeRunTransitionReason::StartRun))
+	{
+		return false;
+	}
+
+	const bool bActivated = TransitionRunState(
+		ERoguelikeRunState::InRoom,
+		ERoguelikeRunTransitionReason::RoomLoaded);
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Direct-PIE map activation %s. World=%s MajorStage=%d Room=%d."),
+		bActivated ? TEXT("succeeded") : TEXT("failed"),
+		*CurrentPackageName,
+		CurrentMajorStageIndex,
+		CurrentRoomIndex);
+	return bActivated;
 }
 
 bool URoguelikeRunFlowSubsystem::NotifyRoomLoaded(UWorld* LoadedWorld)
@@ -443,10 +627,27 @@ void URoguelikeRunFlowSubsystem::ResetRunProgress()
 	CurrentRoomIndex = INDEX_NONE;
 	ActiveRoomSequence.Reset();
 	RunOutcome = ERoguelikeRunOutcome::None;
+	ResultSnapshot = FRoguelikeRunResultSnapshot();
 }
 
 bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reason)
 {
+	// Build and validate the destination before committing any reset. This is
+	// especially important when RestartRun is called from Result: a rejected
+	// configuration leaves its snapshot and buttons available for recovery.
+	TArray<FRoguelikeRoomDefinition> FirstMajorStageSequence;
+	if (!BuildRoomSequence(FirstMajorStageIndex, FirstMajorStageSequence))
+	{
+		return false;
+	}
+	const FRoguelikeRoomDefinition& FirstRoom = FirstMajorStageSequence[0];
+	if (!HasConfiguredTravelMap(FirstRoom.RoomMap))
+	{
+		UE_LOG(LogRoguelikeRunFlow, Error,
+			TEXT("New-run request rejected: the first room map is not configured."));
+		return false;
+	}
+
 	if (!ResetPlayerRuntimeData())
 	{
 		return false;
@@ -464,18 +665,12 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 
 	ResetRunProgress();
 
-	TArray<FRoguelikeRoomDefinition> FirstMajorStageSequence;
-	if (!BuildRoomSequence(FirstMajorStageIndex, FirstMajorStageSequence))
-	{
-		return false;
-	}
-
 	CurrentMajorStageIndex = FirstMajorStageIndex;
 	CurrentRoomIndex = 0;
 	ActiveRoomSequence = MoveTemp(FirstMajorStageSequence);
 
-	const FRoguelikeRoomDefinition& FirstRoom = ActiveRoomSequence[CurrentRoomIndex];
-	if (!RequestMapTravel(FirstRoom.RoomMap, Reason, TEXT("new run first room"), false))
+	const FRoguelikeRoomDefinition& ActiveFirstRoom = ActiveRoomSequence[CurrentRoomIndex];
+	if (!RequestMapTravel(ActiveFirstRoom.RoomMap, Reason, TEXT("new run first room"), false))
 	{
 		ResetRunProgress();
 		return false;
@@ -485,8 +680,8 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 		TEXT("New run started. MajorStage=%d RoomIndex=%d RoomId=%s EncounterTier=%d."),
 		CurrentMajorStageIndex,
 		CurrentRoomIndex,
-		*FirstRoom.RoomId.ToString(),
-		static_cast<int32>(FirstRoom.EncounterTier));
+		*ActiveFirstRoom.RoomId.ToString(),
+		static_cast<int32>(ActiveFirstRoom.EncounterTier));
 	return true;
 }
 

@@ -9,6 +9,7 @@
 #include "Player/ProjectileTargetingComponent.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
+#include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 #include "RoguelikeSystem/RoguelikeShopManager.h"
 #include "RiverOfInk.h"
 
@@ -321,4 +322,56 @@ void ARiverOfInkPlayerController::DebugPrepareTwoStageArc(float ForwardDistance)
 		TEXT("DebugPrepareTwoStageArc moved %s to player front: Distance=%.1f."),
 		*GetNameSafe(NearestEnemy),
 		Distance);
+}
+
+void ARiverOfInkPlayerController::DebugFinishRunVictory()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeRunFlowSubsystem* RunFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>()
+		: nullptr;
+	if (!RunFlow)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugFinishRunVictory failed because the run-flow subsystem is unavailable."));
+		return;
+	}
+
+	if (!RunFlow->DebugActivateCurrentMapForPIE(GetWorld()))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugFinishRunVictory requires an active room or a configured direct-PIE test map."));
+		return;
+	}
+
+	const bool bFinalized = RunFlow->DebugFinalizeRunForPIE(ERoguelikeRunOutcome::Victory);
+	UE_LOG(LogRoguelike, Log,
+		TEXT("DebugFinishRunVictory %s."),
+		bFinalized ? TEXT("opened the victory Result HUD") : TEXT("was rejected outside an active room"));
+}
+
+void ARiverOfInkPlayerController::DebugTriggerPlayerDefeat()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	URoguelikeRunFlowSubsystem* RunFlow = GameInstance
+		? GameInstance->GetSubsystem<URoguelikeRunFlowSubsystem>()
+		: nullptr;
+	if (!RunFlow || !RunFlow->DebugActivateCurrentMapForPIE(GetWorld()))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugTriggerPlayerDefeat requires an active room or a configured direct-PIE test map."));
+		return;
+	}
+
+	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("DebugTriggerPlayerDefeat requires a possessed PlayerCharacter."));
+		return;
+	}
+
+	PlayerCharacter->TestDie();
+	UE_LOG(LogRoguelike, Log,
+		TEXT("DebugTriggerPlayerDefeat invoked the normal player-death path."));
 }

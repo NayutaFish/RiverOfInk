@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Delegates/Delegate.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "Player/Skill/PlayerSkillTypes.h"
 #include "SettlementDataRecorder.generated.h"
 
 struct FNonPlayerDiedEvent;
@@ -33,6 +34,56 @@ struct FSettlementRewardPick
 	/** 本次叠加层数 */
 	UPROPERTY(BlueprintReadOnly, Category = "Settlement")
 	int32 StackCount = 1;
+
+	/** Stable identifiers for resolving the matching Build presentation. */
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	ERoguelikeRewardType RewardType = ERoguelikeRewardType::Modifier;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	EPlayerSkillID SkillID = EPlayerSkillID::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	ESkillUpgradeType UpgradeType = ESkillUpgradeType::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	EPlayerSkillForm TargetSkillForm = EPlayerSkillForm::Default;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	ESkillModifierID ModifierID = ESkillModifierID::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	int32 CurrencyAmount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Build")
+	float HealthRestoreAmount = 0.0f;
+};
+
+/** Immutable copy of one completed run, consumed by the Result HUD. */
+USTRUCT(BlueprintType)
+struct FRoguelikeRunResultSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	bool bIsValid = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	int32 NonPlayerDeathCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	int32 EliteEnemyDeathCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	float TotalDamageDealtToNonPlayer = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	int32 TotalShopCurrencyGained = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	int32 ShopPurchaseCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Settlement|Result")
+	TArray<FSettlementRewardPick> RewardPicks;
 };
 
 /**
@@ -73,6 +124,12 @@ public:
 	/** 清空所有累计数据（保留订阅）。 */
 	UFUNCTION(BlueprintCallable, Category = "Settlement")
 	static void Reset();
+
+	/** Stop accepting late combat/economy events after a run result is fixed. */
+	static void FreezeCollection();
+
+	/** Returns a value copy that remains stable even when a new run begins. */
+	static FRoguelikeRunResultSnapshot CaptureSnapshot();
 
 	/** 是否已完成事件订阅。 */
 	UFUNCTION(BlueprintPure, Category = "Settlement")
@@ -153,6 +210,9 @@ private:
 
 	/** 屏幕调试开关 */
 	static bool bScreenDebugEnabled;
+
+	/** Reset enables collection; Result freezes it to exclude late events. */
+	static bool bCollectionFrozen;
 
 	// ── 订阅状态 ──
 

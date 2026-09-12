@@ -529,10 +529,15 @@ void UCombatBuildHudWidget::ApplyViewportLayout()
 	// must be applied after the position call.
 	const float RightMargin = FMath::Clamp(ViewportMargin.Right, 0.0f, MaximumViewportMargin);
 	const float BottomMargin = FMath::Clamp(ViewportMargin.Bottom, 0.0f, MaximumViewportMargin);
+	const float HudScale = FMath::Clamp(OverallHudScale, 0.50f, 1.00f);
 	SetDesiredSizeInViewport(FVector2D(PanelWidth, PanelHeight));
 	SetPositionInViewport(FVector2D(-RightMargin, -BottomMargin));
 	SetAnchorsInViewport(FAnchors(1.0f, 1.0f));
 	SetAlignmentInViewport(FVector2D(1.0f, 1.0f));
+	// Pivot around the same bottom-right anchor so scaling never moves the HUD
+	// away from its viewport-safe corner.
+	SetRenderTransformPivot(FVector2D(1.0f, 1.0f));
+	SetRenderScale(FVector2D(HudScale, HudScale));
 }
 
 void UCombatBuildHudWidget::BindSkillEvents()
