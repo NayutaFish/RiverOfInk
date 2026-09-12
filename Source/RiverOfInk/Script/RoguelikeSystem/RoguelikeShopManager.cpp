@@ -498,9 +498,11 @@ void ARoguelikeShopManager::AddDefaultOffersIfUnset()
 		ShopItems.Add(MoveTemp(TemporaryBoost));
 	};
 
-	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 25 生命"), 5, 25.0f);
-	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 50 生命"), 10, 50.0f);
-	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 100 生命"), 18, 100.0f);
+	// 回血量（最后一个参数 = Item.EffectValue，走 SetCurrentHealth(Current + EffectValue) 并夹到 MaxHealth）。
+	// 玩家满血 1000：150 / 300 / 600 ≈ 15% / 30% / 60%（价格 5 / 10 / 18 纯墨，越高档每点纯墨越划算）。
+	AddRestoreOffer(TEXT("shop_restore_small"), TEXT("快速冲洗"), TEXT("恢复 150 生命"), 5, 150.0f);
+	AddRestoreOffer(TEXT("shop_restore_health"), TEXT("纯净洗涤"), TEXT("恢复 300 生命"), 10, 300.0f);
+	AddRestoreOffer(TEXT("shop_restore_full"), TEXT("深层净化"), TEXT("恢复 600 生命"), 18, 600.0f);
 	AddTemporaryOffer(
 		TEXT("shop_temp_walk_speed"),
 		TEXT("疾流"),
