@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -387,7 +387,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
 	bool bCanAttack1 = true;
 
-	/** Attack1 冷却：设置 bCanAttack1=false，固定 0.3 秒后恢复 true */
+	/**
+	 * 普攻冷却时长（秒）：三连收尾、以及普攻被冲刺/受击打断后会进入这段冷却。
+	 * 配 0 表示不加冷却（冷却期间左键也不会被缓存，见 PlayerState_Idle/Move 的 OnLmb）。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State|Combat", meta = (ClampMin = "0.0", Units = "s"))
+	float Attack1CooldownTime = 0.05f;
+
+	/** Attack1 冷却：设置 bCanAttack1=false，Attack1CooldownTime 秒后恢复 true */
 	UFUNCTION(BlueprintCallable, Category = "State")
 	void StartAttack1Cooldown();
 

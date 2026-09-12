@@ -1300,12 +1300,20 @@ void APlayerCharacter::StartDashCooldown()
 
 void APlayerCharacter::StartAttack1Cooldown()
 {
+	// 冷却配 0 = 不加冷却：这里必须直接恢复，因为 SetTimer 会丢弃 rate <= 0 的计时器，
+	// 否则 bCanAttack1 会永远停在 false（普攻再也按不出来）。
+	if (Attack1CooldownTime <= KINDA_SMALL_NUMBER)
+	{
+		bCanAttack1 = true;
+		return;
+	}
+
 	bCanAttack1 = false;
 	FTimerHandle Handle;
 	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		bCanAttack1 = true;
-	}), 0.3f, false);
+	}), FMath::Max(Attack1CooldownTime, KINDA_SMALL_NUMBER), false);
 }
 
 void APlayerCharacter::StartAttack2Cooldown()
