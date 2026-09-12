@@ -45,7 +45,7 @@ AInkOverlay::AInkOverlay()
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> InkMaterialFinder(
-		TEXT("/Game/Presentation/StageIntro/M_InkPollution_Opening_v6.M_InkPollution_Opening_v6"));
+		TEXT("/Game/Presentation/StageIntro/M_InkPollution_Opening_v8.M_InkPollution_Opening_v8"));
 	if (InkMaterialFinder.Succeeded())
 	{
 		OverlayPlane->SetMaterial(0, InkMaterialFinder.Object);
@@ -80,7 +80,7 @@ void AInkOverlay::CreateDynamicMaterial()
 	// placeholder. The simple material remains a compatibility fallback.
 	UMaterialInterface* SourceMaterial = LoadObject<UMaterialInterface>(
 		nullptr,
-		TEXT("/Game/Presentation/StageIntro/M_InkPollution_Opening_v6.M_InkPollution_Opening_v6"));
+		TEXT("/Game/Presentation/StageIntro/M_InkPollution_Opening_v8.M_InkPollution_Opening_v8"));
 	if (!IsValid(SourceMaterial))
 	{
 		SourceMaterial = LoadObject<UMaterialInterface>(
@@ -164,16 +164,22 @@ void AInkOverlay::ApplyOpeningCollectionParameters()
 	}
 
 	const float Progress = FMath::Clamp(InkProgress, 0.0f, 1.0f);
-	const float SlowFastSlow = InkSmoothStep(0.0f, 1.0f, Progress);
+	// Preserve a small source bloom, then give the visible front most of the
+	// runtime. Keep a short, measurable finishing advance instead of saturating
+	// the distance field before the blackout phase starts.
+	const float EarlyGrowth = 0.07f * InkSmoothStep(0.0f, 0.12f, Progress);
+	const float SustainedGrowth = 0.83f * FMath::Clamp((Progress - 0.10f) / 0.78f, 0.0f, 1.0f);
+	const float TailGrowth = 0.10f * InkSmoothStep(0.78f, 0.96f, Progress);
+	const float InkGrowthProgress = FMath::Clamp(EarlyGrowth + SustainedGrowth + TailGrowth, 0.0f, 1.0f);
 	const float MiddleFlow = FMath::Sin(PI * Progress);
 	const float WetEnvelope = InkSmoothStep(0.05f, 0.28f, Progress)
-		* (1.0f - 0.18f * InkSmoothStep(0.86f, 1.0f, Progress));
+		* (1.0f - 0.06f * InkSmoothStep(0.92f, 1.0f, Progress));
 	const float SplatterWindow = InkSmoothStep(0.14f, 0.27f, Progress)
-		* (1.0f - InkSmoothStep(0.58f, 0.72f, Progress));
+		* (1.0f - InkSmoothStep(0.70f, 0.88f, Progress));
 
 	CollectionInstance->SetScalarParameterValue(
 		TEXT("InkGrowth"),
-		FMath::Clamp(SlowFastSlow * FMath::Max(0.25f, InkScale / 0.52f), 0.0f, 1.0f));
+		InkGrowthProgress);
 	CollectionInstance->SetScalarParameterValue(
 		TEXT("InkOpacity"), InkSmoothStep(0.005f, 0.045f, Progress));
 	CollectionInstance->SetScalarParameterValue(
@@ -182,17 +188,19 @@ void AInkOverlay::ApplyOpeningCollectionParameters()
 	CollectionInstance->SetScalarParameterValue(
 		TEXT("InkWetness"), FMath::Clamp(InkWetness * WetEnvelope, 0.0f, 1.0f));
 	CollectionInstance->SetScalarParameterValue(
-		TEXT("InkFlowSpeed"), FMath::Clamp(InkFlowSpeed * (0.14f + MiddleFlow * 0.86f), 0.0f, 2.0f));
+		TEXT("InkFlowSpeed"), FMath::Clamp(InkFlowSpeed * (0.28f + MiddleFlow * 0.72f), 0.0f, 2.0f));
 	CollectionInstance->SetScalarParameterValue(
 		TEXT("InkCoreDensity"), InkCoreDensity * InkSmoothStep(0.015f, 0.24f, Progress));
 	CollectionInstance->SetScalarParameterValue(
 		TEXT("InkSplatterAmount"), InkSplatterAmount * SplatterWindow);
-	// The blackout is deliberately two-stage: a long, visible lead-in avoids
-// a final-frame pop, then a short settle reaches pure black before travel.
-const float BlackoutLeadIn = 0.84f * InkSmoothStep(0.66f, 0.89f, Progress);
-const float BlackoutSettle = 0.16f * InkSmoothStep(0.89f, 0.98f, Progress);
-CollectionInstance->SetScalarParameterValue(
-    TEXT("InkBlackout"), InkBlackout * FMath::Clamp(BlackoutLeadIn + BlackoutSettle, 0.0f, 1.0f));
+	// Blackout is a continuous settle over the final half of the effect. The
+	// former curve reserved almost half of its coverage for the final 13.5%,
+	// which presented as a static hold followed by a sudden screen fill.
+	const float BlackoutLeadIn = 0.30f * InkSmoothStep(0.56f, 0.78f, Progress);
+	const float BlackoutSpread = 0.50f * InkSmoothStep(0.68f, 0.92f, Progress);
+	const float BlackoutSettle = 0.20f * InkSmoothStep(0.88f, 0.995f, Progress);
+	CollectionInstance->SetScalarParameterValue(
+		TEXT("InkBlackout"), InkBlackout * FMath::Clamp(BlackoutLeadIn + BlackoutSpread + BlackoutSettle, 0.0f, 1.0f));
 	CollectionInstance->SetVectorParameterValue(
 		TEXT("InkOrigin"), FLinearColor(InkCenter.X, InkCenter.Y, 0.0f, 0.0f));
 }

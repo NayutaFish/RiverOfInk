@@ -23,6 +23,7 @@ enum class EStage01IntroState : uint8
 	Fading,
 	Traveling,
 	Failed,
+	HudFading,
 	PreviewComplete
 };
 
@@ -159,6 +160,8 @@ private:
 	void SetIntroCameraOwnership(bool bOwnCamera);
 	void SetMenuCinematicState(bool bCinematic);
 	void RestoreMainMenuAfterFailure();
+	void BeginMainMenuHudFade();
+	void UpdateMainMenuHudFade(float DeltaTime);
 	void ClearPreviewWidgets();
 	void UpdateInkEffect(float DeltaTime);
 	void StartInkEffect();
@@ -183,6 +186,7 @@ private:
 	FTimerHandle FadeTimer;
 	FTimerHandle AutoPlayTimer;
 	FTransform InitialCameraTransform;
+	float HudFadeElapsed = 0.0f;
 	float IntroElapsed = 0.0f;
 	float InkEffectElapsed = 0.0f;
 	int32 MainMenuBindAttempts = 0;

@@ -234,13 +234,20 @@ void AStage01IntroDirector::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	MaintainIntroCameraOwnership();
+	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
+
+	// The HUD owns this transition until its event-driven fade has completed.
+	// Only then can the ink timeline acquire the opening state.
+	if (IntroState == EStage01IntroState::HudFading)
+	{
+		UpdateMainMenuHudFade(SafeDeltaTime);
+		return;
+	}
 
 	if (!bIntroPlaying)
 	{
 		return;
 	}
-
-	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
 	if (IntroState == EStage01IntroState::Playing)
 	{
 		IntroElapsed += SafeDeltaTime;
@@ -436,6 +443,7 @@ bool AStage01IntroDirector::PlayIntro()
 
 	bIntroPlaying = true;
 	bTravelRequested = false;
+	HudFadeElapsed = 0.0f;
 	IntroElapsed = 0.0f;
 	InkEffectElapsed = 0.0f;
 	bInkEffectActive = false;

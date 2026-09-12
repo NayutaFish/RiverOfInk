@@ -8,7 +8,7 @@ import unreal
 
 ASSET_DIR = "/Game/Presentation/StageIntro"
 MPC_PATH = ASSET_DIR + "/MPC_InkOpening"
-MATERIAL_PATH = ASSET_DIR + "/M_InkPollution_Opening_v6"
+MATERIAL_PATH = ASSET_DIR + "/M_InkPollution_Opening_v8"
 
 SCALAR_DEFAULTS = (
     ("InkGrowth", 0.0),
@@ -29,8 +29,13 @@ def fail(message):
     raise RuntimeError("[InkOpeningAssets] " + message)
 
 
+def load_asset(path):
+    if not unreal.EditorAssetLibrary.does_asset_exist(path):
+        return None
+    return unreal.EditorAssetLibrary.load_asset(path)
+
 def get_or_create(path, asset_name, asset_class, factory_class):
-    asset = unreal.EditorAssetLibrary.load_asset(path)
+    asset = load_asset(path)
     if asset:
         return asset
 
@@ -157,7 +162,9 @@ float flowTime = Time * max(InkFlowSpeed, 0.02);
 
 // Multi-core signed distance field. The delayed side cores make the
 // contamination gain weight asymmetrically instead of expanding as one disc.
-float mainRadius = lerp(0.016, 1.10, saturate(InkGrowth));
+// Keep the contour alive until the end of the timeline. A radius of 1.10
+// covered every UV corner too early, leaving a visible dead zone before black.
+float mainRadius = lerp(0.016, 0.86, saturate(InkGrowth));
 float mainField = length(p * float2(0.89, 1.05)) - mainRadius;
 float sideGateA = smoothstep(0.16, 0.34, InkGrowth);
 float sideGateB = smoothstep(0.31, 0.56, InkGrowth);
@@ -209,6 +216,23 @@ float lobeC = smoothstep(0.20, 0.58, dot(p, flowDirC))
     * (0.016 + n1 * 0.024);
 field -= lobeA + lobeB + lobeC;
 
+// The lower-left page corner is furthest from the authored source. Give the
+// spreading ink a delayed, irregular return flow toward it, instead of leaving
+// that corner for a uniform blackout fill at the very end.
+float2 lowerLeftDir = normalize(float2(-0.78, -0.62));
+float lowerLeftT = smoothstep(0.38, 0.94, InkGrowth);
+float lowerLeftLength = lerp(0.035, 0.84, lowerLeftT);
+float lowerLeftRadius = lerp(0.018, 0.145, lowerLeftT);
+float2 lowerLeftA = lowerLeftDir * 0.015;
+float2 lowerLeftB = lowerLeftDir * lowerLeftLength;
+float2 lowerLeftSegment = lowerLeftB - lowerLeftA;
+float lowerLeftSegmentLengthSq = max(dot(lowerLeftSegment, lowerLeftSegment), 0.0001);
+float lowerLeftAlong = saturate(dot(p - lowerLeftA, lowerLeftSegment) / lowerLeftSegmentLengthSq);
+float2 lowerLeftClosest = lowerLeftA + lowerLeftSegment * lowerLeftAlong;
+float lowerLeftField = length(p - lowerLeftClosest) - lowerLeftRadius;
+float lowerLeftGate = smoothstep(0.42, 0.52, InkGrowth);
+field = min(field, lerp(4.0, lowerLeftField, lowerLeftGate));
+
 float edge = max(0.006, InkEdgeWidth);
 float body = 1.0 - smoothstep(-edge * 0.22, edge * 1.05, field);
 float denseCore = 1.0 - smoothstep(-mainRadius * 0.53, -mainRadius * 0.05, field);
@@ -237,7 +261,15 @@ float pooling = saturate(0.43 + (n0 - 0.5) * 0.50 + (n1 - 0.5) * 0.18);
 float coreDensity = saturate(denseCore * (0.88 + pooling * 0.12) * (0.74 + InkCoreDensity * 0.26));
 float coreAlpha = denseCore * InkOpacity;
 float bodyAlpha = body * InkOpacity * lerp(0.982, 0.998, denseCore);
-float alpha = saturate(max(coreAlpha, bodyAlpha) + bleed * InkOpacity * 0.12 + fixedDots * InkOpacity * 0.98 + InkBlackout);
+float baseAlpha = saturate(max(coreAlpha, bodyAlpha) + bleed * InkOpacity * 0.12 + fixedDots * InkOpacity * 0.98);
+// Blackout fills the remaining paper in a broad, continuous tail instead of
+// waiting to reveal itself as one last alpha jump around the outer edge.
+float blackout = saturate(InkBlackout);
+// Keep the uncovered paper in motion as the close approaches, but leave the
+// spatial completion to the directional return flow above rather than hiding a
+// large unpainted corner in the last few frames.
+float blackoutFill = blackout * (0.05 + (1.0 - body) * 0.80 + bleed * 0.15);
+float alpha = saturate(baseAlpha + blackoutFill);
 
 // Use a restrained warm-neutral charcoal. The emissive unlit layer keeps this
 // value stable under the cool key and sky light used by the preview scene.
@@ -246,6 +278,11 @@ float3 wetTint = float3(0.0190, 0.0172, 0.0155) * (0.80 + pooling * 0.20);
 float3 color = lerp(coreTint, wetTint, wetRing * (0.22 + InkWetness * 0.38));
 color += wetTint * bleed * 0.12;
 color = lerp(color, float3(0.0014, 0.0012, 0.0010), fixedDots);
+// Alpha alone cannot visibly change an already opaque ink body. Darken the
+// unlit output through the same curve so the final approach to black has
+// measurable movement in every rendered frame.
+float blackoutWeight = blackout * (0.22 + 0.78 * saturate(body + bleed));
+color = lerp(color, float3(0.00006, 0.00005, 0.00004), blackoutWeight);
 
 InkOpacityOut = alpha;
 InkRoughnessOut = saturate(0.83 - wetRing * InkWetness * 0.08 - denseCore * 0.02);
@@ -275,7 +312,7 @@ def build_assets():
     # The collection is shared by every material revision. Do not save it again
     # when a later version is generated, because an Editor session may be
     # reading the MPC while the new material itself remains safe to create.
-    collection = unreal.EditorAssetLibrary.load_asset(MPC_PATH)
+    collection = load_asset(MPC_PATH)
     if not collection:
         collection = get_or_create(
             MPC_PATH,
@@ -285,13 +322,15 @@ def build_assets():
         )
         set_collection_parameters(collection)
 
+    material_exists = unreal.EditorAssetLibrary.does_asset_exist(MATERIAL_PATH)
     material = get_or_create(
         MATERIAL_PATH,
-        "M_InkPollution_Opening_v6",
+        "M_InkPollution_Opening_v8",
         unreal.Material,
         unreal.MaterialFactoryNew,
     )
-    create_material_graph(material, collection)
+    if not material_exists:
+        create_material_graph(material, collection)
 
 
 build_assets()
