@@ -205,6 +205,18 @@ void ARiverOfInkGameMode::HandleRoomCleared()
 				Economy ? TEXT("valid") : TEXT("null"),
 				IsValid(BoundRoomManager) ? TEXT("valid") : TEXT("null"));
 		}
+
+		// 顺序关卡列表的最后一个关卡：清场瞬间即通关 —— 广播 FGameClearedEvent 并进入 Result，
+		// 不再弹这一关的清场奖励（已经打到终点了，再选卡没有意义）。
+		if (RunFlow && RunFlow->IsCurrentRoomFinalLevel())
+		{
+			UE_LOG(LogRoguelikeRunFlow, Log,
+				TEXT("Final level cleared; completing the run instead of showing the room reward."));
+			if (RunFlow->CompleteRunFromFinalRoomClear())
+			{
+				return;
+			}
+		}
 	}
 
 	TransitionRoomState(ERoguelikeRoomState::Reward);

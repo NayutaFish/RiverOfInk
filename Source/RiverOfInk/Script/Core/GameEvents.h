@@ -361,3 +361,29 @@ struct FRewardSelectedEvent
 	{
 	}
 };
+
+// ====================
+// 通关事件
+// ====================
+
+/**
+ * 本局通关时广播一次（顺序关卡列表走到终点、最后一个关卡清场）。
+ *
+ * 订阅方（结算界面、成就、音效等）只看这个事件，不关心关卡是怎么排的。
+ */
+struct FGameClearedEvent
+{
+	/** 通关时一共走过了几个关卡（含最后一个）。 */
+	int32 ClearedLevelCount = 0;
+
+	/** 最后一个关卡的资源路径（长包名），便于日志与结算展示。 */
+	FString FinalLevelPackageName;
+
+	FGameClearedEvent() = default;
+
+	FGameClearedEvent(int32 InClearedLevelCount, const FString& InFinalLevelPackageName)
+		: ClearedLevelCount(InClearedLevelCount)
+		, FinalLevelPackageName(InFinalLevelPackageName)
+	{
+	}
+};

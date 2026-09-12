@@ -9,6 +9,7 @@
 
 class ARoguelikeExitTrigger;
 class URoguelikeEconomySubsystem;
+class ULevelDataAsset;
 class UWorld;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogRoguelikeRunFlow, Log, All);
@@ -85,6 +86,17 @@ public:
 	/** Return whether a world matches the configured preparation-room map. */
 	bool IsPreparationRoomMap(const UWorld* World) const;
 
+	/** 当前房间是不是本局的最后一个关卡（顺序关卡列表的终点 / 最后一大关的最后一件）。 */
+	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow")
+	bool IsCurrentRoomFinalLevel() const;
+
+	/**
+	 * 通关：置 Victory、广播 FGameClearedEvent、切到 Result（幂等）。
+	 * 顺序关卡模式由"终点关卡清场"调用；终点是商店（没有清场）时由它的出口调用。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Roguelike|Run Flow")
+	bool CompleteRunFromFinalRoomClear();
+
 	UFUNCTION(BlueprintPure, Category = "Roguelike|Run Flow")
 	ERoguelikeRunState GetRunState() const { return CurrentRunState; }
 
@@ -147,12 +159,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Run Flow|Runtime")
 	TArray<FRoguelikeRoomDefinition> ActiveRoomSequence;
 
+	/** 本局是否在使用关卡数据资产的顺序关卡列表（否则为白盒大关 / 房间池模式）。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Run Flow|Runtime")
+	bool bOrderedLevelListMode = false;
+
 	/** Broadcast after state storage is updated. Subscribers observe; they do not own transitions. */
 	UPROPERTY(BlueprintAssignable, Category = "Roguelike|Run Flow|Events")
 	FOnRoguelikeRunStateChanged OnRunStateChanged;
 
 private:
 	void ConfigureDefaultWhiteboxRoomsIfUnset();
+
+	/** 按固定资产路径解析关卡数据资产（幂等，只会在第一次或失败后重试）。 */
+	void ResolveLevelDataAsset();
+
+	/** 用关卡数据资产的顺序列表填 OutSequence；没有可用数据时返回 false。 */
+	bool BuildRoomSequenceFromLevelData(TArray<FRoguelikeRoomDefinition>& OutSequence);
+
 	void ResetRunProgress();
 	bool BeginNewRun(ERoguelikeRunTransitionReason Reason);
 	bool BuildRoomSequence(int32 MajorStageIndex, TArray<FRoguelikeRoomDefinition>& OutSequence);
@@ -169,4 +192,8 @@ private:
 	bool CaptureCurrentPlayerRuntimeData();
 
 	FRandomStream RoomRandomStream;
+
+	/** 关卡数据资产（顺序关卡列表）；为空表示走白盒兜底配置。 */
+	UPROPERTY(Transient)
+	TObjectPtr<ULevelDataAsset> RunLevelData;
 };

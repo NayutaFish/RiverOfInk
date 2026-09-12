@@ -2,18 +2,31 @@
 
 #include "RoguelikeSystem/RoguelikeRunFlowSubsystem.h"
 
+#include "Core/EventBus.h"
+#include "Core/GameEvents.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Core/SettlementDataRecorder.h"
 #include "Player/PlayerCharacter.h"
+#include "RoguelikeSystem/LevelDataAsset.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 #include "RoguelikeSystem/RoguelikeRuntimeDataSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 
 DEFINE_LOG_CATEGORY(LogRoguelikeRunFlow);
+
+namespace
+{
+	/**
+	 * 关卡数据资产的固定资产路径：在内容浏览器里建一个 ULevelDataAsset，
+	 * 放到 Content/DataAsset/LevelData/ 下并命名为 DA_LevelData，把顺序关卡拖进它的 Levels 数组即可。
+	 * 资产不存在（或列表为空）时退回白盒大关 / 房间池配置。
+	 */
+	const TCHAR* RunLevelDataAssetPath = TEXT("/Game/DataAsset/LevelData/DA_LevelData.DA_LevelData");
+}
 
 void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -24,6 +37,7 @@ void URoguelikeRunFlowSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	CurrentRunState = ERoguelikeRunState::MainMenu;
 	LastTransitionReason = ERoguelikeRunTransitionReason::None;
 	ConfigureDefaultWhiteboxRoomsIfUnset();
+	ResolveLevelDataAsset();
 
 	// 新的游戏会话（含 PIE 重进）：清掉上一局残留的静态结算数据，
 	// 否则结算/统计数值会跨会话继续累加。
@@ -266,19 +280,18 @@ bool URoguelikeRunFlowSubsystem::AdvanceToNextMajorStage()
 		return false;
 	}
 
+	// 顺序关卡列表模式没有"大关"概念：走到最后一个关卡之后就算通关。
+	// 终点的战斗关卡通常在清场时就已通关（见 CompleteRunFromFinalRoomClear 的调用方）；
+	// 这里兜住"终点是商店房间（没有清场）"的情况：走完它的出口即通关。
+	if (bOrderedLevelListMode)
+	{
+		return CompleteRunFromFinalRoomClear();
+	}
+
 	const int32 NextMajorStageIndex = CurrentMajorStageIndex + 1;
 	if (NextMajorStageIndex > LastMajorStageIndex)
 	{
-		if (!CaptureCurrentPlayerRuntimeData())
-		{
-			return false;
-		}
-
-		RunOutcome = ERoguelikeRunOutcome::Victory;
-		return TransitionRunState(
-			ERoguelikeRunState::Result,
-			ERoguelikeRunTransitionReason::RunCompleted
-		);
+		return CompleteRunFromFinalRoomClear();
 	}
 
 	TArray<FRoguelikeRoomDefinition> NextSequence;
@@ -376,6 +389,64 @@ FRoguelikeRoomDefinition URoguelikeRunFlowSubsystem::GetCurrentRoomDefinition() 
 		: FRoguelikeRoomDefinition();
 }
 
+bool URoguelikeRunFlowSubsystem::IsCurrentRoomFinalLevel() const
+{
+	if (!ActiveRoomSequence.IsValidIndex(CurrentRoomIndex))
+	{
+		return false;
+	}
+
+	if (bOrderedLevelListMode)
+	{
+		return CurrentRoomIndex >= ActiveRoomSequence.Num() - 1;
+	}
+
+	// 白盒大关模式：最后一个大关的最后一个房间。
+	return CurrentMajorStageIndex >= LastMajorStageIndex && !HasNextRoom();
+}
+
+bool URoguelikeRunFlowSubsystem::CompleteRunFromFinalRoomClear()
+{
+	if (CurrentRunState == ERoguelikeRunState::Result)
+	{
+		// 已经通关过（例如清场结算与出口推进都触发了），保持幂等。
+		return true;
+	}
+
+	if (CurrentRunState != ERoguelikeRunState::InRoom)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Cannot complete the run in state %d; InRoom is required."),
+			static_cast<int32>(CurrentRunState));
+		return false;
+	}
+
+	if (!CaptureCurrentPlayerRuntimeData())
+	{
+		return false;
+	}
+
+	RunOutcome = ERoguelikeRunOutcome::Victory;
+
+	const FRoguelikeRoomDefinition FinalRoom = GetCurrentRoomDefinition();
+	const FString FinalPackageName = FinalRoom.RoomMap.ToSoftObjectPath().GetLongPackageName();
+	const int32 ClearedLevelCount = ActiveRoomSequence.Num();
+
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Run cleared! Mode=%s Levels=%d FinalLevelId=%s FinalLevel=%s."),
+		bOrderedLevelListMode ? TEXT("OrderedLevelList") : TEXT("MajorStagePool"),
+		ClearedLevelCount,
+		*FinalRoom.RoomId.ToString(),
+		*FinalPackageName);
+
+	FEventBus::Publish<FGameClearedEvent>(FGameClearedEvent(ClearedLevelCount, FinalPackageName));
+
+	return TransitionRunState(
+		ERoguelikeRunState::Result,
+		ERoguelikeRunTransitionReason::RunCompleted
+	);
+}
+
 void URoguelikeRunFlowSubsystem::ConfigureDefaultWhiteboxRoomsIfUnset()
 {
 	if (!PreparationRoomMap.IsNull() || !MajorStageDefinitions.IsEmpty())
@@ -442,7 +513,93 @@ void URoguelikeRunFlowSubsystem::ResetRunProgress()
 	CurrentMajorStageIndex = INDEX_NONE;
 	CurrentRoomIndex = INDEX_NONE;
 	ActiveRoomSequence.Reset();
+	bOrderedLevelListMode = false;
 	RunOutcome = ERoguelikeRunOutcome::None;
+}
+
+void URoguelikeRunFlowSubsystem::ResolveLevelDataAsset()
+{
+	if (IsValid(RunLevelData))
+	{
+		return;
+	}
+
+	const FSoftObjectPath LevelDataPath(RunLevelDataAssetPath);
+	RunLevelData = Cast<ULevelDataAsset>(LevelDataPath.TryLoad());
+
+	if (!RunLevelData)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Log,
+			TEXT("No level data asset at %s; using the whitebox major-stage / room-pool configuration."),
+			RunLevelDataAssetPath);
+		return;
+	}
+
+	UE_LOG(LogRoguelikeRunFlow, Log,
+		TEXT("Level data asset loaded: %s Levels=%d."),
+		*LevelDataPath.ToString(),
+		RunLevelData->Levels.Num());
+
+	if (RunLevelData->Levels.Num() == 0)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Level data asset %s has an empty Levels array; using the whitebox configuration."),
+			RunLevelDataAssetPath);
+	}
+}
+
+bool URoguelikeRunFlowSubsystem::BuildRoomSequenceFromLevelData(TArray<FRoguelikeRoomDefinition>& OutSequence)
+{
+	OutSequence.Reset();
+
+	if (!IsValid(RunLevelData))
+	{
+		return false;
+	}
+
+	for (int32 EntryIndex = 0; EntryIndex < RunLevelData->Levels.Num(); ++EntryIndex)
+	{
+		const FRunLevelEntry& Entry = RunLevelData->Levels[EntryIndex];
+		if (Entry.LevelMap.IsNull())
+		{
+			UE_LOG(LogRoguelikeRunFlow, Warning,
+				TEXT("Levels[%d] has no LevelMap assigned; entry skipped."),
+				EntryIndex);
+			continue;
+		}
+
+		FRoguelikeRoomDefinition Room;
+		Room.RoomId = Entry.LevelId.IsNone()
+			? FName(*FString::Printf(TEXT("Level_%02d"), OutSequence.Num() + 1))
+			: Entry.LevelId;
+		Room.RoomType = Entry.RoomType;
+		Room.EncounterTier = Entry.EncounterTier;
+		// 顺序列表模式下不使用抽签权重，固定填 1 以免误导。
+		Room.SelectionWeight = 1;
+		Room.RoomMap = Entry.LevelMap;
+		OutSequence.Add(MoveTemp(Room));
+	}
+
+	if (OutSequence.Num() == 0)
+	{
+		UE_LOG(LogRoguelikeRunFlow, Warning,
+			TEXT("Level data asset provided no usable level (all entries missing a LevelMap); using the whitebox configuration."));
+		return false;
+	}
+
+	for (int32 LevelIndex = 0; LevelIndex < OutSequence.Num(); ++LevelIndex)
+	{
+		const FRoguelikeRoomDefinition& Room = OutSequence[LevelIndex];
+		UE_LOG(LogRoguelikeRunFlow, Log,
+			TEXT("Ordered level list entry. Index=%d LevelId=%s RoomType=%d EncounterTier=%d Map=%s."),
+			LevelIndex,
+			*Room.RoomId.ToString(),
+			static_cast<int32>(Room.RoomType),
+			static_cast<int32>(Room.EncounterTier),
+			*Room.RoomMap.ToSoftObjectPath().ToString());
+	}
+
+	return true;
 }
 
 bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reason)
@@ -464,15 +621,22 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 
 	ResetRunProgress();
 
-	TArray<FRoguelikeRoomDefinition> FirstMajorStageSequence;
-	if (!BuildRoomSequence(FirstMajorStageIndex, FirstMajorStageSequence))
+	// 优先用关卡数据资产的顺序关卡列表；没有可用数据时退回白盒大关 / 房间池。
+	ResolveLevelDataAsset();
+
+	TArray<FRoguelikeRoomDefinition> FirstSequence;
+	bOrderedLevelListMode = BuildRoomSequenceFromLevelData(FirstSequence);
+	if (!bOrderedLevelListMode)
 	{
-		return false;
+		if (!BuildRoomSequence(FirstMajorStageIndex, FirstSequence))
+		{
+			return false;
+		}
 	}
 
 	CurrentMajorStageIndex = FirstMajorStageIndex;
 	CurrentRoomIndex = 0;
-	ActiveRoomSequence = MoveTemp(FirstMajorStageSequence);
+	ActiveRoomSequence = MoveTemp(FirstSequence);
 
 	const FRoguelikeRoomDefinition& FirstRoom = ActiveRoomSequence[CurrentRoomIndex];
 	if (!RequestMapTravel(FirstRoom.RoomMap, Reason, TEXT("new run first room"), false))
@@ -482,7 +646,9 @@ bool URoguelikeRunFlowSubsystem::BeginNewRun(ERoguelikeRunTransitionReason Reaso
 	}
 
 	UE_LOG(LogRoguelikeRunFlow, Log,
-		TEXT("New run started. MajorStage=%d RoomIndex=%d RoomId=%s EncounterTier=%d."),
+		TEXT("New run started. Mode=%s Levels=%d MajorStage=%d RoomIndex=%d RoomId=%s EncounterTier=%d."),
+		bOrderedLevelListMode ? TEXT("OrderedLevelList") : TEXT("MajorStagePool"),
+		ActiveRoomSequence.Num(),
 		CurrentMajorStageIndex,
 		CurrentRoomIndex,
 		*FirstRoom.RoomId.ToString(),
