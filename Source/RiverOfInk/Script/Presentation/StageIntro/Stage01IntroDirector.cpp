@@ -879,15 +879,18 @@ void AStage01IntroDirector::ApplyMainMenuHudArt(UUserWidget* MenuWidget)
 			InkPanelImage->SetBrushFromTexture(InkPanelTexture, false);
 			InkPanelImage->SetColorAndOpacity(FLinearColor::White);
 			InkPanelImage->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-			InkPanelImage->SetRenderScale(FVector2D(-1.0f, 1.0f));
+			// Overscan vertically so the texture's transparent ink fade extends
+			// beyond the viewport instead of leaving visible gaps at either edge.
+			InkPanelImage->SetRenderScale(FVector2D(-1.0f, 1.40f));
 			InkPanelImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 			if (UCanvasPanelSlot* InkPanelSlot = RootCanvas->AddChildToCanvas(InkPanelImage))
 			{
-				InkPanelSlot->SetAnchors(FAnchors(0.0f, 0.5f));
-				InkPanelSlot->SetAlignment(FVector2D(0.0f, 0.5f));
-				InkPanelSlot->SetPosition(FVector2D(0.0f, 0.0f));
-				InkPanelSlot->SetSize(FVector2D(520.0f, 924.0f));
+				// Keep the decorative panel flush with the top and bottom screen edges.
+				// The right offset remains a manual width control for visual tuning.
+				InkPanelSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 1.0f));
+				InkPanelSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+				InkPanelSlot->SetOffsets(FMargin(0.0f, 0.0f, 520.0f, 0.0f));
 				InkPanelSlot->SetZOrder(5);
 			}
 		}
