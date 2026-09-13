@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
+#include "RoguelikeSystem/RoguelikeRewardScrimWidget.h"
 #include "RoguelikeSystem/RoguelikeRewardWidget.h"
 #include "Player/Skill/SkillComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -156,6 +157,18 @@ void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 	ActiveRewardWidget->SetIsFocusable(true);
 	ActiveRewardWidget->SetVisibility(ESlateVisibility::Visible);
 	ActiveRewardWidget->SetRenderOpacity(1.0f);
+	ActiveRewardScrimWidget = CreateWidget<URoguelikeRewardScrimWidget>(
+		PlayerController,
+		URoguelikeRewardScrimWidget::StaticClass());
+	if (ActiveRewardScrimWidget)
+	{
+		ActiveRewardScrimWidget->ConfigureScrim(ActiveRewardWidget->ScrimBlurStrength);
+		ActiveRewardScrimWidget->AddToViewport(99);
+	}
+	else
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("Reward scrim creation failed; displaying reward cards without background blur."));
+	}
 	// Construct the Slate widget before populating its bindings. This makes the
 	// subsequent layout prepass include the icon brushes and text blocks.
 	// Reward selection is a modal screen. Put it above the display-only health
@@ -839,6 +852,11 @@ void ARoguelikeRewardManager::CloseRewardUI()
 		ActiveRewardWidget->SetSelectionFinishedCallback(FSimpleDelegate());
 		ActiveRewardWidget->RemoveFromParent();
 		ActiveRewardWidget = nullptr;
+	}
+	if (ActiveRewardScrimWidget)
+	{
+		ActiveRewardScrimWidget->RemoveFromParent();
+		ActiveRewardScrimWidget = nullptr;
 	}
 	CurrentRewardOptions.Empty();
 

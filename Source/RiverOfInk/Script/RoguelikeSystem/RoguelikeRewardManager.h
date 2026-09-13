@@ -11,6 +11,7 @@
 class APlayerCharacter;
 class USkillComponent;
 class URoguelikeRewardWidget;
+class URoguelikeRewardScrimWidget;
 class ARoguelikeExitTrigger;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -139,6 +140,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<URoguelikeRewardWidget> ActiveRewardWidget;
+
+	/** Separate lower viewport layer so its blur cannot sample reward cards. */
+	UPROPERTY(Transient)
+	TObjectPtr<URoguelikeRewardScrimWidget> ActiveRewardScrimWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerCharacter> CachedPlayer;

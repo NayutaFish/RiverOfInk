@@ -8,7 +8,6 @@
 #include "RoguelikeRewardWidget.generated.h"
 
 class ARoguelikeRewardManager;
-class UBackgroundBlur;
 class UCanvasPanel;
 class UHorizontalBox;
 class UImage;
@@ -58,7 +57,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> TitleDividerTexture;
 
-	/** Full-screen background blur strength used to keep the gameplay scene behind the reward text subdued. */
+	/** Blur strength passed to the separate lower reward-Scrim viewport layer. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float ScrimBlurStrength = 14.0f;
 
@@ -106,12 +105,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> RootOverlay;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> BackgroundOverlay;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UBackgroundBlur> BackgroundBlur;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;
