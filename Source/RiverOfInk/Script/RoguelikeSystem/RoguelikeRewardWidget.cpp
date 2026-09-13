@@ -24,6 +24,7 @@
 namespace
 {
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
+	const TCHAR* OptionsPaperPanelPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_OptionsPaperPanel.T_UI_Reward_OptionsPaperPanel");
 	const TCHAR* RewardWidgetStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
@@ -284,6 +285,35 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 		RootSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 		RootSlot->SetOffsets(FMargin(0.0f));
 		RootSlot->SetZOrder(0);
+	}
+
+	// Keep the three rewards visually connected without putting each one inside
+	// its own rigid rectangle. The legacy WBP owns a reconstructed Overlay tree,
+	// so place this native backing straight on the root canvas instead of that
+	// branch; the canvas layer is stable through Blueprint reconstruction.
+	OptionsPaperPanel = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardOptionsPaperPanel"));
+	if (!OptionsPaperTexture)
+	{
+		OptionsPaperTexture = LoadObject<UTexture2D>(nullptr, OptionsPaperPanelPath);
+	}
+	if (OptionsPaperTexture)
+	{
+		OptionsPaperPanel->SetBrushFromTexture(OptionsPaperTexture, false);
+	}
+	const FVector2D OptionsPaperPanelSize = GetTextureAspectSize(
+		OptionsPaperTexture,
+		OptionsPaperPanelWidth,
+		FVector2D(908.0f, 363.2f));
+	OptionsPaperPanel->SetDesiredSizeOverride(OptionsPaperPanelSize);
+	OptionsPaperPanel->SetColorAndOpacity(FLinearColor::White);
+	OptionsPaperPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UCanvasPanelSlot* PaperSlot = RootCanvas->AddChildToCanvas(OptionsPaperPanel))
+	{
+		PaperSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+		PaperSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		PaperSlot->SetPosition(FVector2D(0.0f, 24.0f));
+		PaperSlot->SetSize(OptionsPaperPanelSize);
+		PaperSlot->SetZOrder(-1);
 	}
 
 	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));

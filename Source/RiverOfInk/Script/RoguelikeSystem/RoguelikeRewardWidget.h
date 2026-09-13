@@ -57,6 +57,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> TitleDividerTexture;
 
+	/** One shared paper backing for the complete reward-option row. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
+	TObjectPtr<UTexture2D> OptionsPaperTexture;
+
+	/** Horizontal display width for the shared paper backing; its height follows the texture aspect ratio. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Layout", meta = (ClampMin = "640.0", ClampMax = "1600.0"))
+	float OptionsPaperPanelWidth = 908.0f;
+
 	/** Blur strength passed to the separate lower reward-Scrim viewport layer. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float ScrimBlurStrength = 14.0f;
@@ -111,6 +119,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> TitleDecoration;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> OptionsPaperPanel;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> RewardOptionsRow;

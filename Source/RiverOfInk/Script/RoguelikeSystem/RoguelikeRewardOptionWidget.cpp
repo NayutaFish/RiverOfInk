@@ -41,7 +41,6 @@ namespace
 	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
-	const TCHAR* CardPaperPath = TEXT("/Game/RawContent/UI/Result/T_UI_Result_Paper.T_UI_Result_Paper");
 	const TCHAR* RewardOptionStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
@@ -625,21 +624,7 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	OptionOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RewardOptionOverlay"));
 	ButtonHitArea->SetContent(OptionOverlay);
 
-	CardPaperPanel = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardCardPaperPanel"));
-	if (UTexture2D* CardPaperTexture = LoadObject<UTexture2D>(nullptr, CardPaperPath))
-	{
-		CardPaperPanel->SetBrushFromTexture(CardPaperTexture, false);
-	}
-	CardPaperPanel->SetColorAndOpacity(FLinearColor(0.96f, 0.94f, 0.88f, 0.94f));
-	CardPaperPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UOverlaySlot* CardPaperSlot = OptionOverlay->AddChildToOverlay(CardPaperPanel))
-	{
-		CardPaperSlot->SetHorizontalAlignment(HAlign_Fill);
-		CardPaperSlot->SetVerticalAlignment(VAlign_Fill);
-		CardPaperSlot->SetPadding(FMargin(2.0f));
-	}
-
-	// The hover mark sits over the paper but behind the content.
+	// The hover mark sits over the shared paper backdrop but behind this option's content.
 	HoverInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardHoverInk"));
 	if (!HoverInkTexture)
 	{
