@@ -70,28 +70,11 @@ void APlayerSkill_CircleDamageArea::BeginPlay()
 	}
 
 #if ENABLE_DRAW_DEBUG
-	if (bDrawDebugArea)
+	// The base E form uses the circular hit area. Keep that gameplay form free of
+	// debug geometry; the optional arc form can still opt in to its fan visualisation.
+	if (bDrawDebugArea && bUseArcHitbox)
 	{
-		if (bUseArcHitbox)
-		{
-			DrawDebugFanHitbox();
-		}
-		else
-		{
-			DrawDebugCircle(
-				GetWorld(),
-				GetActorLocation() + FVector(0.0f, 0.0f, 3.0f),
-				Radius,
-				32,
-				FColor::Blue,
-				false,
-				LifeTime,
-				0,
-				2.0f,
-				FVector::ForwardVector,
-				FVector::UpVector,
-				false);
-		}
+		DrawDebugFanHitbox();
 	}
 #endif
 
