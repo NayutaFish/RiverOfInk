@@ -130,6 +130,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> OptionOverlay;
 
+	/** Stable paper backing keeps card content readable over a changing combat scene. */
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> CardPaperPanel;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentGroup;
 

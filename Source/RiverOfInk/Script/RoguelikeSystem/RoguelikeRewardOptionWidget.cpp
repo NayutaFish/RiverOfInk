@@ -32,8 +32,8 @@ namespace
 {
 	constexpr float OptionWidth = 270.0f;
 	constexpr float OptionHeight = 420.0f;
-	constexpr float IconSize = 112.0f;
-	constexpr float MaximumDescriptionHeight = 112.0f;
+	constexpr float IconSize = 96.0f;
+	constexpr float MaximumDescriptionHeight = 64.0f;
 	constexpr float SelectionBrushWidth = 76.0f;
 	constexpr float HoverScale = 1.03f;
 
@@ -41,6 +41,7 @@ namespace
 	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
 	const TCHAR* HoverInkPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_HoverInk.T_UI_Reward_HoverInk");
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
+	const TCHAR* CardPaperPath = TEXT("/Game/RawContent/UI/Result/T_UI_Result_Paper.T_UI_Result_Paper");
 	const TCHAR* RewardOptionStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
@@ -61,19 +62,6 @@ namespace
 		return FallbackSize;
 	}
 
-	FText GetSkillName(EPlayerSkillID SkillID)
-	{
-		switch (SkillID)
-		{
-		case EPlayerSkillID::TripleProjectile:
-			return FText::FromString(TEXT("三连墨矢"));
-		case EPlayerSkillID::CircularSlash:
-			return FText::FromString(TEXT("环斩"));
-		default:
-			return FText::FromString(TEXT("技能"));
-		}
-	}
-
 	FText GetRewardCategory(const FRoguelikeRewardOption& Option)
 	{
 		switch (Option.RewardType)
@@ -85,22 +73,6 @@ namespace
 		default:
 			return FText::FromString(TEXT("技能构筑"));
 		}
-	}
-
-	FText GetTargetSkill(const FRoguelikeRewardOption& Option)
-	{
-		if (!Option.TargetSkill.IsEmpty())
-		{
-			return Option.TargetSkill;
-		}
-
-		if (Option.RewardType == ERoguelikeRewardType::Currency || Option.RewardType == ERoguelikeRewardType::Health)
-		{
-			return FText::GetEmpty();
-		}
-
-		const TCHAR* InputSlot = Option.SkillID == EPlayerSkillID::CircularSlash ? TEXT("E") : TEXT("Q");
-		return FText::FromString(FString::Printf(TEXT("%s  %s"), InputSlot, *GetSkillName(Option.SkillID).ToString()));
 	}
 
 	FText GetBuildType(const FRoguelikeRewardOption& Option)
@@ -116,6 +88,21 @@ namespace
 		}
 
 		return FText::FromString(TEXT("强化构筑"));
+	}
+
+	FText GetCompactCardTag(const FRoguelikeRewardOption& Option)
+	{
+		if (Option.RewardType == ERoguelikeRewardType::Currency)
+		{
+			return FText::FromString(TEXT("资源奖励"));
+		}
+		if (Option.RewardType == ERoguelikeRewardType::Health)
+		{
+			return FText::FromString(TEXT("生命恢复"));
+		}
+
+		const TCHAR* InputSlot = Option.SkillID == EPlayerSkillID::CircularSlash ? TEXT("E") : TEXT("Q");
+		return FText::FromString(FString::Printf(TEXT("%s · %s"), InputSlot, *GetBuildType(Option).ToString()));
 	}
 
 	FText GetPrimaryValue(const FRoguelikeRewardOption& Option)
@@ -422,10 +409,8 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 
 	if (TextRewardCategory)
 	{
-		TextRewardCategory->SetText(GetRewardCategory(RewardOption));
-		// The formal HUD hierarchy starts at icon/title. A separate category
-		// label duplicates titles such as "纯墨" and adds no decision value.
-		TextRewardCategory->SetVisibility(ESlateVisibility::Collapsed);
+		TextRewardCategory->SetText(GetCompactCardTag(RewardOption));
+		TextRewardCategory->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	if (TextRewardTitle)
 	{
@@ -433,17 +418,14 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	}
 	if (TextSkillInfo)
 	{
-		TextSkillInfo->SetText(GetTargetSkill(RewardOption));
-		TextSkillInfo->SetVisibility(GetTargetSkill(RewardOption).IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::Visible);
+		// The compact header tag already states the target key and build type.
+		// Suppress the two redundant metadata rows to make the title, value, and
+		// effect description easier to scan across three cards.
+		TextSkillInfo->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (TextBuildType)
 	{
-		TextBuildType->SetText(GetBuildType(RewardOption));
-		TextBuildType->SetVisibility(GetBuildType(RewardOption).IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::Visible);
+		TextBuildType->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (TextValueChange)
 	{
@@ -643,8 +625,21 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	OptionOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RewardOptionOverlay"));
 	ButtonHitArea->SetContent(OptionOverlay);
 
-	// The hover mark sits behind the content and only becomes visible for the
-	// hovered option; it must never read as a card background.
+	CardPaperPanel = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardCardPaperPanel"));
+	if (UTexture2D* CardPaperTexture = LoadObject<UTexture2D>(nullptr, CardPaperPath))
+	{
+		CardPaperPanel->SetBrushFromTexture(CardPaperTexture, false);
+	}
+	CardPaperPanel->SetColorAndOpacity(FLinearColor(0.96f, 0.94f, 0.88f, 0.94f));
+	CardPaperPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UOverlaySlot* CardPaperSlot = OptionOverlay->AddChildToOverlay(CardPaperPanel))
+	{
+		CardPaperSlot->SetHorizontalAlignment(HAlign_Fill);
+		CardPaperSlot->SetVerticalAlignment(VAlign_Fill);
+		CardPaperSlot->SetPadding(FMargin(2.0f));
+	}
+
+	// The hover mark sits over the paper but behind the content.
 	HoverInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardHoverInk"));
 	if (!HoverInkTexture)
 	{
@@ -678,11 +673,11 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 
 	TextRewardCategory = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardCategory"));
 	TextRewardCategory->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextRewardCategory, 14, FLinearColor(0.22f, 0.22f, 0.20f, 1.0f));
+	SetTextStyle(TextRewardCategory, 15, FLinearColor(0.30f, 0.22f, 0.10f, 1.0f));
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextRewardCategory))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 10.0f, 0.0f, 6.0f));
+		VerticalSlot->SetPadding(FMargin(0.0f, 16.0f, 0.0f, 4.0f));
 	}
 
 	USizeBox* IconSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardIconSize"));
@@ -694,12 +689,12 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(IconSizeBox))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 12.0f));
+		VerticalSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
 	}
 
 	TextRewardTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));
 	TextRewardTitle->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextRewardTitle, 25, FLinearColor(0.035f, 0.030f, 0.025f, 1.0f));
+	SetTextStyle(TextRewardTitle, 30, FLinearColor(0.025f, 0.020f, 0.016f, 1.0f));
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextRewardTitle))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
@@ -726,7 +721,7 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 
 	TextValueChange = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardValueChange"));
 	TextValueChange->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextValueChange, 21, FLinearColor(0.48f, 0.32f, 0.10f, 1.0f));
+	SetTextStyle(TextValueChange, 27, FLinearColor(0.55f, 0.34f, 0.075f, 1.0f));
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextValueChange))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
@@ -738,9 +733,9 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	TextDescription->SetAutoWrapText(true);
 	TextDescription->SetWrapTextAt(230.0f);
 	TextDescription->SetTextOverflowPolicy(ETextOverflowPolicy::MultilineEllipsis);
-	SetTextStyle(TextDescription, 16, FLinearColor(0.28f, 0.28f, 0.25f, 1.0f));
+	SetTextStyle(TextDescription, 18, FLinearColor(0.15f, 0.14f, 0.12f, 1.0f));
 	DescriptionSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardDescriptionSize"));
-	DescriptionSizeBox->SetWidthOverride(OptionWidth - 24.0f);
+	DescriptionSizeBox->SetWidthOverride(OptionWidth - 28.0f);
 	DescriptionSizeBox->SetMaxDesiredHeight(MaximumDescriptionHeight);
 	DescriptionSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
 	DescriptionSizeBox->SetContent(TextDescription);
