@@ -156,6 +156,17 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|VFX", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> ComboSecondVFX;
 
+	/**
+	 * 一段 VFX 的旋转偏移（相对玩家朝向）：Roll/Pitch/Yaw 分别对应绕自身 X/Y/Z 轴旋转。
+	 * 只影响特效朝向，不影响伤害判定；生成位置仍沿玩家前向偏移，如需跟着转请一并调下面的偏移。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|VFX", meta = (AllowPrivateAccess = "true"))
+	FRotator AttackVFXRotationOffset = FRotator::ZeroRotator;
+
+	/** 二段 VFX 的旋转偏移（相对玩家朝向）；含义与一段相同。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|VFX", meta = (AllowPrivateAccess = "true"))
+	FRotator ComboSecondVFXRotationOffset = FRotator::ZeroRotator;
+
 	/** 一段 VFX 相对玩家的前向生成偏移；当前值保持原有表现。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|VFX", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm"))
 	float AttackVFXForwardOffset = 60.0f;

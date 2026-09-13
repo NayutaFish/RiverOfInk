@@ -477,21 +477,31 @@ void UPlayerState_Attack1::SpawnAttackVFX()
 	const float VFXScale = FMath::Max(0.01f, bIsSecondStep
 		? ComboSecondVFXScale
 		: AttackVFXScale);
+
+	// 朝向 = 玩家当前朝向 + 编辑器里配的旋转偏移（Roll/Pitch/Yaw 分别绕自身 X/Y/Z 轴）。
+	const FRotator VFXRotationOffset = bIsSecondStep
+		? ComboSecondVFXRotationOffset
+		: AttackVFXRotationOffset;
+	const FRotator SpawnRotation = (Player->GetActorRotation() + VFXRotationOffset).GetNormalized();
+
 	const FVector SpawnLocation = Player->GetActorLocation()
 		+ Player->GetActorForwardVector() * VFXForwardOffset;
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		VFX,
 		SpawnLocation,
-		Player->GetActorRotation(),
+		SpawnRotation,
 		FVector(VFXScale));
 
 	UE_LOG(LogRiverOfInk, Log,
-		TEXT("Player Attack1 VFX spawned: Step=%d Asset=%s Scale=%.2f Offset=%.1f%s."),
+		TEXT("Player Attack1 VFX spawned: Step=%d Asset=%s Scale=%.2f Offset=%.1f Rotation=(P=%.1f Y=%.1f R=%.1f)%s."),
 		ComboStep,
 		*VFX->GetName(),
 		VFXScale,
 		VFXForwardOffset,
+		SpawnRotation.Pitch,
+		SpawnRotation.Yaw,
+		SpawnRotation.Roll,
 		bIsSecondStep && !ComboSecondVFX ? TEXT(" (first-step placeholder)") : TEXT(""));
 }
 
