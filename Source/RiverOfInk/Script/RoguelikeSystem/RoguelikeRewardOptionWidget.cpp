@@ -735,6 +735,8 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 
 	TextValueChange = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardValueChange"));
 	TextValueChange->SetJustification(ETextJustify::Center);
+	TextValueChange->SetAutoWrapText(true);
+	TextValueChange->SetWrapTextAt(OptionContentWidth - 16.0f);
 	SetTextStyle(TextValueChange, 24, FLinearColor(0.56f, 0.30f, 0.035f, 1.0f));
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextValueChange))
 	{

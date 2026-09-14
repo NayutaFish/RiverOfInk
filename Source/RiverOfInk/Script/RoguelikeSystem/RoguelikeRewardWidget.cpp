@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RoguelikeSystem/RoguelikeRewardWidget.h"
 
@@ -28,6 +28,10 @@ namespace
 	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
 	const TCHAR* RewardWidgetStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
+	constexpr float PanelHorizontalSafeZone = 0.10f;
+	constexpr float PanelContentWidth = 1.0f - (PanelHorizontalSafeZone * 2.0f);
+	constexpr float FirstColumnDividerAnchor = PanelHorizontalSafeZone + (PanelContentWidth / 3.0f);
+	constexpr float SecondColumnDividerAnchor = PanelHorizontalSafeZone + (PanelContentWidth * 2.0f / 3.0f);
 
 	FVector2D GetTextureAspectSize(const UTexture2D* Texture, float DesiredWidth, const FVector2D& FallbackSize)
 	{
@@ -360,8 +364,8 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 	RewardOptionsRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RewardOptionsRow"));
 	if (UCanvasPanelSlot* OptionsSlot = PanelContentCanvas->AddChildToCanvas(RewardOptionsRow))
 	{
-		OptionsSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-		OptionsSlot->SetOffsets(FMargin(56.0f, 38.0f, 56.0f, 50.0f));
+		OptionsSlot->SetAnchors(FAnchors(PanelHorizontalSafeZone, 0.0f, 1.0f - PanelHorizontalSafeZone, 1.0f));
+		OptionsSlot->SetOffsets(FMargin(0.0f, 38.0f, 0.0f, 50.0f));
 		OptionsSlot->SetZOrder(1);
 	}
 
@@ -387,8 +391,8 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 			DividerSlot->SetZOrder(2);
 		}
 	};
-	AddVerticalDivider(TEXT("RewardColumnDividerLeft"), 1.0f / 3.0f);
-	AddVerticalDivider(TEXT("RewardColumnDividerRight"), 2.0f / 3.0f);
+	AddVerticalDivider(TEXT("RewardColumnDividerLeft"), FirstColumnDividerAnchor);
+	AddVerticalDivider(TEXT("RewardColumnDividerRight"), SecondColumnDividerAnchor);
 
 	UImage* FooterDivider = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardPanelFooterDivider"));
 	if (SmallDividerTexture)
