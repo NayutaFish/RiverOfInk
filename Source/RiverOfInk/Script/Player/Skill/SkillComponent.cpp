@@ -1352,6 +1352,10 @@ bool USkillComponent::SpawnCircularSlash(
 		bNullifyEnemyProjectiles,
 		bUseArcHitbox,
 		ArcHalfAngle);
+	DamageArea->HitShakeBinding.PresetId = StageIndex > 0
+		? TEXT("Player.HeavyHit")
+		: TEXT("Player.SkillHit");
+	DamageArea->HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 	// The normal E keeps the original BP circular slash VFX. TwoStageArc owns
 	// its presentation and therefore hides only the legacy component on this
 	// arc damage area before the deferred actor begins play.
@@ -1756,6 +1760,8 @@ bool USkillComponent::SpawnProjectile(
 	}
 
 	Projectile->AttackDamageProfile.AttackType = EAttackType::PlayerQProjectile;
+	Projectile->HitShakeBinding.PresetId = TEXT("Player.SkillHit");
+	Projectile->HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 	Projectile->InitializeProjectile(ProjectileSpec);
 	Projectile->bDetectObstacle = true;
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);

@@ -4,6 +4,7 @@
 #include "RiverOfInk.h"
 #include "Core/GlobalStructs.h"
 #include "Core/CombatDamageCalculator.h"
+#include "CameraManager/CameraShakeManager.h"
 #include "Core/Audio/AudioManager.h"
 #include "Engine/World.h"
 #include "Components/StaticMeshComponent.h"
@@ -478,10 +479,52 @@ void AAttackAreaBase::ApplyDamage_Implementation(AActor* Target)
 	if (AEnemyBase* Enemy = Cast<AEnemyBase>(Target))
 	{
 		Enemy->TakeDamage(DamageInfo, this);
+		TryTriggerPlayerHitShake(Enemy);
 	}
 	else if (APlayerCharacter* Player = Cast<APlayerCharacter>(Target))
 	{
 		Player->TakeDamage(DamageInfo);
+	}
+}
+
+void AAttackAreaBase::TryTriggerPlayerHitShake(const AEnemyBase* Enemy)
+{
+	if (!Enemy || !HitShakeBinding.IsEnabled() || !Cast<APlayerCharacter>(GetOwner()))
+	{
+		return;
+	}
+
+	const FEnemyDamageResult& DamageResult = Enemy->LastDamageResult;
+	if (!DamageResult.ResolvedDamage.bDamageApplied || DamageResult.FinalDamage <= 0)
+	{
+		return;
+	}
+
+	if (HitShakeBinding.bOnlyTriggerOncePerAttackArea && bHitShakeTriggered)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	if (!HitShakeBinding.bOnlyTriggerOncePerAttackArea
+		&& CurrentTime - LastHitShakeTriggerTime < FMath::Max(0.0f, HitShakeBinding.MinimumInterval))
+	{
+		return;
+	}
+
+	if (FCameraShakeManager::TriggerAttackHit(
+		World,
+		HitShakeBinding,
+		static_cast<float>(DamageResult.FinalDamage)))
+	{
+		bHitShakeTriggered = true;
+		LastHitShakeTriggerTime = CurrentTime;
 	}
 }
 

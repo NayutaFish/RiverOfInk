@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Core/GlobalEnums.h"
 #include "Common/CombatEffectTypes.h"
+#include "CameraManager/CameraShakeManager.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -71,6 +72,8 @@ APlayerSkill_ThrownGrenade::APlayerSkill_ThrownGrenade()
 	DamageInfo.bCanCauseDeath = true;
 	DamageInfo.bIsDirectDamage = true;
 	ExplosionsRemaining = 1;
+	ExplosionHitShakeBinding.PresetId = TEXT("Player.Explosion");
+	ExplosionHitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 }
 
 void APlayerSkill_ThrownGrenade::BeginPlay()
@@ -494,6 +497,7 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 		QueryParams);
 
 	int32 HitCount = 0;
+	bool bShakeTriggeredForExplosion = false;
 	if (bHasOverlaps)
 	{
 		for (const FOverlapResult& Overlap : Overlaps)
@@ -505,6 +509,17 @@ void APlayerSkill_ThrownGrenade::PerformExplosion()
 			}
 
 			Enemy->TakeDamage(DamageInfo);
+			if ((!bShakeTriggeredForExplosion || !ExplosionHitShakeBinding.bOnlyTriggerOncePerAttackArea)
+				&& Cast<APlayerCharacter>(DamageInstigator)
+				&& Enemy->LastDamageResult.ResolvedDamage.bDamageApplied
+				&& Enemy->LastDamageResult.FinalDamage > 0
+				&& FCameraShakeManager::TriggerAttackHit(
+					GetWorld(),
+					ExplosionHitShakeBinding,
+					static_cast<float>(Enemy->LastDamageResult.FinalDamage)))
+			{
+				bShakeTriggeredForExplosion = true;
+			}
 			++HitCount;
 		}
 	}
