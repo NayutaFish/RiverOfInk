@@ -25,17 +25,20 @@
 #include "Sections/MovieSceneFloatSection.h"
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "RiverOfInk.h"
+#include "Styling/SlateBrush.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
 {
-	constexpr float OptionWidth = 270.0f;
-	constexpr float OptionHeight = 420.0f;
-	constexpr float IconSize = 112.0f;
-	constexpr float MaximumDescriptionHeight = 112.0f;
+	constexpr float OptionContentWidth = 352.0f;
+	constexpr float IconSize = 132.0f;
+	constexpr float SelectionBrushHeight = 440.0f;
 	constexpr float SelectionBrushWidth = 76.0f;
-	constexpr float HoverScale = 1.03f;
+	constexpr float HoverScale = 1.0f;
+	constexpr float SmallDividerWidthScale = 0.70f;
+	constexpr float SmallDividerHeightScale = 0.31f;
+	constexpr float SmallDividerMinimumHeight = 10.0f;
 
 	const TCHAR* SelectionBrushPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SelectBrush.T_UI_Reward_SelectBrush");
 	const TCHAR* SelectionBrushMaterialPath = TEXT("/Game/RawContent/UI/Reward/Materials/M_UI_RewardSelectionReveal.M_UI_RewardSelectionReveal");
@@ -382,14 +385,7 @@ void URoguelikeRewardOptionWidget::NativeConstruct()
 	{
 		SmallDividerImage->SetRenderOpacity(0.55f);
 	}
-	ForceLayoutPrepass();
-	UpdateDividerLayout();
-}
 
-void URoguelikeRewardOptionWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
-	UpdateDividerLayout();
 }
 
 void URoguelikeRewardOptionWidget::NativeDestruct()
@@ -433,17 +429,21 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	}
 	if (TextSkillInfo)
 	{
-		TextSkillInfo->SetText(GetTargetSkill(RewardOption));
-		TextSkillInfo->SetVisibility(GetTargetSkill(RewardOption).IsEmpty()
+		const FText TargetSkill = GetTargetSkill(RewardOption);
+		const FText BuildType = GetBuildType(RewardOption);
+		const FText CombinedInfo = TargetSkill.IsEmpty()
+			? BuildType
+			: (BuildType.IsEmpty()
+				? TargetSkill
+				: FText::FromString(FString::Printf(TEXT("%s　%s"), *TargetSkill.ToString(), *BuildType.ToString())));
+		TextSkillInfo->SetText(CombinedInfo);
+		TextSkillInfo->SetVisibility(CombinedInfo.IsEmpty()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::Visible);
 	}
 	if (TextBuildType)
 	{
-		TextBuildType->SetText(GetBuildType(RewardOption));
-		TextBuildType->SetVisibility(GetBuildType(RewardOption).IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::Visible);
+		TextBuildType->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (TextValueChange)
 	{
@@ -491,8 +491,7 @@ void URoguelikeRewardOptionWidget::InitializeRewardOption(const FRoguelikeReward
 	{
 		SmallDividerImage->SetRenderOpacity(0.55f);
 	}
-	ForceLayoutPrepass();
-	UpdateDividerLayout();
+
 }
 
 bool URoguelikeRewardOptionWidget::PlaySelectionFeedback()
@@ -631,9 +630,6 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	}
 
 	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardOptionSize"));
-	RootSizeBox->SetWidthOverride(OptionWidth);
-	RootSizeBox->SetHeightOverride(OptionHeight);
-	RootSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
 	WidgetTree->RootWidget = RootSizeBox;
 
 	ButtonHitArea = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RewardOptionHitArea"));
@@ -643,8 +639,8 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	OptionOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RewardOptionOverlay"));
 	ButtonHitArea->SetContent(OptionOverlay);
 
-	// The hover mark sits behind the content and only becomes visible for the
-	// hovered option; it must never read as a card background.
+	// Each option owns this local mark. The shared scroll itself never changes
+	// state, which keeps hover feedback confined to the hovered column.
 	HoverInkImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardHoverInk"));
 	if (!HoverInkTexture)
 	{
@@ -657,7 +653,7 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	HoverInkImage->SetColorAndOpacity(FLinearColor::White);
 	HoverInkImage->SetRenderOpacity(0.0f);
 	HoverInkImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	HoverInkImage->SetDesiredSizeOverride(FVector2D(184.0f, 184.0f));
+	HoverInkImage->SetDesiredSizeOverride(FVector2D(328.0f, 328.0f));
 	if (UOverlaySlot* HoverSlot = OptionOverlay->AddChildToOverlay(HoverInkImage))
 	{
 		HoverSlot->SetHorizontalAlignment(HAlign_Center);
@@ -665,24 +661,13 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	}
 
 	USizeBox* ContentSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardOptionContentSize"));
-	ContentSize->SetWidthOverride(OptionWidth);
-	ContentSize->SetHeightOverride(OptionHeight);
-	ContentSize->SetClipping(EWidgetClipping::ClipToBounds);
+	ContentSize->SetWidthOverride(OptionContentWidth);
 	ContentGroup = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("RewardOptionContentGroup"));
 	ContentSize->SetContent(ContentGroup);
 	if (UOverlaySlot* ContentSlot = OptionOverlay->AddChildToOverlay(ContentSize))
 	{
 		ContentSlot->SetHorizontalAlignment(HAlign_Center);
-		ContentSlot->SetVerticalAlignment(VAlign_Top);
-	}
-
-	TextRewardCategory = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardCategory"));
-	TextRewardCategory->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextRewardCategory, 14, FLinearColor(0.22f, 0.22f, 0.20f, 1.0f));
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextRewardCategory))
-	{
-		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 10.0f, 0.0f, 6.0f));
+		ContentSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
 	USizeBox* IconSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardIconSize"));
@@ -694,60 +679,26 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(IconSizeBox))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 12.0f));
-	}
-
-	TextRewardTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));
-	TextRewardTitle->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextRewardTitle, 25, FLinearColor(0.035f, 0.030f, 0.025f, 1.0f));
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextRewardTitle))
-	{
-		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 14.0f));
 	}
 
 	TextSkillInfo = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardSkillInfo"));
 	TextSkillInfo->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextSkillInfo, 17, FLinearColor(0.20f, 0.20f, 0.18f, 1.0f));
+	SetTextStyle(TextSkillInfo, 18, FLinearColor::Black);
 	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextSkillInfo))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 3.0f));
-	}
-
-	TextBuildType = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardBuildType"));
-	TextBuildType->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextBuildType, 15, FLinearColor(0.25f, 0.25f, 0.22f, 1.0f));
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextBuildType))
-	{
-		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
 		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
 	}
 
-	TextValueChange = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardValueChange"));
-	TextValueChange->SetJustification(ETextJustify::Center);
-	SetTextStyle(TextValueChange, 21, FLinearColor(0.48f, 0.32f, 0.10f, 1.0f));
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextValueChange))
+	TextRewardTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardTitle"));
+	TextRewardTitle->SetJustification(ETextJustify::Center);
+	TextRewardTitle->SetLineHeightPercentage(0.88f);
+	SetTextStyle(TextRewardTitle, 31, FLinearColor(0.48f, 0.035f, 0.025f, 1.0f));
+	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextRewardTitle))
 	{
 		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
-	}
-
-	TextDescription = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardDescription"));
-	TextDescription->SetJustification(ETextJustify::Center);
-	TextDescription->SetAutoWrapText(true);
-	TextDescription->SetWrapTextAt(230.0f);
-	TextDescription->SetTextOverflowPolicy(ETextOverflowPolicy::MultilineEllipsis);
-	SetTextStyle(TextDescription, 16, FLinearColor(0.28f, 0.28f, 0.25f, 1.0f));
-	DescriptionSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardDescriptionSize"));
-	DescriptionSizeBox->SetWidthOverride(OptionWidth - 24.0f);
-	DescriptionSizeBox->SetMaxDesiredHeight(MaximumDescriptionHeight);
-	DescriptionSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
-	DescriptionSizeBox->SetContent(TextDescription);
-	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(DescriptionSizeBox))
-	{
-		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
-		VerticalSlot->SetPadding(FMargin(12.0f, 0.0f, 12.0f, 10.0f));
+		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
 	}
 
 	SmallDividerImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardSmallDivider"));
@@ -762,16 +713,48 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	SmallDividerImage->SetColorAndOpacity(FLinearColor::White);
 	SmallDividerImage->SetRenderOpacity(0.55f);
 	SmallDividerImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	SmallDividerImage->SetDesiredSizeOverride(
-		GetOptionTextureAspectSize(SmallDividerTexture, SmallDividerWidth, FVector2D(SmallDividerWidth, 18.0f)));
-	// Keep the divider independent from the content flow. Its slot is
-	// repositioned from the measured description bottom after layout.
-	SmallDividerSlot = OptionOverlay->AddChildToOverlay(SmallDividerImage);
-	if (SmallDividerSlot)
+	FVector2D DividerSize = GetOptionTextureAspectSize(
+		SmallDividerTexture,
+		SmallDividerWidth,
+		FVector2D(SmallDividerWidth, 18.0f));
+	DividerSize.X *= SmallDividerWidthScale;
+	DividerSize.Y = FMath::Max(DividerSize.Y * SmallDividerHeightScale, SmallDividerMinimumHeight);
+	FSlateBrush DividerBrush = SmallDividerImage->GetBrush();
+	DividerBrush.ImageSize = DividerSize;
+	SmallDividerImage->SetBrush(DividerBrush);
+	SmallDividerImage->SetDesiredSizeOverride(DividerSize);
+	USizeBox* DividerSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardSmallDividerSize"));
+	DividerSizeBox->SetWidthOverride(DividerSize.X);
+	DividerSizeBox->SetHeightOverride(DividerSize.Y);
+	DividerSizeBox->SetContent(SmallDividerImage);
+	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(DividerSizeBox))
 	{
-		SmallDividerSlot->SetHorizontalAlignment(HAlign_Center);
-		SmallDividerSlot->SetVerticalAlignment(VAlign_Top);
-		SmallDividerSlot->SetPadding(FMargin(0.0f));
+		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
+		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+	}
+
+	TextValueChange = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardValueChange"));
+	TextValueChange->SetJustification(ETextJustify::Center);
+	SetTextStyle(TextValueChange, 24, FLinearColor(0.56f, 0.30f, 0.035f, 1.0f));
+	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(TextValueChange))
+	{
+		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
+		VerticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 10.0f));
+	}
+
+	TextDescription = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RewardDescription"));
+	TextDescription->SetJustification(ETextJustify::Center);
+	TextDescription->SetAutoWrapText(true);
+	TextDescription->SetLineHeightPercentage(0.88f);
+	TextDescription->SetWrapTextAt(OptionContentWidth - 16.0f);
+	SetTextStyle(TextDescription, 18, FLinearColor::Black);
+	DescriptionSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RewardDescriptionSize"));
+	DescriptionSizeBox->SetWidthOverride(OptionContentWidth - 16.0f);
+	DescriptionSizeBox->SetContent(TextDescription);
+	if (UVerticalBoxSlot* VerticalSlot = ContentGroup->AddChildToVerticalBox(DescriptionSizeBox))
+	{
+		VerticalSlot->SetHorizontalAlignment(HAlign_Center);
+		VerticalSlot->SetPadding(FMargin(8.0f, 0.0f, 8.0f, 0.0f));
 	}
 
 	ImageSelectionBrush = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardSelectionBrush"));
@@ -784,16 +767,12 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 		ImageSelectionBrush->SetBrushFromTexture(SelectionBrushTexture, true);
 	}
 	ImageSelectionBrush->SetColorAndOpacity(FLinearColor::White);
-	// Keep the brush at its final geometry for the entire reveal. The material
-	// remaps the source texture's transparent margins and masks only its alpha.
-	ImageSelectionBrush->SetDesiredSizeOverride(FVector2D(SelectionBrushWidth, OptionHeight));
+	ImageSelectionBrush->SetDesiredSizeOverride(FVector2D(SelectionBrushWidth, SelectionBrushHeight));
 	ImageSelectionBrush->SetVisibility(ESlateVisibility::Collapsed);
 	if (UOverlaySlot* BrushSlot = OptionOverlay->AddChildToOverlay(ImageSelectionBrush))
 	{
-		// This is deliberately added after all card content so the fixed brush is
-		// the highest visual layer. RevealProgress controls only its visible alpha.
 		BrushSlot->SetHorizontalAlignment(HAlign_Center);
-		BrushSlot->SetVerticalAlignment(VAlign_Top);
+		BrushSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
 	ButtonHitArea->OnClicked.AddDynamic(this, &URoguelikeRewardOptionWidget::HandleButtonClicked);
@@ -801,7 +780,6 @@ void URoguelikeRewardOptionWidget::BuildDefaultWidgetTree()
 	ButtonHitArea->OnUnhovered.AddDynamic(this, &URoguelikeRewardOptionWidget::HandleButtonUnhovered);
 	BuildAnimations();
 }
-
 void URoguelikeRewardOptionWidget::InitializeSelectionBrushMaterial()
 {
 	if (SelectionBrushMaterialInstance)
@@ -868,46 +846,6 @@ void URoguelikeRewardOptionWidget::UpdateSelectionBrushReveal()
 	{
 		World->GetTimerManager().ClearTimer(SelectionRevealTimer);
 	}
-}
-
-void URoguelikeRewardOptionWidget::UpdateDividerLayout()
-{
-	if (!OptionOverlay || !DescriptionSizeBox || !SmallDividerImage || !SmallDividerSlot)
-	{
-		return;
-	}
-
-	const FGeometry& OverlayGeometry = OptionOverlay->GetCachedGeometry();
-	const FGeometry& DescriptionGeometry = DescriptionSizeBox->GetCachedGeometry();
-	const FVector2D OverlaySize = OverlayGeometry.GetLocalSize();
-	const FVector2D DescriptionSize = DescriptionGeometry.GetLocalSize();
-	if (OverlaySize.X <= KINDA_SMALL_NUMBER || OverlaySize.Y <= KINDA_SMALL_NUMBER
-		|| DescriptionSize.Y <= KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	const FVector2D DescriptionBottomAbsolute = DescriptionGeometry.LocalToAbsolute(
-		FVector2D(0.0f, DescriptionSize.Y));
-	const float DescriptionBottomY = OverlayGeometry.AbsoluteToLocal(DescriptionBottomAbsolute).Y;
-	const float DividerHeight = FMath::Max(0.0f, SmallDividerImage->GetDesiredSize().Y);
-	const float DesiredDividerY = DescriptionBottomY + FMath::Max(0.0f, DividerTextOffsetY);
-	const float MaxDividerY = FMath::Max(0.0f, OverlaySize.Y - DividerHeight);
-	const float DividerY = FMath::Clamp(DesiredDividerY, 0.0f, MaxDividerY);
-
-	if (FMath::IsNearlyEqual(DescriptionBottomY, LastDescriptionBottomY, 0.05f)
-		&& FMath::IsNearlyEqual(OverlaySize.Y, LastOverlayHeight, 0.05f)
-		&& FMath::IsNearlyEqual(DividerTextOffsetY, LastDividerTextOffsetY, 0.05f))
-	{
-		return;
-	}
-
-	SmallDividerSlot->SetHorizontalAlignment(HAlign_Center);
-	SmallDividerSlot->SetVerticalAlignment(VAlign_Top);
-	SmallDividerSlot->SetPadding(FMargin(0.0f, DividerY, 0.0f, 0.0f));
-	LastDescriptionBottomY = DescriptionBottomY;
-	LastOverlayHeight = OverlaySize.Y;
-	LastDividerTextOffsetY = DividerTextOffsetY;
 }
 
 void URoguelikeRewardOptionWidget::BuildAnimations()

@@ -93,7 +93,6 @@ public:
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void NativeDestruct() override;
 
 private:
@@ -102,7 +101,6 @@ private:
 	void InitializeSelectionBrushMaterial();
 	void SetSelectionBrushRevealProgress(float Progress);
 	void UpdateSelectionBrushReveal();
-	void UpdateDividerLayout();
 	void SetTextStyle(UTextBlock* TextBlock, int32 FontSize, const FLinearColor& Color) const;
 	void SetButtonStyle();
 	void SetVisualScale(float Scale);
@@ -163,8 +161,6 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> SmallDividerImage;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UOverlaySlot> SmallDividerSlot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> ImageSelectionBrush;
@@ -194,7 +190,4 @@ private:
 	FTimerHandle SelectionHoldTimer;
 	FTimerHandle SelectionRevealTimer;
 	float SelectionRevealStartTime = 0.0f;
-	float LastDescriptionBottomY = -1.0f;
-	float LastOverlayHeight = -1.0f;
-	float LastDividerTextOffsetY = -1.0f;
 };

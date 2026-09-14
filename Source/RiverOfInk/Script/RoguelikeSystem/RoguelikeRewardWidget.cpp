@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RoguelikeSystem/RoguelikeRewardWidget.h"
 
@@ -24,6 +24,8 @@
 namespace
 {
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
+	const TCHAR* RewardScrollPanelPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_ScrollPanel.T_UI_Reward_ScrollPanel");
+	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
 	const TCHAR* RewardWidgetStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 
@@ -129,7 +131,8 @@ void URoguelikeRewardWidget::SetupRewardOptions(
 
 		if (UHorizontalBoxSlot* OptionSlot = RewardOptionsRow->AddChildToHorizontalBox(OptionWidget))
 		{
-			OptionSlot->SetPadding(FMargin(18.0f, 0.0f));
+			OptionSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			OptionSlot->SetPadding(FMargin(0.0f));
 			OptionSlot->SetVerticalAlignment(VAlign_Center);
 		}
 		OptionWidgets.Add(OptionWidget);
@@ -324,12 +327,84 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 		DecorationSlot->SetPadding(FMargin(0.0f, 136.0f, 0.0f, 0.0f));
 	}
 
-	RewardOptionsRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RewardOptionsRow"));
-	if (UOverlaySlot* OptionsSlot = RootOverlay->AddChildToOverlay(RewardOptionsRow))
+	// The selection choices deliberately share one scroll. The art leaves the
+	// centre clean for readable build data and limits decoration to the Bian
+	// River market scenes at the two ends.
+	RewardScrollPanel = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardScrollPanel"));
+	if (!RewardScrollPanelTexture)
 	{
-		OptionsSlot->SetHorizontalAlignment(HAlign_Center);
-		OptionsSlot->SetVerticalAlignment(VAlign_Center);
-		OptionsSlot->SetPadding(FMargin(0.0f, 48.0f, 0.0f, 0.0f));
+		RewardScrollPanelTexture = LoadObject<UTexture2D>(nullptr, RewardScrollPanelPath);
+	}
+	if (RewardScrollPanelTexture)
+	{
+		RewardScrollPanel->SetBrushFromTexture(RewardScrollPanelTexture, true);
+	}
+	RewardScrollPanel->SetColorAndOpacity(FLinearColor::White);
+	RewardScrollPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UCanvasPanelSlot* PanelSlot = RootCanvas->AddChildToCanvas(RewardScrollPanel))
+	{
+		PanelSlot->SetAnchors(FAnchors(0.065f, 0.247f, 0.935f, 0.880f));
+		PanelSlot->SetOffsets(FMargin(0.0f));
+		PanelSlot->SetZOrder(1);
+	}
+
+	PanelContentCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RewardScrollContent"));
+	PanelContentCanvas->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (UCanvasPanelSlot* ContentSlot = RootCanvas->AddChildToCanvas(PanelContentCanvas))
+	{
+		ContentSlot->SetAnchors(FAnchors(0.065f, 0.247f, 0.935f, 0.880f));
+		ContentSlot->SetOffsets(FMargin(0.0f));
+		ContentSlot->SetZOrder(2);
+	}
+
+	RewardOptionsRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RewardOptionsRow"));
+	if (UCanvasPanelSlot* OptionsSlot = PanelContentCanvas->AddChildToCanvas(RewardOptionsRow))
+	{
+		OptionsSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		OptionsSlot->SetOffsets(FMargin(56.0f, 38.0f, 56.0f, 50.0f));
+		OptionsSlot->SetZOrder(1);
+	}
+
+	UTexture2D* SmallDividerTexture = LoadObject<UTexture2D>(nullptr, SmallDividerPath);
+	auto AddVerticalDivider = [this, SmallDividerTexture](const FName& Name, float AnchorX)
+	{
+		UImage* Divider = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), Name);
+		if (SmallDividerTexture)
+		{
+			Divider->SetBrushFromTexture(SmallDividerTexture, true);
+		}
+		Divider->SetColorAndOpacity(FLinearColor(0.19f, 0.18f, 0.16f, 0.48f));
+		Divider->SetDesiredSizeOverride(FVector2D(348.0f, 16.0f));
+		Divider->SetRenderTransformAngle(90.0f);
+		Divider->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+		Divider->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* DividerSlot = PanelContentCanvas->AddChildToCanvas(Divider))
+		{
+			DividerSlot->SetAnchors(FAnchors(AnchorX, 0.50f));
+			DividerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			DividerSlot->SetSize(FVector2D(348.0f, 16.0f));
+			DividerSlot->SetPosition(FVector2D::ZeroVector);
+			DividerSlot->SetZOrder(2);
+		}
+	};
+	AddVerticalDivider(TEXT("RewardColumnDividerLeft"), 1.0f / 3.0f);
+	AddVerticalDivider(TEXT("RewardColumnDividerRight"), 2.0f / 3.0f);
+
+	UImage* FooterDivider = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RewardPanelFooterDivider"));
+	if (SmallDividerTexture)
+	{
+		FooterDivider->SetBrushFromTexture(SmallDividerTexture, true);
+	}
+	FooterDivider->SetColorAndOpacity(FLinearColor(0.14f, 0.13f, 0.12f, 0.62f));
+	FooterDivider->SetDesiredSizeOverride(GetTextureAspectSize(SmallDividerTexture, 248.0f, FVector2D(248.0f, 16.0f)));
+	FooterDivider->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UCanvasPanelSlot* FooterSlot = PanelContentCanvas->AddChildToCanvas(FooterDivider))
+	{
+		FooterSlot->SetAnchors(FAnchors(0.5f, 0.925f));
+		FooterSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		FooterSlot->SetSize(FooterDivider->GetDesiredSize());
+		FooterSlot->SetPosition(FVector2D::ZeroVector);
+		FooterSlot->SetZOrder(3);
 	}
 
 	bNativeTreeBuilt = true;

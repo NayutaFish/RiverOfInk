@@ -57,6 +57,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
 	TObjectPtr<UTexture2D> TitleDividerTexture;
 
+	/** One shared xuan-paper panel behind every reward option. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style")
+	TObjectPtr<UTexture2D> RewardScrollPanelTexture;
+
 	/** Blur strength passed to the separate lower reward-Scrim viewport layer. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Style", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float ScrimBlurStrength = 14.0f;
@@ -105,6 +109,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> RootOverlay;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> RewardScrollPanel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> PanelContentCanvas;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;
