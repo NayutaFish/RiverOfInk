@@ -25,7 +25,7 @@ namespace
 {
 	const TCHAR* TitleDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_TitleDivider.T_UI_Reward_TitleDivider");
 	const TCHAR* RewardScrollPanelPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_ScrollPanel.T_UI_Reward_ScrollPanel");
-	const TCHAR* SmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
+	const TCHAR* RewardWidgetSmallDividerPath = TEXT("/Game/RawContent/UI/Reward/Textures/T_UI_Reward_SmallDivider.T_UI_Reward_SmallDivider");
 	const TCHAR* RewardWidgetStandardUiFontPath = TEXT(
 		"/Game/RawContent/UI/Fonts/AaGuDianKeBenSongYouMoBan_2_Font.AaGuDianKeBenSongYouMoBan_2_Font");
 	constexpr float PanelHorizontalSafeZone = 0.10f;
@@ -369,7 +369,7 @@ void URoguelikeRewardWidget::BuildDefaultWidgetTree()
 		OptionsSlot->SetZOrder(1);
 	}
 
-	UTexture2D* SmallDividerTexture = LoadObject<UTexture2D>(nullptr, SmallDividerPath);
+	UTexture2D* SmallDividerTexture = LoadObject<UTexture2D>(nullptr, RewardWidgetSmallDividerPath);
 	auto AddVerticalDivider = [this, SmallDividerTexture](const FName& Name, float AnchorX)
 	{
 		UImage* Divider = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), Name);
