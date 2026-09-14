@@ -128,6 +128,11 @@ void UCombatBuildDetailsWidget::SetDetailsKey(const FKey& InKey)
 	DetailsKey = InKey.IsValid() ? InKey : EKeys::B;
 }
 
+void UCombatBuildDetailsWidget::SetDetailsGamepadKey(const FKey& InKey)
+{
+	DetailsGamepadKey = InKey.IsValid() ? InKey : EKeys::Gamepad_Special_Right;
+}
+
 void UCombatBuildDetailsWidget::ClearForClose()
 {
 	UnbindSkillEvents();
@@ -1196,7 +1201,9 @@ bool UCombatBuildDetailsWidget::MoveSelectionVertical(int32 Direction)
 
 bool UCombatBuildDetailsWidget::HandleNavigationKey(const FKey& Key)
 {
-	if ((DetailsKey.IsValid() && Key == DetailsKey) || Key == EKeys::Escape)
+	if ((DetailsKey.IsValid() && Key == DetailsKey)
+		|| (DetailsGamepadKey.IsValid() && Key == DetailsGamepadKey)
+		|| Key == EKeys::Escape)
 	{
 		if (ObservedPlayer)
 		{

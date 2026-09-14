@@ -107,6 +107,12 @@ public:
 	/** Pass the player-configured toggle key to the UI-only modal. */
 	void SetDetailsKey(const FKey& InKey);
 
+	/**
+	 * 传入手柄开关键（默认 Xbox Start）。面板是 UIOnly + 处于暂停状态，
+	 * 打开它的那条 PlayerInputComponent 绑定收不到按键，所以关闭必须由面板自己认这个键。
+	 */
+	void SetDetailsGamepadKey(const FKey& InKey);
+
 	/** Give keyboard/gamepad focus to the first visible build slot. */
 	void FocusFirstAvailableSlot();
 
@@ -271,6 +277,10 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	FKey DetailsKey = EKeys::B;
+
+	/** 手柄开关键（默认 Xbox Start / 菜单键）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	FKey DetailsGamepadKey = EKeys::Gamepad_Special_Right;
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Navigation", meta = (AllowPrivateAccess = "true"))
 	FName SelectedBuildId;

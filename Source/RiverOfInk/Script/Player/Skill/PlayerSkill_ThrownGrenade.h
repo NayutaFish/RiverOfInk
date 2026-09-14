@@ -53,7 +53,7 @@ public:
 		FVector InGuidanceTargetOffset = FVector::ZeroVector,
 		UNiagaraSystem* InNiagaraSystem = nullptr,
 		UNiagaraSystem* InImpactNiagaraSystem = nullptr,
-		bool bInDrawDebugExplosion = true
+		bool bInDrawDebugExplosion = false
 	);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skill|ThrownGrenade|Components")
@@ -101,9 +101,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Feedback")
 	FAttackHitShakeBinding ExplosionHitShakeBinding;
 
-	/** Development-only debug sphere at the explosion location. */
+	/** Development-only debug sphere at the explosion location; off by default. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Debug")
-	bool bDrawDebugExplosion = true;
+	bool bDrawDebugExplosion = false;
 
 protected:
 	virtual void BeginPlay() override;

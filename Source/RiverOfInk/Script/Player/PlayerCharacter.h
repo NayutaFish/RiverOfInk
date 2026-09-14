@@ -294,6 +294,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Cheat")
 	FKey CheatHealKey = EKeys::H;
 
+	/** 技能书面板的手柄开关键（默认 Xbox Start / 菜单键）；与键盘 B 等效。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Build HUD")
+	FKey BuildDetailsGamepadKey = EKeys::Gamepad_Special_Right;
+
 	TWeakObjectPtr<ARoguelikeShopManager> NearbyShopManager;
 
 	void Die();

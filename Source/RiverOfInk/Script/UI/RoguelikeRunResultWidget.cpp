@@ -42,6 +42,11 @@ namespace
 	FLinearColor SealColor(0.55f, 0.10f, 0.06f, 1.0f);
 	FLinearColor ButtonInkColor(0.07f, 0.055f, 0.038f, 1.0f);
 
+	/** 结算页按钮落在选中/悬停状态时的配色。 */
+	const FLinearColor ResultActionHighlightTint(1.0f, 0.93f, 0.80f, 1.0f);
+	const FLinearColor ResultActionHighlightInk(0.42f, 0.085f, 0.05f, 1.0f);
+	const FLinearColor ResultActionHighlightRule(0.55f, 0.10f, 0.06f, 0.85f);
+
 	UTexture2D* LoadResultTexture(const TCHAR* ObjectPath)
 	{
 		return LoadObject<UTexture2D>(nullptr, ObjectPath);
@@ -221,12 +226,160 @@ void URoguelikeRunResultWidget::CloseForTransition()
 void URoguelikeRunResultWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// 按钮动效独立于入场序列：入场结束后（以及暂停中）也要继续跑。
+	UpdateActionButtonVisuals();
+
 	if (!bSequencePlaying)
 	{
 		return;
 	}
 
 	UpdateEntranceSequence(static_cast<float>(FPlatformTime::Seconds() - SequenceStartSeconds));
+}
+
+// ──────────────────────────────
+// 底部两个按钮的动效
+// ──────────────────────────────
+
+void URoguelikeRunResultWidget::UpdateActionButtonVisuals()
+{
+	if (ActionButtons.IsEmpty())
+	{
+		return;
+	}
+
+	const int32 ButtonCount = ActionButtons.Num();
+	ActionAppliedScale.SetNum(ButtonCount);
+	ActionAppliedLift.SetNum(ButtonCount);
+	ActionActiveFlags.SetNum(ButtonCount);
+
+	// 时间基准用真实时间：结算页是暂停状态，DeltaTime 不可靠。
+	const double Now = FPlatformTime::Seconds();
+
+	// 第一遍：检测落点变化（悬停 / Slate 焦点都算），新落点上触发一次脉冲。
+	for (int32 Index = 0; Index < ButtonCount; ++Index)
+	{
+		UButton* Button = ActionButtons[Index];
+		if (!IsValid(Button))
+		{
+			continue;
+		}
+
+		const bool bActive = Button->GetIsEnabled() && (Button->IsHovered() || Button->HasKeyboardFocus());
+		if (bActive && !ActionActiveFlags[Index])
+		{
+			if (ActionPulseIndex != INDEX_NONE && ActionButtons.IsValidIndex(ActionPulseIndex))
+			{
+				// 换落点：先把上一个按钮的抬起量还回去，避免残留位移。
+				if (UCanvasPanelSlot* PreviousSlot = Cast<UCanvasPanelSlot>(ActionButtons[ActionPulseIndex]->Slot))
+				{
+					if (ActionButtonBasePositions.IsValidIndex(ActionPulseIndex))
+					{
+						PreviousSlot->SetPosition(ActionButtonBasePositions[ActionPulseIndex]);
+					}
+				}
+				if (ActionAppliedLift.IsValidIndex(ActionPulseIndex))
+				{
+					ActionAppliedLift[ActionPulseIndex] = 0.0f;
+				}
+			}
+
+			ActionPulseIndex = Index;
+			ActionPulseStartSeconds = Now;
+		}
+
+		if (bActive != ActionActiveFlags[Index])
+		{
+			ApplyActionButtonHighlight(Button, bActive);
+			ActionActiveFlags[Index] = bActive;
+		}
+	}
+
+	// 脉冲进度（sin 曲线 0 → 峰值 → 0；跑完自动清掉）
+	float PulseCurve = 0.0f;
+	if (ActionPulseIndex != INDEX_NONE)
+	{
+		if (ActionPulseDuration <= 0.0f)
+		{
+			ActionPulseIndex = INDEX_NONE;
+		}
+		else
+		{
+			const float Elapsed = static_cast<float>(Now - ActionPulseStartSeconds);
+			const float Alpha = FMath::Clamp(Elapsed / ActionPulseDuration, 0.0f, 1.0f);
+			PulseCurve = FMath::Sin(Alpha * UE_PI);
+			if (Alpha >= 1.0f)
+			{
+				ActionPulseIndex = INDEX_NONE;
+				PulseCurve = 0.0f;
+			}
+		}
+	}
+
+	const float BreathPeriod = FMath::Max(0.05f, ActionBreathPeriod);
+	const float Breath = ActionBreathScale
+		* FMath::Sin(2.0f * UE_PI * static_cast<float>(Now - ActionBreathStartSeconds) / BreathPeriod);
+
+	// 第二遍：合成缩放与抬起。
+	for (int32 Index = 0; Index < ButtonCount; ++Index)
+	{
+		UButton* Button = ActionButtons[Index];
+		if (!IsValid(Button))
+		{
+			continue;
+		}
+
+		const bool bActive = ActionActiveFlags[Index];
+		const bool bPulsing = (Index == ActionPulseIndex);
+		const float TargetScale = (bActive ? ActionActiveScale : 1.0f)
+			+ (bActive ? Breath : 0.0f)
+			+ (bPulsing ? ActionPulseScale * PulseCurve : 0.0f);
+		const float TargetLift = bPulsing ? -ActionPulseLift * PulseCurve : 0.0f;
+
+		if (!FMath::IsNearlyEqual(ActionAppliedScale[Index], TargetScale, 0.0005f))
+		{
+			Button->SetRenderScale(FVector2D(TargetScale));
+			ActionAppliedScale[Index] = TargetScale;
+		}
+
+		if (!FMath::IsNearlyEqual(ActionAppliedLift[Index], TargetLift, 0.1f))
+		{
+			if (UCanvasPanelSlot* ButtonSlot = Cast<UCanvasPanelSlot>(Button->Slot))
+			{
+				if (ActionButtonBasePositions.IsValidIndex(Index))
+				{
+					ButtonSlot->SetPosition(ActionButtonBasePositions[Index] + FVector2D(0.0f, TargetLift));
+				}
+			}
+			ActionAppliedLift[Index] = TargetLift;
+		}
+	}
+}
+
+void URoguelikeRunResultWidget::ApplyActionButtonHighlight(const UButton* Button, bool bHighlighted)
+{
+	// 主按钮是笔刷图，靠暖色提亮；次按钮是纯文字，靠落款红 + 下划线加重。
+	if (Button == RestartButton)
+	{
+		if (RestartBrushImage)
+		{
+			RestartBrushImage->SetColorAndOpacity(bHighlighted ? ResultActionHighlightTint : FLinearColor::White);
+		}
+		return;
+	}
+
+	if (Button == PreparationButton)
+	{
+		if (PreparationLabel)
+		{
+			PreparationLabel->SetColorAndOpacity(FSlateColor(bHighlighted ? ResultActionHighlightInk : InkColor));
+		}
+		if (PreparationRule)
+		{
+			PreparationRule->SetBrushColor(bHighlighted ? ResultActionHighlightRule : DividerColor);
+		}
+	}
 }
 
 void URoguelikeRunResultWidget::BuildDefaultWidgetTree()
@@ -417,10 +570,10 @@ void URoguelikeRunResultWidget::BuildDefaultWidgetTree()
 	UOverlay* RestartVisual = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ResultRestartVisual"));
 	if (UTexture2D* PrimaryBrushTexture = LoadResultTexture(TEXT("/Game/RawContent/UI/Result/T_UI_Result_PrimaryBrush.T_UI_Result_PrimaryBrush")))
 	{
-		UImage* PrimaryBrushImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ResultRestartBrush"));
-		PrimaryBrushImage->SetBrushFromTexture(PrimaryBrushTexture, true);
-		PrimaryBrushImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (UOverlaySlot* BrushSlot = RestartVisual->AddChildToOverlay(PrimaryBrushImage))
+		RestartBrushImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ResultRestartBrush"));
+		RestartBrushImage->SetBrushFromTexture(PrimaryBrushTexture, true);
+		RestartBrushImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UOverlaySlot* BrushSlot = RestartVisual->AddChildToOverlay(RestartBrushImage))
 		{
 			BrushSlot->SetHorizontalAlignment(HAlign_Fill);
 			BrushSlot->SetVerticalAlignment(VAlign_Fill);
@@ -443,13 +596,37 @@ void URoguelikeRunResultWidget::BuildDefaultWidgetTree()
 
 	PreparationButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ResultPreparationButton"));
 	PreparationButton->SetBackgroundColor(FLinearColor::Transparent);
-	UTextBlock* PreparationText = MakeText(WidgetTree, TEXT("ResultPreparationText"), NSLOCTEXT("RunResult", "Preparation", "返回准备区"), 27, InkColor, ETextJustify::Center);
-	PreparationText->SetVisibility(ESlateVisibility::HitTestInvisible);
-	PreparationButton->SetContent(PreparationText);
+	PreparationLabel = MakeText(WidgetTree, TEXT("ResultPreparationText"), NSLOCTEXT("RunResult", "Preparation", "返回准备区"), 27, InkColor, ETextJustify::Center);
+	PreparationLabel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	PreparationButton->SetContent(PreparationLabel);
 	AddCanvasChild(ActionCanvas, PreparationButton, FVector2D(445.0f, 6.0f), FVector2D(220.0f, 60.0f));
-	UBorder* PreparationRule = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ResultPreparationRule"));
+	PreparationRule = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ResultPreparationRule"));
 	PreparationRule->SetBrushColor(DividerColor);
 	AddCanvasChild(ActionCanvas, PreparationRule, FVector2D(470.0f, 70.0f), FVector2D(170.0f, 1.0f));
+
+	// 两个动作按钮登记进动效列表（顺序固定：再来一局 / 返回准备区），
+	// 位置基准取自画布槽，缩放绕中心，动效结束后要还原。
+	ActionButtons.Reset();
+	ActionButtonBasePositions.Reset();
+	ActionButtons.Add(RestartButton);
+	ActionButtons.Add(PreparationButton);
+	for (UButton* ActionButton : ActionButtons)
+	{
+		FVector2D BasePosition = FVector2D::ZeroVector;
+		if (IsValid(ActionButton))
+		{
+			ActionButton->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+			if (const UCanvasPanelSlot* ActionSlot = Cast<UCanvasPanelSlot>(ActionButton->Slot))
+			{
+				BasePosition = ActionSlot->GetPosition();
+			}
+		}
+		ActionButtonBasePositions.Add(BasePosition);
+	}
+	ActionAppliedScale.Init(1.0f, ActionButtons.Num());
+	ActionAppliedLift.Init(0.0f, ActionButtons.Num());
+	ActionActiveFlags.Init(false, ActionButtons.Num());
+	ActionBreathStartSeconds = FPlatformTime::Seconds();
 
 	StatusText = MakeText(WidgetTree, TEXT("ResultStatusText"), FText::GetEmpty(), 20, SealColor, ETextJustify::Center);
 	AddCanvasChild(LayoutCanvas, StatusText, FVector2D(550.0f, 992.0f), FVector2D(820.0f, 30.0f));
@@ -562,6 +739,31 @@ void URoguelikeRunResultWidget::ResetEntranceState()
 	EmptyRewardsText->SetRenderOpacity(0.0f);
 	ActionRoot->SetRenderOpacity(0.0f);
 	SetActionsEnabled(false);
+
+	// 按钮动效复位：重新打开一局结算时从静止状态开始，清掉上一次的脉冲/高亮残留。
+	ActionPulseIndex = INDEX_NONE;
+	ActionBreathStartSeconds = FPlatformTime::Seconds();
+	ActionActiveFlags.Init(false, ActionButtons.Num());
+	ActionAppliedScale.Init(1.0f, ActionButtons.Num());
+	ActionAppliedLift.Init(0.0f, ActionButtons.Num());
+	for (int32 Index = 0; Index < ActionButtons.Num(); ++Index)
+	{
+		UButton* ActionButton = ActionButtons[Index];
+		if (!IsValid(ActionButton))
+		{
+			continue;
+		}
+
+		ActionButton->SetRenderScale(FVector2D(1.0f));
+		if (UCanvasPanelSlot* ActionSlot = Cast<UCanvasPanelSlot>(ActionButton->Slot))
+		{
+			if (ActionButtonBasePositions.IsValidIndex(Index))
+			{
+				ActionSlot->SetPosition(ActionButtonBasePositions[Index]);
+			}
+		}
+		ApplyActionButtonHighlight(ActionButton, false);
+	}
 }
 
 void URoguelikeRunResultWidget::UpdateEntranceSequence(float ElapsedSeconds)

@@ -323,9 +323,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Impact")
 	TObjectPtr<UNiagaraSystem> ThrownGrenadeImpactNiagaraSystem;
 
-	/** 雷电球落地后是否显示伤害范围线框球；在编辑器里可开关。 */
+	/** 雷电球落地后是否显示伤害范围线框球；默认关闭，需要时在编辑器里勾上。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile|ThrownGrenade|Debug")
-	bool bDrawThrownGrenadeDebugExplosion = true;
+	bool bDrawThrownGrenadeDebugExplosion = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|TripleProjectile", meta = (ClampMin = "0.0"))
 	float TripleProjectileCooldown = 4.0f;

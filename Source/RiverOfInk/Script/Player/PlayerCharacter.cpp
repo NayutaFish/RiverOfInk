@@ -650,6 +650,7 @@ void APlayerCharacter::CreateCombatBuildDetailsWidget()
 	}
 
 	CombatBuildDetailsWidget->SetDetailsKey(BuildDetailsKey);
+	CombatBuildDetailsWidget->SetDetailsGamepadKey(BuildDetailsGamepadKey);
 	CombatBuildDetailsWidget->SetIsFocusable(true);
 	CombatBuildDetailsWidget->SetVisibility(ESlateVisibility::Visible);
 	if (!CombatBuildDetailsWidget->IsInViewport())
@@ -860,6 +861,16 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		PlayerInputComponent->BindKey(
 			BuildDetailsKey,
+			IE_Pressed,
+			this,
+			&APlayerCharacter::ToggleCombatBuildDetails);
+	}
+	// 手柄开关键（默认 Xbox Start）：面板打开时是 UIOnly，这里只负责“打开”；
+	// 关闭由面板自己处理（见 UCombatBuildDetailsWidget::HandleNavigationKey）。
+	if (PlayerInputComponent && BuildDetailsGamepadKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(
+			BuildDetailsGamepadKey,
 			IE_Pressed,
 			this,
 			&APlayerCharacter::ToggleCombatBuildDetails);

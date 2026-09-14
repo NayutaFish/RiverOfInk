@@ -63,6 +63,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Animation", meta = (ClampMin = "0.01"))
 	float ActionsFadeDuration = 0.20f;
 
+	// ── 底部两个动作按钮的动效（鼠标悬停 / 手柄·键盘焦点）──
+
+	/** 落在某一项上时的常态放大。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "1.0"))
+	float ActionActiveScale = 1.05f;
+
+	/** 刚落到某一项上时额外弹一下的幅度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "0.0"))
+	float ActionPulseScale = 0.05f;
+
+	/** 弹一下的时长（秒）；0 = 不做脉冲。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "0.0", Units = "s"))
+	float ActionPulseDuration = 0.22f;
+
+	/** 脉冲期间向上抬起的像素（回落归零，不会残留位移）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "0.0"))
+	float ActionPulseLift = 7.0f;
+
+	/** 停在该项上时的呼吸缩放幅度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "0.0"))
+	float ActionBreathScale = 0.008f;
+
+	/** 呼吸一个来回的时长（秒）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Result|Action Buttons", meta = (ClampMin = "0.05", Units = "s"))
+	float ActionBreathPeriod = 1.6f;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -83,6 +109,17 @@ private:
 	void BeginLeaveRequest();
 	void RestoreAfterLeaveFailure(const FText& FailureMessage);
 	UWidget* BuildRewardEntry(const FSettlementRewardPick& Pick, int32 DisplayIndex);
+
+	// ── 底部按钮动效 ──
+
+	/**
+	 * 逐帧合成两个按钮的缩放与抬起：悬停或 Slate 焦点（手柄/键盘）都算“落点”，
+	 * 落上时弹一下 + 常态放大 + 缓慢呼吸。只在数值真变了才写回，避免每帧打脏布局。
+	 */
+	void UpdateActionButtonVisuals();
+
+	/** 落点变化时切换主按钮笔刷提亮 / 次按钮文字与下划线配色。 */
+	void ApplyActionButtonHighlight(const UButton* Button, bool bHighlighted);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> RootCanvas;
@@ -127,6 +164,36 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> PreparationButton;
+
+	/** 主按钮（再来一局）的笔刷图：落点上时暖色提亮。 */
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> RestartBrushImage;
+
+	/** 次按钮（返回准备区）的文字与下划线：落点上时改成落款红。 */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PreparationLabel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> PreparationRule;
+
+	/** 参与动效的两个按钮，顺序固定为 { 再来一局, 返回准备区 }。 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UButton>> ActionButtons;
+
+	/** 各按钮在 ActionCanvas 上的基准位置（抬起动画结束后要还原）。 */
+	TArray<FVector2D> ActionButtonBasePositions;
+
+	/** 已经写回的缩放与抬起量，用来避免每帧重复写。 */
+	TArray<float> ActionAppliedScale;
+	TArray<float> ActionAppliedLift;
+
+	/** 各按钮上一帧是否处于“落点上”，用来检测落点变化并触发脉冲。 */
+	TArray<bool> ActionActiveFlags;
+
+	/** 正在脉冲的按钮；INDEX_NONE = 没有。时间基准用真实时间，不受暂停/时间膨胀影响。 */
+	int32 ActionPulseIndex = INDEX_NONE;
+	double ActionPulseStartSeconds = 0.0;
+	double ActionBreathStartSeconds = 0.0;
 
 	bool bNativeTreeBuilt = false;
 	bool bSequencePlaying = false;

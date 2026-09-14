@@ -108,9 +108,9 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Hitbox", meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
 	float ComboSecondHitboxRadiusMultiplier = 1.5f;
 
-	/** PIE 调试开关：显示普通攻击 CollisionSphere 的真实范围。 */
+	/** PIE 调试开关：显示普通攻击 CollisionSphere 的真实范围（默认关闭）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Debug", meta = (AllowPrivateAccess = "true"))
-	bool bDebugDrawHitbox = true;
+	bool bDebugDrawHitbox = false;
 
 	/** 调试球体线宽；不影响实际碰撞。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackState|Debug", meta = (AllowPrivateAccess = "true", ClampMin = "0.1"))

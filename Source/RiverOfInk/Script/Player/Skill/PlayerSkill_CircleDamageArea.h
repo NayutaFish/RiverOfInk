@@ -71,9 +71,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea", meta = (ClampMin = "0.01"))
 	float LifeTime = 0.25f;
 
-	/** Development-only wireframe preview; compiled out when debug drawing is disabled. */
+	/** Development-only wireframe preview; off by default, tick it in the editor when needed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea|Debug")
-	bool bDrawDebugArea = true;
+	bool bDrawDebugArea = false;
 
 	/** True only for the E Null Ring form. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|NullRing")

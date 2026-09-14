@@ -16,7 +16,8 @@ AAttackArea_PlayerAttack1::AAttackArea_PlayerAttack1()
 	HitShakeBinding.PresetId = TEXT("Player.LightHit");
 	HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 	FanHalfAngleDegrees = 55.0f;
-	bDrawDebugHitbox = true;
+	// 调试线框默认关闭；需要看真实判定范围时在编辑器里勾 bDrawDebugHitbox。
+	bDrawDebugHitbox = false;
 	DebugHitboxColor = FColor(60, 220, 255, 220);
 }
 void AAttackArea_PlayerAttack1::ApplyDamage_Implementation(AActor* Target)

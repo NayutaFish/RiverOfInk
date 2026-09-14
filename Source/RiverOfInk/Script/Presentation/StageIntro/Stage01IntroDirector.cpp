@@ -13,6 +13,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ContentWidget.h"
 #include "Components/Image.h"
+#include "Components/InputComponent.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Engine/Font.h"
@@ -21,6 +22,7 @@
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
@@ -235,6 +237,9 @@ void AStage01IntroDirector::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	MaintainIntroCameraOwnership();
 	const float SafeDeltaTime = FMath::Max(0.0f, DeltaTime);
+
+	// 主菜单可操作期间：同步 Slate 焦点到选中项，并推进选中动效（淡出阶段也让动效自然收尾）。
+	UpdateMainMenuSelection(SafeDeltaTime);
 
 	// The HUD owns this transition until its event-driven fade has completed.
 	// Only then can the ink timeline acquire the opening state.
@@ -1037,6 +1042,292 @@ void AStage01IntroDirector::ApplyMainMenuHudArt(UUserWidget* MenuWidget)
 		IsValid(InkPanelTexture) ? TEXT("loaded") : TEXT("missing"),
 		OrderedButtons.Num(),
 		IsValid(MainMenuFont) ? TEXT("AaGuDianKeBenSongYouMoBan_2_Font") : TEXT("fallback"));
+
+	// 记住按钮顺序、基准位置和两张按钮贴图：手柄/键盘导航要按同一顺序切选中项，
+	// 选中项常驻 Focus 贴图，动效结束后还要把画布位置还原。
+	MenuNormalButtonTexture = NormalButtonTexture;
+	MenuFocusButtonTexture = FocusButtonTexture;
+	MenuButtons.Reset();
+	MenuButtonBasePositions.Reset();
+	for (UButton* Button : OrderedButtons)
+	{
+		MenuButtons.Add(Button);
+
+		FVector2D BasePosition = FVector2D::ZeroVector;
+		if (IsValid(Button))
+		{
+			if (const UCanvasPanelSlot* ButtonSlot = Cast<UCanvasPanelSlot>(Button->Slot))
+			{
+				BasePosition = ButtonSlot->GetPosition();
+			}
+		}
+		MenuButtonBasePositions.Add(BasePosition);
+
+		if (IsValid(Button))
+		{
+			Button->SetRenderTransformPivot(FVector2D(0.0f, 0.5f));
+		}
+	}
+}
+
+void AStage01IntroDirector::SetupMenuInput()
+{
+	if (bMenuInputReady)
+	{
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (!IsValid(PC))
+	{
+		return;
+	}
+
+	EnableInput(PC);
+	if (!InputComponent)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Stage01 main menu input component could not be created; the menu stays mouse-only."));
+		return;
+	}
+
+	// 主菜单是 GameAndUI：Slate 先处理输入。
+	// 有 Slate 焦点时十字键与 A 由 UButton 自己响应（Tick 里把焦点同步成选中项）；
+	// 没有焦点时这些键会落到这里，由本导演兜底。
+	InputComponent->BindKey(EKeys::Gamepad_DPad_Up, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateUp);
+	InputComponent->BindKey(EKeys::Gamepad_DPad_Down, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateDown);
+	InputComponent->BindKey(EKeys::Up, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateUp);
+	InputComponent->BindKey(EKeys::Down, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateDown);
+	InputComponent->BindKey(EKeys::W, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateUp);
+	InputComponent->BindKey(EKeys::S, IE_Pressed, this, &AStage01IntroDirector::HandleMenuNavigateDown);
+	InputComponent->BindKey(EKeys::Gamepad_FaceButton_Bottom, IE_Pressed, this, &AStage01IntroDirector::HandleMenuConfirm);
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AStage01IntroDirector::HandleMenuConfirm);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AStage01IntroDirector::HandleMenuConfirm);
+
+	bMenuInputReady = true;
+	UE_LOG(LogTemp, Log,
+		TEXT("Stage01 main menu gamepad input ready: DPad/WS/arrows navigate, A/Enter/Space confirm."));
+}
+
+bool AStage01IntroDirector::IsMenuInteractive() const
+{
+	if (!bMainMenuBound || bIntroPlaying || bTravelRequested || MenuButtons.IsEmpty())
+	{
+		return false;
+	}
+
+	// 过场进行中、淡出中、切图阶段都不接受导航；失败回退后菜单重新可用。
+	return IntroState == EStage01IntroState::Idle
+		|| IntroState == EStage01IntroState::Failed
+		|| IntroState == EStage01IntroState::PreviewComplete;
+}
+
+void AStage01IntroDirector::HandleMenuNavigateUp()
+{
+	if (!IsMenuInteractive())
+	{
+		return;
+	}
+
+	const int32 Count = MenuButtons.Num();
+	const int32 Current = MenuButtons.IsValidIndex(MenuSelectionIndex) ? MenuSelectionIndex : 0;
+	SetMenuSelection((Current - 1 + Count) % Count, true);
+}
+
+void AStage01IntroDirector::HandleMenuNavigateDown()
+{
+	if (!IsMenuInteractive())
+	{
+		return;
+	}
+
+	const int32 Count = MenuButtons.Num();
+	const int32 Current = MenuButtons.IsValidIndex(MenuSelectionIndex) ? MenuSelectionIndex : 0;
+	SetMenuSelection((Current + 1) % Count, true);
+}
+
+void AStage01IntroDirector::HandleMenuConfirm()
+{
+	if (!IsMenuInteractive() || !MenuButtons.IsValidIndex(MenuSelectionIndex))
+	{
+		return;
+	}
+
+	UButton* Button = MenuButtons[MenuSelectionIndex];
+	if (!IsValid(Button) || !Button->GetIsEnabled())
+	{
+		return;
+	}
+
+	// 走按钮自己的点击委托，蓝图里挂在“设置/退出游戏”上的逻辑也会被手柄触发。
+	Button->OnClicked.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("Stage01 main menu confirm: '%s'."), *Button->GetName());
+}
+
+void AStage01IntroDirector::SetMenuSelection(int32 Index, bool bPlayPulse)
+{
+	if (!MenuButtons.IsValidIndex(Index))
+	{
+		return;
+	}
+
+	const bool bChanged = (Index != MenuSelectionIndex);
+	MenuSelectionIndex = Index;
+
+	if (UButton* Button = MenuButtons[Index])
+	{
+		// Slate 焦点跟着选中项走：这样 A/Enter 由 UButton 自己响应，和鼠标点击是同一条路径。
+		Button->SetKeyboardFocus();
+	}
+
+	RefreshMenuSelectionArt();
+
+	if (bPlayPulse && (bChanged || MenuPulseIndex == INDEX_NONE))
+	{
+		StartMenuSelectionPulse(Index);
+	}
+}
+
+void AStage01IntroDirector::RefreshMenuSelectionArt()
+{
+	if (MenuButtons.IsEmpty())
+	{
+		return;
+	}
+
+	const FSlateBrush NormalBrush = MakeMainMenuBrush(MenuNormalButtonTexture, FLinearColor::White);
+	const FSlateBrush FocusBrush = MakeMainMenuBrush(MenuFocusButtonTexture, FLinearColor::White);
+	FSlateBrush HoverBrush = FocusBrush;
+	HoverBrush.TintColor = FSlateColor(FLinearColor(1.0f, 0.88f, 0.78f, 1.0f));
+
+	for (int32 Index = 0; Index < MenuButtons.Num(); ++Index)
+	{
+		UButton* Button = MenuButtons[Index];
+		if (!IsValid(Button))
+		{
+			continue;
+		}
+
+		FButtonStyle Style = Button->GetStyle();
+		// 选中项常驻 Focus 贴图，未选中回到普通贴图；悬停/按下保持原有的暖色反馈。
+		Style.Normal = (Index == MenuSelectionIndex) ? FocusBrush : NormalBrush;
+		Style.Hovered = HoverBrush;
+		Style.Pressed = FocusBrush;
+		Style.Disabled = NormalBrush;
+		Button->SetStyle(Style);
+	}
+}
+
+void AStage01IntroDirector::StartMenuSelectionPulse(int32 Index)
+{
+	if (!MenuButtons.IsValidIndex(Index) || !MenuButtons[Index])
+	{
+		return;
+	}
+
+	// 换项时上一条脉冲直接作废：动效由 UpdateMenuButtonVisuals 逐帧重新合成，不需要手动归位。
+	MenuPulseIndex = Index;
+	MenuPulseElapsed = 0.0f;
+	MenuButtons[Index]->SetRenderTransformPivot(FVector2D(0.0f, 0.5f));
+}
+
+void AStage01IntroDirector::UpdateMainMenuSelection(float DeltaTime)
+{
+	if (IsMenuInteractive())
+	{
+		SyncMenuSelectionFromFocus();
+	}
+
+	UpdateMenuButtonVisuals(DeltaTime);
+}
+
+void AStage01IntroDirector::SyncMenuSelectionFromFocus()
+{
+	for (int32 Index = 0; Index < MenuButtons.Num(); ++Index)
+	{
+		UButton* Button = MenuButtons[Index];
+		if (IsValid(Button) && Index != MenuSelectionIndex && Button->HasKeyboardFocus())
+		{
+			// 十字键被 Slate 的焦点导航吃掉时，焦点会先动；这里把它同步成选中项，
+			// 贴图与动效就跟得上，不会出现“焦点在这、高亮在那”。
+			SetMenuSelection(Index, true);
+			return;
+		}
+	}
+}
+
+void AStage01IntroDirector::UpdateMenuButtonVisuals(float DeltaTime)
+{
+	if (MenuButtons.IsEmpty())
+	{
+		return;
+	}
+
+	MenuButtonAppliedScale.SetNum(MenuButtons.Num());
+	MenuButtonAppliedOffsetX.SetNum(MenuButtons.Num());
+
+	// 选中项的静止呼吸：很小的缩放浮动，配合 Focus 贴图让“当前落点”在不动时也活着。
+	MenuBreathElapsed += DeltaTime;
+	const float BreathPeriod = FMath::Max(0.05f, MenuSelectionBreathPeriod);
+	const float Breath = MenuSelectionBreathScale
+		* FMath::Sin(2.0f * UE_PI * MenuBreathElapsed / BreathPeriod);
+
+	// 脉冲：sin 曲线 0 → 峰值 → 0；跑完就清掉，由下面的合成自然回到静止值。
+	float PulseCurve = 0.0f;
+	if (MenuPulseIndex != INDEX_NONE)
+	{
+		if (MenuSelectionPulseDuration <= 0.0f)
+		{
+			MenuPulseIndex = INDEX_NONE;
+		}
+		else
+		{
+			MenuPulseElapsed += DeltaTime;
+			const float Alpha = FMath::Clamp(MenuPulseElapsed / MenuSelectionPulseDuration, 0.0f, 1.0f);
+			PulseCurve = FMath::Sin(Alpha * UE_PI);
+			if (Alpha >= 1.0f)
+			{
+				MenuPulseIndex = INDEX_NONE;
+				PulseCurve = 0.0f;
+			}
+		}
+	}
+
+	for (int32 Index = 0; Index < MenuButtons.Num(); ++Index)
+	{
+		UButton* Button = MenuButtons[Index];
+		if (!IsValid(Button))
+		{
+			continue;
+		}
+
+		const bool bSelected = (Index == MenuSelectionIndex);
+		const bool bPulsing = (Index == MenuPulseIndex);
+		const float TargetScale = (bSelected ? MenuSelectedRestScale : 1.0f)
+			+ (bSelected ? Breath : 0.0f)
+			+ (bPulsing ? MenuSelectionPulseScale * PulseCurve : 0.0f);
+		const float TargetOffsetX = bPulsing ? MenuSelectionPulseOffsetX * PulseCurve : 0.0f;
+
+		// 只在数值真的变了才写回：SetPosition 会把画布布局标脏，不能每帧无脑调。
+		if (!FMath::IsNearlyEqual(MenuButtonAppliedScale[Index], TargetScale, 0.0005f))
+		{
+			Button->SetRenderScale(FVector2D(TargetScale));
+			MenuButtonAppliedScale[Index] = TargetScale;
+		}
+
+		if (!FMath::IsNearlyEqual(MenuButtonAppliedOffsetX[Index], TargetOffsetX, 0.05f))
+		{
+			if (UCanvasPanelSlot* ButtonSlot = Cast<UCanvasPanelSlot>(Button->Slot))
+			{
+				if (MenuButtonBasePositions.IsValidIndex(Index))
+				{
+					ButtonSlot->SetPosition(
+						MenuButtonBasePositions[Index] + FVector2D(TargetOffsetX, 0.0f));
+				}
+			}
+			MenuButtonAppliedOffsetX[Index] = TargetOffsetX;
+		}
+	}
 }
 
 bool AStage01IntroDirector::TryBindMainMenu()
@@ -1045,6 +1336,7 @@ bool AStage01IntroDirector::TryBindMainMenu()
 	{
 		return bMainMenuBound;
 	}
+
 
 	++MainMenuBindAttempts;
 	TArray<UUserWidget*> Widgets;
@@ -1112,6 +1404,8 @@ bool AStage01IntroDirector::TryBindMainMenu()
 		if (!BoundNewGameButtons.IsEmpty())
 		{
 			BoundMainMenuWidget = Candidate;
+			// 手柄/键盘导航要给按钮设 Slate 焦点，先确保这个 UserWidget 允许承载焦点。
+			Candidate->SetIsFocusable(true);
 			ApplyMainMenuHudArt(Candidate);
 			bMainMenuBound = true;
 			GetWorld()->GetTimerManager().ClearTimer(MainMenuBindTimer);
@@ -1119,6 +1413,9 @@ bool AStage01IntroDirector::TryBindMainMenu()
 			// establish the UI input mode after binding so the first mouse click
 			// is not spent only giving Slate focus to the viewport.
 			SetMenuCinematicState(false);
+			// 手柄/键盘：绑定导航键，并把默认选中项落到“开始游戏”上（顺带播一次提示动效）。
+			SetupMenuInput();
+			SetMenuSelection(0, true);
 			UE_LOG(LogTemp, Log,
 				TEXT("Stage01 intro bound MainMenu widget '%s' to %d New Game button(s)."),
 				*Candidate->GetName(), BoundNewGameButtons.Num());
@@ -1326,6 +1623,12 @@ void AStage01IntroDirector::SetMenuCinematicState(bool bCinematic)
 void AStage01IntroDirector::RestoreMainMenuAfterFailure()
 {
 	SetMenuCinematicState(false);
+
+	// 失败回退后重新把选中项/焦点交回菜单，手柄不必再摸鼠标就能继续操作。
+	if (bMenuInputReady)
+	{
+		SetMenuSelection(MenuButtons.IsValidIndex(MenuSelectionIndex) ? MenuSelectionIndex : 0, false);
+	}
 }
 
 void AStage01IntroDirector::ClearPreviewWidgets()
