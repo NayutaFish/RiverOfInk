@@ -165,6 +165,13 @@ bool FCameraShakeManager::OnShakeTick(float DeltaTime)
 		return false; // 移除 Ticker
 	}
 
+	ACameraManager* Camera = GetCameraManager(World);
+	if (Camera && Camera->IsExitGuideActive())
+	{
+		// Combat shake is suppressed while the route-guide camera owns the view.
+		Camera->CurrentShakeOffset = FVector::ZeroVector;
+		return true;
+	}
 	// 强度随时间线性衰减
 	const float CurrentIntensity = ShakeIntensity * FMath::Max(ShakeRemaining, 0.0f) / (ShakeRemaining + DeltaTime * 10.0f);
 
@@ -174,7 +181,6 @@ bool FCameraShakeManager::OnShakeTick(float DeltaTime)
 		FMath::FRandRange(-1.0f, 1.0f) * CurrentIntensity,
 		FMath::FRandRange(-0.3f, 0.3f) * CurrentIntensity);
 
-	ACameraManager* Camera = GetCameraManager(World);
 	if (Camera)
 	{
 		Camera->CurrentShakeOffset = RandomOffset;

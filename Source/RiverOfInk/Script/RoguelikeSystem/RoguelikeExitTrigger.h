@@ -8,6 +8,7 @@
 #include "RoguelikeExitTrigger.generated.h"
 
 class USphereComponent;
+class USceneComponent;
 class UStaticMeshComponent;
 class APlayerCharacter;
 class ARoguelikeRewardManager;
@@ -29,6 +30,13 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Exit")
 	TObjectPtr<USphereComponent> TriggerSphere;
+
+	/** Camera focus point for the post-reward exit guide; has no collision or gameplay behavior. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Exit|Camera")
+	TObjectPtr<USceneComponent> GuideFocusPoint;
+
+	UFUNCTION(BlueprintPure, Category = "Exit|Camera")
+	FVector GetGuideFocusLocation() const;
 
 	/** 传送门检测半径（球形检测范围） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Exit", meta = (ClampMin = "10.0"))
