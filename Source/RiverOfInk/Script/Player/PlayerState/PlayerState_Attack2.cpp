@@ -34,21 +34,8 @@ void UPlayerState_Attack2::OnEnter_Implementation()
 	// 播放攻击动画
 	Player->BeginAttack();
 
-	// 旋转朝向鼠标方向（仅 Yaw）
-	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-	{
-		FHitResult Hit;
-		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
-		if (Hit.bBlockingHit)
-		{
-			FVector ToTarget = Hit.Location - Player->GetActorLocation();
-			ToTarget.Z = 0.0f;
-			if (!ToTarget.IsNearlyZero())
-			{
-				Player->SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
-			}
-		}
-	}
+	// 朝向：手柄右摇杆优先，无摇杆输入时回到鼠标光标（见 APlayerCharacter::FaceAimDirection）
+	Player->FaceAimDirection();
 
 	// 生成沿玩家朝向移动的球形弹幕；Hitbox 与蓝图中的火球 VFX 由同一个 Actor 驱动。
 	if (Player->Attack2AreaClass)

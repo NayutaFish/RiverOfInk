@@ -93,9 +93,85 @@ void UPlayerInputComponent::ValidateInputAssets() const
 		TEXT("Player action input assets are missing."));
 }
 
+void UPlayerInputComponent::MapGamepadKey(
+	UInputMappingContext* Context,
+	UInputAction* Action,
+	const FKey& Key)
+{
+	if (!Context || !Action || !Key.IsValid())
+	{
+		return;
+	}
+
+	// 同一条动作 + 同一个键重复映射会让轴值翻倍，所以先查重再挂。
+	for (const FEnhancedActionKeyMapping& Existing : Context->GetMappings())
+	{
+		if (Existing.Action == Action && Existing.Key == Key)
+		{
+			return;
+		}
+	}
+
+	Context->MapKey(Action, Key);
+}
+
+void UPlayerInputComponent::BuildGamepadMappingContext()
+{
+	if (!bEnableGamepadInput)
+	{
+		GamepadMappingContext = nullptr;
+		return;
+	}
+
+	// 临时对象：不写进 IMC_Player 资产（避免把编辑器资产改脏），也不需要额外 cook，
+	// 打包后一定存在——键位在编辑器里通过上面的 UPROPERTY 覆盖。
+	if (!GamepadMappingContext)
+	{
+		GamepadMappingContext = NewObject<UInputMappingContext>(
+			this, TEXT("IMC_Player_Gamepad"), RF_Transient);
+	}
+
+	if (!AimXAction)
+	{
+		AimXAction = NewObject<UInputAction>(this, TEXT("IA_Player_GamepadAimX"), RF_Transient);
+		AimXAction->ValueType = EInputActionValueType::Axis1D;
+	}
+	if (!AimYAction)
+	{
+		AimYAction = NewObject<UInputAction>(this, TEXT("IA_Player_GamepadAimY"), RF_Transient);
+		AimYAction->ValueType = EInputActionValueType::Axis1D;
+	}
+
+	// 左摇杆 → 移动（复用 WSAD 已有的动作，整条移动管线不用改）
+	MapGamepadKey(GamepadMappingContext, MoveXAction, GamepadMoveXKey);
+	MapGamepadKey(GamepadMappingContext, MoveYAction, GamepadMoveYKey);
+
+	// 右摇杆 → 攻击朝向（独立动作，不参与移动）
+	MapGamepadKey(GamepadMappingContext, AimXAction, GamepadAimXKey);
+	MapGamepadKey(GamepadMappingContext, AimYAction, GamepadAimYKey);
+
+	// 扳机 / 肩键 / 面键 → 已有的战斗动作
+	MapGamepadKey(GamepadMappingContext, LmbAction, GamepadAttackKey);      // 右扳机 = 左键普攻
+	MapGamepadKey(GamepadMappingContext, RmbAction, GamepadSecondaryKey);   // 西键 = 右键特攻
+	MapGamepadKey(GamepadMappingContext, QAction, GamepadSkill1Key);        // 左肩键 = Q 法术
+	MapGamepadKey(GamepadMappingContext, EAction, GamepadSkill2Key);        // 右肩键 = E 斩击
+	MapGamepadKey(GamepadMappingContext, SpaceAction, GamepadDashKey);      // 左扳机 = 冲刺
+
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("Gamepad mapping ready: Context=%s Move=(%s,%s) Aim=(%s,%s) Attack=%s Secondary=%s Skill1=%s Skill2=%s Dash=%s."),
+		*GetNameSafe(GamepadMappingContext),
+		*GamepadMoveXKey.ToString(), *GamepadMoveYKey.ToString(),
+		*GamepadAimXKey.ToString(), *GamepadAimYKey.ToString(),
+		*GamepadAttackKey.ToString(), *GamepadSecondaryKey.ToString(),
+		*GamepadSkill1Key.ToString(), *GamepadSkill2Key.ToString(),
+		*GamepadDashKey.ToString());
+}
+
 void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* EnhancedInput, APlayerController* PC)
 {
 	if (!EnhancedInput || !PC || bInputSetup) return;
+
+	CachedPlayerController = PC;
 
 	LoadInputAssets();
 	ValidateInputAssets();
@@ -104,6 +180,9 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 	{
 		return;
 	}
+
+	// 先把手柄上下文和右摇杆动作准备好（没有本地玩家时也不会拿到空动作）。
+	BuildGamepadMappingContext();
 
 	// ── 注册 Mapping Context 到子系统 ──
 	if (ULocalPlayer* LocalPlayer = PC->GetLocalPlayer())
@@ -117,6 +196,13 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 				Subsystem->RemoveMappingContext(LegacyContext);
 			}
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+
+			// 手柄映射单独一个上下文：手柄键和键鼠键不同，所以两边互不覆盖，
+			// 动的只是同一条 InputAction（左摇杆并入移动、扳机并入普攻/特攻）。
+			if (GamepadMappingContext)
+			{
+				Subsystem->AddMappingContext(GamepadMappingContext, 0);
+			}
 		}
 	}
 
@@ -126,6 +212,15 @@ void UPlayerInputComponent::SetupEnhancedInput(UEnhancedInputComponent* Enhanced
 	EnhancedInput->BindAction(MoveXAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnMoveX);
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnMoveY);
 	EnhancedInput->BindAction(MoveYAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnMoveY);
+
+	// 右摇杆瞄准（手柄专用动作；Completed 时归零，避免松杆后朝向还在飘）
+	if (AimXAction && AimYAction)
+	{
+		EnhancedInput->BindAction(AimXAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnAimX);
+		EnhancedInput->BindAction(AimXAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnAimX);
+		EnhancedInput->BindAction(AimYAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnAimY);
+		EnhancedInput->BindAction(AimYAction, ETriggerEvent::Completed, this, &UPlayerInputComponent::OnAimY);
+	}
 
 	// 疾跑（Shift 按住）：Triggered 持续触发、Completed 松开时广播 0。
 	EnhancedInput->BindAction(ShiftAction, ETriggerEvent::Triggered, this, &UPlayerInputComponent::OnShift);
@@ -257,6 +352,112 @@ void UPlayerInputComponent::OnShift(const FInputActionValue& Value)
 {
 	CurrentShiftValue = Value.Get<float>();
 	OnShiftDelegate.Broadcast(CurrentShiftValue);
+}
+
+// ──────────────────────────────
+// 手柄：右摇杆瞄准
+// ──────────────────────────────
+
+void UPlayerInputComponent::OnAimX(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	CurrentAimX = FMath::Abs(Raw) < AimAxisDeadZone ? 0.0f : Raw;
+}
+
+void UPlayerInputComponent::OnAimY(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	CurrentAimY = FMath::Abs(Raw) < AimAxisDeadZone ? 0.0f : Raw;
+}
+
+bool UPlayerInputComponent::HasGamepadAimInput() const
+{
+	return bEnableGamepadInput
+		&& (!FMath::IsNearlyZero(CurrentAimX) || !FMath::IsNearlyZero(CurrentAimY));
+}
+
+bool UPlayerInputComponent::IsGamepadInputActive() const
+{
+	if (!bEnableGamepadInput)
+	{
+		return false;
+	}
+
+	const APlayerController* PC = CachedPlayerController.Get();
+	if (!PC)
+	{
+		return false;
+	}
+
+	// 按钮类（扳机 / 肩键 / 面键 / 十字键）：直接查按下状态
+	const FKey ButtonKeys[] =
+	{
+		GamepadAttackKey,
+		GamepadSecondaryKey,
+		GamepadSkill1Key,
+		GamepadSkill2Key,
+		GamepadDashKey,
+		EKeys::Gamepad_DPad_Up,
+		EKeys::Gamepad_DPad_Down,
+		EKeys::Gamepad_DPad_Left,
+		EKeys::Gamepad_DPad_Right,
+		EKeys::Gamepad_FaceButton_Bottom,
+		EKeys::Gamepad_FaceButton_Right,
+		EKeys::Gamepad_FaceButton_Left,
+		EKeys::Gamepad_FaceButton_Top,
+		EKeys::Gamepad_LeftShoulder,
+		EKeys::Gamepad_RightShoulder,
+	};
+	for (const FKey& Key : ButtonKeys)
+	{
+		if (PC->IsInputKeyDown(Key))
+		{
+			return true;
+		}
+	}
+
+	// 摇杆 / 扳机是轴键，用模拟量再确认一次（阈值和移动死区一致）。
+	const float AnalogThreshold = FMath::Max(MoveAxisDeadZone, 0.2f);
+	const FKey AnalogKeys[] =
+	{
+		GamepadMoveXKey,
+		GamepadMoveYKey,
+		GamepadAimXKey,
+		GamepadAimYKey,
+		GamepadAttackKey,
+		GamepadSecondaryKey,
+		GamepadDashKey,
+	};
+	for (const FKey& Key : AnalogKeys)
+	{
+		if (FMath::Abs(PC->GetInputAnalogKeyState(Key)) > AnalogThreshold)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UPlayerInputComponent::GetGamepadAimWorldDirection(FVector& OutDirection) const
+{
+	if (!HasGamepadAimInput())
+	{
+		return false;
+	}
+
+	// 与 GetMoveWorldDirection 用同一套固定等距映射：摇杆向右 = 屏幕右，摇杆向上 = 屏幕上。
+	const FVector XDir = (FVector::RightVector - FVector::ForwardVector).GetSafeNormal();
+	const FVector YDir = (FVector::ForwardVector + FVector::RightVector).GetSafeNormal();
+
+	FVector Direction = XDir * CurrentAimX + YDir * CurrentAimY;
+	if (Direction.SizeSquared() <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	OutDirection = Direction.GetSafeNormal();
+	return true;
 }
 
 // ──────────────────────────────

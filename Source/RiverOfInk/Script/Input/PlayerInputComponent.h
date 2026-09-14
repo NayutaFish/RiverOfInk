@@ -9,6 +9,8 @@
 
 class UInputAction;
 class UInputMappingContext;
+class UEnhancedInputComponent;
+class APlayerController;
 
 // ── 输入事件委托（多播，供角色订阅） ──
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnPlayerInputAxis, float);
@@ -90,6 +92,24 @@ public:
 	 */
 	FVector GetMoveWorldDirection() const;
 
+	// ── 手柄（右摇杆瞄准）──
+
+	/**
+	 * 右摇杆推杆方向换算出的世界方向（与移动同一套等距映射：右=屏幕右）。
+	 * 摇杆在死区内（或手柄输入被关闭）时返回 false，调用方应回退到鼠标光标逻辑。
+	 */
+	bool GetGamepadAimWorldDirection(FVector& OutDirection) const;
+
+	/** 右摇杆当前是否超过瞄准死区（用于区分“按住摇杆瞄准”与“松开摇杆保持朝向”）。 */
+	bool HasGamepadAimInput() const;
+
+	/**
+	 * 玩家现在是不是在用手柄：任意一个手柄键 / 摇杆 / 扳机处于按下或推动状态。
+	 * 攻击瞬间用它决定朝向规则——手柄：右摇杆 > 左摇杆（移动方向）> 保持当前朝向，不读鼠标光标；
+	 * 键鼠：仍然读鼠标光标。
+	 */
+	bool IsGamepadInputActive() const;
+
 	// ── 委托实例 ──
 	FOnPlayerInputAxis OnMoveXDelegate;
 	FOnPlayerInputAxis OnMoveYDelegate;
@@ -107,9 +127,80 @@ protected:
 	void ValidateInputAssets() const;
 	bool bInputSetup = false;
 
+	// ── 手柄映射（键位可在编辑器覆盖）──
+	//
+	// 手柄映射在运行时用临时 InputMappingContext 组装（见 BuildGamepadMappingContext），
+	// 不往 IMC_Player 内容资产里写数据，所以打包后也一定存在，也不会把编辑器资产改脏。
+
+	/** 关闭后完全不注册手柄映射（保留纯键鼠调试）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	bool bEnableGamepadInput = true;
+
+	/** 左摇杆 → 移动（与 WASD 同一条轴，共用原有移动管线）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadMoveXKey = EKeys::Gamepad_LeftX;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadMoveYKey = EKeys::Gamepad_LeftY;
+
+	/** 右摇杆 → 攻击朝向。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadAimXKey = EKeys::Gamepad_RightX;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadAimYKey = EKeys::Gamepad_RightY;
+
+	/** 右扳机 → 左键普攻（IA_Player_Attack）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadAttackKey = EKeys::Gamepad_RightTrigger;
+
+	/** 西键（Xbox X）→ 右键特攻（IA_Player_Secondary）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadSecondaryKey = EKeys::Gamepad_FaceButton_Left;
+
+	/** 左扳机 → 冲刺（IA_Player_Dash，等同 Space）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadDashKey = EKeys::Gamepad_LeftTrigger;
+
+	/** 左肩键 → Q 法术（IA_Player_Skill1）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadSkill1Key = EKeys::Gamepad_LeftShoulder;
+
+	/** 右肩键 → E 斩击（IA_Player_Skill2）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad")
+	FKey GamepadSkill2Key = EKeys::Gamepad_RightShoulder;
+
+	/** 右摇杆瞄准死区（摇杆漂移不会改变朝向）。 */
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.0", ClampMax = "0.9"))
+	float AimAxisDeadZone = 0.3f;
+
+	/** 右摇杆瞄准轴：手柄专用，运行时创建的临时 InputAction。 */
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> AimXAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> AimYAction;
+
+	/** 运行时组装的手柄映射上下文（左摇杆/右摇杆/扳机/肩键）。 */
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> GamepadMappingContext;
+
+	/** 组装上面那个上下文，并把里面的键位挂到已有动作上。 */
+	void BuildGamepadMappingContext();
+
+	/** 给上下文加一条映射；键无效或动作为空时跳过。 */
+	void MapGamepadKey(UInputMappingContext* Context, UInputAction* Action, const FKey& Key);
+
 	/** 缓存的移动输入轴值（OnMoveX/OnMoveY 持续刷新），供 GetMoveWorldDirection 等按需查询。 */
 	float CurrentMoveX = 0.0f;
 	float CurrentMoveY = 0.0f;
+
+	/** 缓存的右摇杆轴值（OnAimX/OnAimY 持续刷新）。 */
+	float CurrentAimX = 0.0f;
+	float CurrentAimY = 0.0f;
+
+	/** 建立输入时缓存的本地 PlayerController，供 IsGamepadInputActive 查按键状态。 */
+	TWeakObjectPtr<APlayerController> CachedPlayerController;
 
 	/** 缓存的疾跑键轴值（OnShift 持续刷新）。 */
 	float CurrentShiftValue = 0.0f;
@@ -162,6 +253,8 @@ protected:
 	void OnMoveX(const FInputActionValue& Value);
 	void OnMoveY(const FInputActionValue& Value);
 	void OnShift(const FInputActionValue& Value);
+	void OnAimX(const FInputActionValue& Value);
+	void OnAimY(const FInputActionValue& Value);
 
 	// ── 动作回调 ──
 	void OnLmb();

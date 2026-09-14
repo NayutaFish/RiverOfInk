@@ -511,6 +511,48 @@ void APlayerCharacter::Tick(float DeltaTime)
 	}
 }
 
+void APlayerCharacter::FaceAimDirection()
+{
+	UPlayerInputComponent* InputComp = FindComponentByClass<UPlayerInputComponent>();
+
+	// 手柄操作：右摇杆 > 左摇杆（移动方向）> 保持当前朝向，全程不看鼠标光标
+	if (InputComp && InputComp->IsGamepadInputActive())
+	{
+		FVector AimDirection;
+		if (InputComp->GetGamepadAimWorldDirection(AimDirection))
+		{
+			// 1) 右摇杆正在推 → 朝摇杆方向
+			SetActorRotation(FRotator(0.0f, AimDirection.Rotation().Yaw, 0.0f));
+		}
+		else
+		{
+			// 2) 右摇杆没输入 → 用左摇杆的移动方向；左摇杆也没推 → 保持当前朝向
+			const FVector MoveDirection = InputComp->GetMoveWorldDirection();
+			if (!MoveDirection.IsNearlyZero())
+			{
+				SetActorRotation(FRotator(0.0f, MoveDirection.Rotation().Yaw, 0.0f));
+			}
+		}
+		return;
+	}
+
+	// 键鼠：沿用鼠标光标朝向
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		FHitResult Hit;
+		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
+		if (Hit.bBlockingHit)
+		{
+			FVector ToTarget = Hit.Location - GetActorLocation();
+			ToTarget.Z = 0.0f;
+			if (!ToTarget.IsNearlyZero())
+			{
+				SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
+			}
+		}
+	}
+}
+
 bool APlayerCharacter::IsDead() const
 {
 	return HealthComponent ? HealthComponent->IsDead() : bIsDead;
@@ -800,6 +842,16 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		PlayerInputComponent->BindKey(
 			ShopInteractionKey,
+			IE_Pressed,
+			this,
+			&APlayerCharacter::TryInteractWithShop);
+	}
+	// 手柄交互键（默认 A）：商店界面打开时输入模式是 UIOnly，这条绑定不会触发，
+	// 所以不会和“A 购买商品 / 选中增益”重复响应。
+	if (PlayerInputComponent && ShopInteractionGamepadKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(
+			ShopInteractionGamepadKey,
 			IE_Pressed,
 			this,
 			&APlayerCharacter::TryInteractWithShop);

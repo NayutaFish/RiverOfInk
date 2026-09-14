@@ -513,20 +513,8 @@ void UPlayerState_Attack1::FaceAttackDirection()
 		return;
 	}
 
-	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-	{
-		FHitResult Hit;
-		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
-		if (Hit.bBlockingHit)
-		{
-			FVector ToTarget = Hit.Location - Player->GetActorLocation();
-			ToTarget.Z = 0.0f;
-			if (!ToTarget.IsNearlyZero())
-			{
-				Player->SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
-			}
-		}
-	}
+	// 手柄右摇杆优先，其次鼠标光标；具体规则见 APlayerCharacter::FaceAimDirection。
+	Player->FaceAimDirection();
 }
 
 void UPlayerState_Attack1::SwitchAfterAttack()

@@ -169,6 +169,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Interaction")
 	void TryInteractWithShop();
 
+	/**
+	 * 让角色朝向“当前瞄准方向”，仅改 Yaw：
+	 * 手柄操作中（任意手柄键/摇杆按下）→ 右摇杆方向 > 左摇杆移动方向 > 保持当前朝向，不读鼠标光标；
+	 * 否则（键鼠）→ 鼠标光标方向。
+	 * 供普攻 / 特攻 / Q / E 四个攻击状态进入时调用，保证四条路径的手柄朝向一致。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Player|Aim")
+	void FaceAimDirection();
+
 	FText GetShopInteractionKeyLabel() const;
 
 	// ── 状态机 ──
@@ -276,6 +285,10 @@ protected:
 	/** Default Shop interaction key. Kept local to player input so the first UI slice needs no new input asset. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Interaction")
 	FKey ShopInteractionKey = EKeys::J;
+
+	/** 手柄交互键（默认 Xbox A / 南键）：与商人交互打开商店界面。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Interaction")
+	FKey ShopInteractionGamepadKey = EKeys::Gamepad_FaceButton_Bottom;
 
 	/** 调试回血键（默认 H）：按下后走 UPlayerCheatCommands::HealPlayer（默认回 500）。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Cheat")

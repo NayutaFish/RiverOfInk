@@ -17,6 +17,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 #include "RoguelikeSystem/RoguelikeRewardOptionWidget.h"
 #include "TimerManager.h"
@@ -83,6 +84,106 @@ void URoguelikeRewardWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
+FReply URoguelikeRewardWidget::NativeOnPreviewKeyDown(
+	const FGeometry& InGeometry,
+	const FKeyEvent& InKeyEvent)
+{
+	// 预览阶段先吃掉导航键：奖励卡的按钮也是 UButton，
+	// 否则 Slate 会先拿 DPad/方向键自己挪一次焦点，动效就跟高亮对不上了。
+	if (HandleNavigationKey(InKeyEvent.GetKey()))
+	{
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply URoguelikeRewardWidget::NativeOnKeyDown(
+	const FGeometry& InGeometry,
+	const FKeyEvent& InKeyEvent)
+{
+	if (HandleNavigationKey(InKeyEvent.GetKey()))
+	{
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+bool URoguelikeRewardWidget::HandleNavigationKey(const FKey& Key)
+{
+	if (!bEnableGamepadNavigation)
+	{
+		return false;
+	}
+
+	// 十字键左右选择增益（键盘方向键顺手一起支持）
+	if (Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Left)
+	{
+		MoveHighlight(-1);
+		return true;
+	}
+	if (Key == EKeys::Gamepad_DPad_Right || Key == EKeys::Right)
+	{
+		MoveHighlight(1);
+		return true;
+	}
+
+	// A（南键）/ 回车 / 空格：确认当前高亮的增益
+	if (Key == EKeys::Gamepad_FaceButton_Bottom || Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		ConfirmHighlightedOption();
+		return true;
+	}
+
+	return false;
+}
+
+void URoguelikeRewardWidget::MoveHighlight(int32 Delta)
+{
+	// 宽限期 / 已锁定（正在播选中反馈）时不移动高亮，和鼠标选择保持同一条规则。
+	if (bSelectionLocked || Delta == 0 || OptionWidgets.IsEmpty())
+	{
+		return;
+	}
+
+	const int32 Count = OptionWidgets.Num();
+	const int32 Next = HighlightedOptionIndex == INDEX_NONE
+		? (Delta > 0 ? 0 : Count - 1)
+		: (HighlightedOptionIndex + Delta + Count) % Count;
+
+	ApplyHighlight(Next);
+}
+
+void URoguelikeRewardWidget::ApplyHighlight(int32 OptionIndex)
+{
+	if (!OptionWidgets.IsValidIndex(OptionIndex) || !OptionWidgets[OptionIndex])
+	{
+		return;
+	}
+
+	HighlightedOptionIndex = OptionIndex;
+
+	// 动效直接复用悬停那一套（卡片放大 + 墨迹/分隔线显影），
+	// 这样手柄选和高亮和鼠标悬停看起来是同一种反馈。
+	HandleOptionHovered(OptionIndex);
+
+	// 焦点跟着高亮走：Slate 的默认“确认”也落在同一张卡上。
+	OptionWidgets[OptionIndex]->FocusOption();
+
+	UE_LOG(LogRoguelike, Verbose,
+		TEXT("Reward highlight moved: Option=%d/%d."),
+		OptionIndex,
+		OptionWidgets.Num());
+}
+
+void URoguelikeRewardWidget::ConfirmHighlightedOption()
+{
+	// 没用十字键选过就直接确认第一张（和 FocusFirstOption 的初始焦点一致）。
+	const int32 OptionIndex = HighlightedOptionIndex != INDEX_NONE ? HighlightedOptionIndex : 0;
+	SelectOption(OptionIndex);
+}
+
 void URoguelikeRewardWidget::SetupRewardOptions(
 	ARoguelikeRewardManager* InRewardManager,
 	const TArray<FRoguelikeRewardOption>& InOptions)
@@ -90,6 +191,8 @@ void URoguelikeRewardWidget::SetupRewardOptions(
 	RewardManager = InRewardManager;
 	RewardOptions = InOptions;
 	bSelectionLocked = false;
+	// 每次开界面都从“没选过”开始，第一次按十字键会落到第一张（左键落到最后一张）。
+	HighlightedOptionIndex = INDEX_NONE;
 	BuildDefaultWidgetTree();
 	ConfigureWidgetTree();
 	OnRewardOptionsSet(RewardOptions);

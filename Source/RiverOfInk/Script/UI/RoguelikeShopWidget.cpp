@@ -20,9 +20,11 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "RoguelikeSystem/RoguelikeEconomySubsystem.h"
 #include "RoguelikeSystem/RoguelikeShopManager.h"
+#include "TimerManager.h"
 
 namespace
 {
@@ -81,21 +83,166 @@ void URoguelikeShopWidget::NativeConstruct()
 void URoguelikeShopWidget::NativeDestruct()
 {
 	UnbindShopEvents();
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(OfferSelectionPulseTimer);
+	}
+	OfferSelectionPulseIndex = INDEX_NONE;
 	Super::NativeDestruct();
+}
+
+FReply URoguelikeShopWidget::NativeOnPreviewKeyDown(
+	const FGeometry& InGeometry,
+	const FKeyEvent& InKeyEvent)
+{
+	// 预览阶段先吃掉导航键：商品行本身是 UButton，
+	// 否则 Slate 会先拿 DPad/上下键自己挪一次焦点，动效就跟选中行对不上了。
+	if (HandleNavigationKey(InKeyEvent.GetKey()))
+	{
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
 FReply URoguelikeShopWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	if (InKeyEvent.GetKey() == EKeys::Escape)
+	if (HandleNavigationKey(InKeyEvent.GetKey()))
 	{
-		if (ObservedShopManager)
-		{
-			ObservedShopManager->CloseShop();
-		}
 		return FReply::Handled();
 	}
 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+bool URoguelikeShopWidget::HandleNavigationKey(const FKey& Key)
+{
+	// 十字键上下选择商品（键盘 W/S、方向键同样可用）
+	if (Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Up || Key == EKeys::W)
+	{
+		return MoveOfferSelection(-1);
+	}
+	if (Key == EKeys::Gamepad_DPad_Down || Key == EKeys::Down || Key == EKeys::S)
+	{
+		return MoveOfferSelection(1);
+	}
+
+	// A（南键）/ 回车 / 空格：购买当前选中的商品
+	if (Key == EKeys::Gamepad_FaceButton_Bottom || Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		TryPurchaseSelected();
+		return true;
+	}
+
+	// B（东键）/ Esc：退出商店界面
+	if (Key == EKeys::Gamepad_FaceButton_Right || Key == EKeys::Escape)
+	{
+		HandleCloseShop();
+		return true;
+	}
+
+	return false;
+}
+
+bool URoguelikeShopWidget::IsOfferSelectable(int32 SlotIndex) const
+{
+	return DisplayedItemIds.IsValidIndex(SlotIndex)
+		&& !DisplayedItemIds[SlotIndex].IsNone()
+		&& OfferRowButtons.IsValidIndex(SlotIndex)
+		&& OfferRowButtons[SlotIndex]
+		&& OfferRowButtons[SlotIndex]->GetIsEnabled();
+}
+
+bool URoguelikeShopWidget::MoveOfferSelection(int32 Delta)
+{
+	if (Delta == 0 || DisplayedItemIds.IsEmpty())
+	{
+		// 没有可选项时也吃掉按键，否则 DPad 会被 Slate 拿去挪焦点。
+		return true;
+	}
+
+	int32 Index = DisplayedItemIds.IsValidIndex(SelectedOfferIndex)
+		? SelectedOfferIndex + Delta
+		: (Delta > 0 ? 0 : DisplayedItemIds.Num() - 1);
+
+	for (; DisplayedItemIds.IsValidIndex(Index); Index += Delta)
+	{
+		if (!IsOfferSelectable(Index))
+		{
+			continue;
+		}
+
+		SelectOffer(Index);
+		PlayOfferSelectionPulse(Index);
+		if (OfferRowButtons.IsValidIndex(Index) && OfferRowButtons[Index])
+		{
+			// 焦点跟着选中行走，Slate 自带的“确认”也落在同一行。
+			OfferRowButtons[Index]->SetKeyboardFocus();
+		}
+		return true;
+	}
+
+	// 到头了：停住，但按键照样吃掉。
+	return true;
+}
+
+void URoguelikeShopWidget::PlayOfferSelectionPulse(int32 SlotIndex)
+{
+	if (!OfferRowCards.IsValidIndex(SlotIndex) || !OfferRowCards[SlotIndex])
+	{
+		return;
+	}
+
+	// 先把上一行的缩放复位，连续按十字键时不会叠出残留。
+	if (OfferRowCards.IsValidIndex(OfferSelectionPulseIndex) && OfferRowCards[OfferSelectionPulseIndex])
+	{
+		OfferRowCards[OfferSelectionPulseIndex]->SetRenderScale(FVector2D(1.0f));
+	}
+
+	OfferSelectionPulseIndex = SlotIndex;
+	OfferSelectionPulseElapsed = 0.0f;
+	OfferRowCards[SlotIndex]->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			OfferSelectionPulseTimer,
+			FTimerDelegate::CreateUObject(this, &URoguelikeShopWidget::HandleOfferSelectionPulseTick),
+			FMath::Max(OfferSelectionPulseStep, KINDA_SMALL_NUMBER),
+			true);
+		HandleOfferSelectionPulseTick();
+	}
+}
+
+void URoguelikeShopWidget::HandleOfferSelectionPulseTick()
+{
+	OfferSelectionPulseElapsed += OfferSelectionPulseStep;
+
+	const float Duration = FMath::Max(OfferSelectionPulseDuration, KINDA_SMALL_NUMBER);
+	const float Alpha = FMath::Clamp(OfferSelectionPulseElapsed / Duration, 0.0f, 1.0f);
+
+	UBorder* RowCard = OfferRowCards.IsValidIndex(OfferSelectionPulseIndex)
+		? OfferRowCards[OfferSelectionPulseIndex]
+		: nullptr;
+	if (RowCard)
+	{
+		// sin 曲线：0 → 峰值 → 回落，短促弹一下
+		const float Curve = FMath::Sin(Alpha * UE_PI);
+		RowCard->SetRenderScale(FVector2D(1.0f + OfferSelectionPulseScale * Curve));
+	}
+
+	if (Alpha >= 1.0f)
+	{
+		if (RowCard)
+		{
+			RowCard->SetRenderScale(FVector2D(1.0f));
+		}
+		OfferSelectionPulseIndex = INDEX_NONE;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(OfferSelectionPulseTimer);
+		}
+	}
 }
 
 void URoguelikeShopWidget::InitializeForShop(ARoguelikeShopManager* InShopManager)

@@ -26,20 +26,8 @@ void UPlayerState_Skill2::OnEnter_Implementation()
 		Input->OnEDelegate.AddUObject(this, &UPlayerState_Skill2::OnE);
 	}
 
-	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-	{
-		FHitResult Hit;
-		PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
-		if (Hit.bBlockingHit)
-		{
-			FVector ToTarget = Hit.Location - Player->GetActorLocation();
-			ToTarget.Z = 0.0f;
-			if (!ToTarget.IsNearlyZero())
-			{
-				Player->SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
-			}
-		}
-	}
+	// 朝向：手柄右摇杆优先，无摇杆输入时回到鼠标光标（见 APlayerCharacter::FaceAimDirection）
+	Player->FaceAimDirection();
 
 	Player->TryCastSkillSlot2();
 	Player->BeginAttack();

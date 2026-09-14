@@ -41,10 +41,16 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
 	static constexpr int32 VisibleOfferCount = 5;
+
+	/** 十字键选中商品时的缩放脉冲时长（秒）、峰值幅度、推进步长。 */
+	static constexpr float OfferSelectionPulseDuration = 0.16f;
+	static constexpr float OfferSelectionPulseScale = 0.05f;
+	static constexpr float OfferSelectionPulseStep = 1.0f / 60.0f;
 
 	void BuildDefaultWidgetTree();
 	void BindShopEvents();
@@ -56,6 +62,27 @@ private:
 	void TryPurchaseSelected();
 	int32 FindFirstSelectableOffer(const TArray<FShopItemDefinition>& Offers) const;
 	void SetFeedbackText(const FText& InText, const FLinearColor& InColor);
+
+	// ── 手柄 / 键盘导航 ──
+
+	/** 识别十字键、上下键、确认键、退出键；已处理返回 true（吃掉事件，避免 Slate 再自己导航一次）。 */
+	bool HandleNavigationKey(const FKey& Key);
+
+	/** 该行现在能不能选（有商品、没售罄、按钮可用）。 */
+	bool IsOfferSelectable(int32 SlotIndex) const;
+
+	/** 上下移动商品选择（跳过售罄/不可用行，到边界就停住）。 */
+	bool MoveOfferSelection(int32 Delta);
+
+	/** 给选中行一个短促的缩放脉冲（纯代码动画，不依赖 Tick）。 */
+	void PlayOfferSelectionPulse(int32 SlotIndex);
+
+	/** 脉冲推进：0 → 峰值 → 1.0，走完把计时器停掉。 */
+	void HandleOfferSelectionPulseTick();
+
+	FTimerHandle OfferSelectionPulseTimer;
+	int32 OfferSelectionPulseIndex = INDEX_NONE;
+	float OfferSelectionPulseElapsed = 0.0f;
 
 	UFUNCTION()
 	void HandleSelectFirst();

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Input/Reply.h"
 #include "Player/Skill/PlayerSkillTypes.h"
 #include "RoguelikeRewardWidget.generated.h"
 
@@ -89,10 +90,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Input", meta = (ClampMin = "0.0", Units = "s"))
 	float InputGracePeriod = 1.2f;
 
+	/**
+	 * 手柄十字键选择增益：左右移动高亮，A（南键）确认当前高亮。
+	 * 关掉后十字键不再作用于奖励卡（其余输入不变）。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward|Input")
+	bool bEnableGamepadNavigation = true;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
 	void BuildDefaultWidgetTree();
@@ -103,6 +113,23 @@ private:
 
 	/** 输入宽限期结束：恢复奖励卡的选择输入。 */
 	void HandleInputGraceFinished();
+
+	// ── 手柄 / 键盘导航 ──
+
+	/** 识别十字键、方向键、确认键；已处理返回 true（吃掉事件，避免 Slate 再自己导航一次焦点）。 */
+	bool HandleNavigationKey(const FKey& Key);
+
+	/** 左右移动高亮（环绕）；Delta 取 ±1。 */
+	void MoveHighlight(int32 Delta);
+
+	/** 把高亮落到指定卡上：复用悬停动效 + 同步 Slate 焦点。 */
+	void ApplyHighlight(int32 OptionIndex);
+
+	/** 确认当前高亮的增益（还没用十字键选过时默认第一张）。 */
+	void ConfirmHighlightedOption();
+
+	/** 十字键当前高亮的卡；INDEX_NONE = 还没用十字键选过。 */
+	int32 HighlightedOptionIndex = INDEX_NONE;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> RootCanvas;
