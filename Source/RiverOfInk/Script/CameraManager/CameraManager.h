@@ -8,6 +8,7 @@
 
 class USpringArmComponent;
 class UCameraComponent;
+class ARoguelikeExitTrigger;
 
 /**
  * 俯视角相机管理器（纯 C++）
@@ -50,6 +51,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	FVector CurrentShakeOffset = FVector::ZeroVector;
 
+	/** Start the reactive post-reward camera guide for one exit. */
+	void StartExitGuide(ARoguelikeExitTrigger* InExitTrigger);
+
+	/** Stop the exit guide and restore the pre-guide camera state. */
+	void StopExitGuide();
+
+	bool IsExitGuideActive() const { return bExitGuideActive; }
 protected:
 	virtual void BeginPlay() override;
 
@@ -68,4 +76,65 @@ protected:
 	/** 俯视摄像机 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> TopDownCameraComponent;
+
+	/** Height above the player actor origin used as the player focus point. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0", Units = "cm"))
+	float ExitGuidePlayerFocusHeight = 80.0f;
+
+	/** 0 keeps the composition on the player; 1 keeps it on the exit. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ExitGuideExitWeight = 0.40f;
+
+	/** Duration of the first blend from the normal camera into the guide composition. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0", Units = "s"))
+	float ExitGuideIntroDuration = 0.80f;
+
+	/** Follow response while the player remains free to move. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0"))
+	float ExitGuideFollowStrength = 16.0f;
+
+	/** Faster response when the camera must zoom out to preserve the safe frame. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0"))
+	float ExitGuideZoomOutStrength = 12.0f;
+
+	/** Slower response when the camera can zoom back in. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0"))
+	float ExitGuideZoomInStrength = 4.0f;
+
+	/** Fraction of the full orthographic width reserved for both targets. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float ExitGuideHorizontalSafeFraction = 0.60f;
+
+	/** Fraction of the full orthographic height reserved for both targets. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float ExitGuideVerticalSafeFraction = 0.70f;
+
+	/** Extra world-space padding on each side of the fitted target bounds. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "0.0", Units = "cm"))
+	float ExitGuideOrthoPadding = 120.0f;
+
+	/** Absolute upper bound for auto-zooming in a very long room. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Exit Guide", meta = (ClampMin = "1.0", Units = "cm"))
+	float ExitGuideMaxOrthoWidth = 3200.0f;
+
+private:
+	void TickExitGuide(float DeltaTime);
+	bool ResolveExitGuideTargets(FVector& OutPlayerFocus, FVector& OutExitFocus) const;
+	float CalculateExitGuideOrthoWidth(
+		const FVector& PlayerFocus,
+		const FVector& ExitFocus,
+		const FVector& CameraCenter) const;
+	float GetCurrentViewAspectRatio() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ARoguelikeExitTrigger> GuideExitTrigger;
+
+	bool bExitGuideActive = false;
+	float ExitGuideElapsed = 0.0f;
+	FVector ExitGuideStartLocation = FVector::ZeroVector;
+	float ExitGuideStartOrthoWidth = 1550.0f;
+	float NormalOrthoWidth = 1550.0f;
+	/** Shake offset already baked into the actor location on the previous camera tick. */
+	FVector AppliedShakeOffset = FVector::ZeroVector;
+
 };

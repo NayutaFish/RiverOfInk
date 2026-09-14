@@ -102,6 +102,8 @@ private:
 	bool ApplyReward(const FRoguelikeRewardOption& Reward);
 	void CloseRewardUI();
 	void FinishRewardSelection();
+	void ShowRewardAfterRoomClearInternal(bool bStartExitGuide);
+	void StartExitGuideCamera();
 	FRoguelikeRewardOption MakeOption(
 		ERoguelikeRewardType RewardType,
 		EPlayerSkillID SkillID,
@@ -130,6 +132,7 @@ private:
 	void FillModifierPreview(FRoguelikeRewardOption& Option) const;
 	void PopulateRewardPresentation(FRoguelikeRewardOption& Option) const;
 	bool bRewardSelectionInProgress = false;
+	bool bRewardSelectionStartsExitGuide = false;
 
 	/** One-shot override consumed by ShowRewardAfterRoomClear for PIE reward tests. */
 	UPROPERTY(Transient)

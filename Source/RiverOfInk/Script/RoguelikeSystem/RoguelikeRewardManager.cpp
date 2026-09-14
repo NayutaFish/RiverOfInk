@@ -3,10 +3,12 @@
 #include "RoguelikeSystem/RoguelikeRewardManager.h"
 
 #include "Blueprint/UserWidget.h"
+#include "CameraManager/CameraManager.h"
 #include "Common/HealthComponent.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/PlayerCharacter.h"
@@ -99,6 +101,12 @@ void ARoguelikeRewardManager::EnsureExitTrigger()
 
 void ARoguelikeRewardManager::ShowRewardAfterRoomClear()
 {
+	ShowRewardAfterRoomClearInternal(true);
+}
+
+void ARoguelikeRewardManager::ShowRewardAfterRoomClearInternal(bool bStartExitGuide)
+{
+	bRewardSelectionStartsExitGuide = bStartExitGuide;
 	if (bRewardShownForRoom || ActiveRewardWidget)
 	{
 		UE_LOG(LogRoguelike, Verbose, TEXT("Reward UI request ignored: already shown for this room."));
@@ -640,6 +648,11 @@ void ARoguelikeRewardManager::FinishRewardSelection()
 
 	const FRoguelikeRewardOption CompletedReward = PendingSelectedReward;
 	CloseRewardUI();
+
+	if (bRewardSelectionStartsExitGuide)
+	{
+		StartExitGuideCamera();
+	}
 	UE_LOG(LogRoguelike, Log, TEXT("Reward UI closed after selection feedback; gameplay input restored."));
 
 	// First persist the finished card event, then let room-flow observers enable
@@ -652,6 +665,7 @@ void ARoguelikeRewardManager::FinishRewardSelection()
 
 	PendingSelectedReward = FRoguelikeRewardOption();
 	bRewardSelectionInProgress = false;
+	bRewardSelectionStartsExitGuide = false;
 }
 
 FString ARoguelikeRewardManager::BuildRewardIdentifier(const FRoguelikeRewardOption& Reward)
@@ -1281,14 +1295,42 @@ bool ARoguelikeRewardManager::ShowRewardChoice(bool bMarkRewardShownForRoom, con
 
 	if (bMarkRewardShownForRoom)
 	{
-		ShowRewardAfterRoomClear();
+		ShowRewardAfterRoomClearInternal(true);
 		return IsValid(ActiveRewardWidget);
 	}
 
 	const bool bPreviousRewardShownForRoom = bRewardShownForRoom;
 	bRewardShownForRoom = false;
-	ShowRewardAfterRoomClear();
+	ShowRewardAfterRoomClearInternal(false);
 	const bool bRewardShown = IsValid(ActiveRewardWidget);
 	bRewardShownForRoom = bPreviousRewardShownForRoom;
 	return bRewardShown;
+}
+void ARoguelikeRewardManager::StartExitGuideCamera()
+{
+	if (!IsValid(ActiveExitTrigger))
+	{
+		UE_LOG(LogRoguelike, Warning,
+			TEXT("Exit guide camera skipped: active exit trigger is unavailable."));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogRoguelike, Warning, TEXT("Exit guide camera skipped: world is unavailable."));
+		return;
+	}
+
+	for (TActorIterator<ACameraManager> It(World); It; ++It)
+	{
+		if (ACameraManager* Camera = *It)
+		{
+			Camera->StartExitGuide(ActiveExitTrigger);
+			return;
+		}
+	}
+
+	UE_LOG(LogRoguelike, Warning,
+		TEXT("Exit guide camera skipped: no ACameraManager exists in the current world."));
 }

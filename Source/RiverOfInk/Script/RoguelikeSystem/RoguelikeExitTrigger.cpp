@@ -2,6 +2,7 @@
 
 #include "RoguelikeSystem/RoguelikeExitTrigger.h"
 
+#include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -29,6 +30,10 @@ ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 	TriggerSphere->SetGenerateOverlapEvents(true);
 	TriggerSphere->ShapeColor = FColor(40, 220, 90, 180);
 
+	GuideFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("GuideFocusPoint"));
+	GuideFocusPoint->SetupAttachment(TriggerSphere);
+	GuideFocusPoint->SetRelativeLocation(FVector::ZeroVector);
+
 	ExitMarkerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExitMarkerMesh"));
 	ExitMarkerMesh->SetupAttachment(TriggerSphere);
 	ExitMarkerMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -50,6 +55,11 @@ ARoguelikeExitTrigger::ARoguelikeExitTrigger()
 	{
 		ExitMarkerMesh->SetMaterial(0, MarkerMaterialAsset.Object);
 	}
+}
+
+FVector ARoguelikeExitTrigger::GetGuideFocusLocation() const
+{
+	return GuideFocusPoint ? GuideFocusPoint->GetComponentLocation() : GetActorLocation();
 }
 
 void ARoguelikeExitTrigger::BeginPlay()
