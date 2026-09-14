@@ -17,7 +17,8 @@ float USettlementDataRecorder::TotalDamageDealtToNonPlayer = 0.0f;
 int32 USettlementDataRecorder::TotalShopCurrencyGained = 0;
 int32 USettlementDataRecorder::ShopPurchaseCount = 0;
 TArray<FSettlementRewardPick> USettlementDataRecorder::RewardPicks;
-bool USettlementDataRecorder::bScreenDebugEnabled = true;
+// 默认关闭屏幕调试打印（左上角那条 [Settlement] 输出）；需要时用 SetScreenDebugEnabled(true) 打开。
+bool USettlementDataRecorder::bScreenDebugEnabled = false;
 bool USettlementDataRecorder::bCollectionFrozen = false;
 
 bool USettlementDataRecorder::bInitialized = false;

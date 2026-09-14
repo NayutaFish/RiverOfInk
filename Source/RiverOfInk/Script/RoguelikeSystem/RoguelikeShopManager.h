@@ -136,6 +136,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UTextRenderComponent> TraderNameplate;
 
+	/**
+	 * 玩家靠近商人时是否显示"按键交互"提示 UI（默认关闭）。
+	 * 关着的时候仍然可以按交互键开店；想恢复提示就在关卡里勾上这个开关。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
+	bool bShowInteractionPrompt = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Roguelike|Shop|Interaction", meta = (AllowPrivateAccess = "true"))
 	FText InteractionPrompt = FText::FromString(TEXT("Talk to the Ink Trader"));
 

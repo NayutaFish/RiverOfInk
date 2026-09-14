@@ -92,3 +92,5 @@ DerivedDataCache/*
 
 # Visual Studio Code C++ cache
 .vscode/ipch/
+
+GamePlay

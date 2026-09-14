@@ -632,6 +632,14 @@ void ARoguelikeShopManager::RegisterPlayerIfAlreadyInsideShopArea()
 
 void ARoguelikeShopManager::ShowInteractionPrompt(APlayerCharacter* InPlayer)
 {
+	// 提示 UI 默认关闭（bShowInteractionPrompt = false）：不创建也不显示，
+	// 但靠近商店后按交互键开店的能力不受影响（那是 NearbyPlayer 那条路径）。
+	if (!bShowInteractionPrompt)
+	{
+		HideInteractionPrompt();
+		return;
+	}
+
 	if (!IsValid(InPlayer) || !InPlayer->IsLocallyControlled())
 	{
 		return;
