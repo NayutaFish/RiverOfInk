@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/GlobalStructs.h"
+#include "CameraManager/CameraShakeTypes.h"
 #include "Common/ProjectileTypes.h"
 #include "PlayerSkill_ThrownGrenade.generated.h"
 
@@ -96,6 +97,9 @@ public:
 	/** Delay between repeated explosions from ExtraExplosion. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade", meta = (ClampMin = "0.0", Units = "s"))
 	float ExplosionDelay = 0.12f;
+	/** Applied once per successful explosion, after final damage is resolved. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Feedback")
+	FAttackHitShakeBinding ExplosionHitShakeBinding;
 
 	/** Development-only debug sphere at the explosion location. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|ThrownGrenade|Debug")

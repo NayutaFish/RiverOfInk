@@ -358,6 +358,8 @@ void UPlayerState_Attack1::BeginActivePhase()
 				}
 
 				ActiveAttackArea->ApplyAttackMultiplierScale(ComboSecondDamageMultiplier);
+				ActiveAttackArea->HitShakeBinding.PresetId = TEXT("Player.HeavyHit");
+				ActiveAttackArea->HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 			}
 
 			// 调试球体直接读取 CollisionSphere，确保观察到的描线与真实 Hitbox 一致。

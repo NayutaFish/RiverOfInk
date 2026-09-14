@@ -13,6 +13,8 @@ AAttackArea_PlayerAttack1::AAttackArea_PlayerAttack1()
 	// Set before BeginPlay so an initial overlap cannot treat the fan as a projectile.
 	bIsMeleeAttack = true;
 	AttackDamageProfile.AttackType = EAttackType::PlayerBasicAttack;
+	HitShakeBinding.PresetId = TEXT("Player.LightHit");
+	HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 	FanHalfAngleDegrees = 55.0f;
 	bDrawDebugHitbox = true;
 	DebugHitboxColor = FColor(60, 220, 255, 220);

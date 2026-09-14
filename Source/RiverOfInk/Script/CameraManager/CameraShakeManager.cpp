@@ -2,6 +2,7 @@
 
 #include "CameraManager/CameraShakeManager.h"
 #include "CameraManager/CameraManager.h"
+#include "CameraManager/CameraShakeSettings.h"
 #include "RiverOfInk.h"
 #include "Core/EventBus.h"
 #include "Core/GameEvents.h"
@@ -21,6 +22,7 @@ TWeakObjectPtr<ACameraManager> FCameraShakeManager::CachedCamera;
 TWeakObjectPtr<UWorld> FCameraShakeManager::ShakeWorld;
 float FCameraShakeManager::ShakeRemaining = 0.0f;
 float FCameraShakeManager::ShakeIntensity = 0.0f;
+double FCameraShakeManager::LastPlayerAttackShakeTime = -1.0e30;
 
 void FCameraShakeManager::EnsureSubscribed()
 {
@@ -55,7 +57,7 @@ void FCameraShakeManager::HandlePlayerTookDirectDamage(const FPlayerTookDirectDa
 	Trigger(World, PlayerHitShakeDuration, PlayerHitShakeIntensity);
 }
 
-void FCameraShakeManager::Trigger(UWorld* InWorld, float Duration, float Intensity)
+void FCameraShakeManager::Trigger(UWorld* InWorld, float Duration, float Intensity, float Scale)
 {
 	if (!InWorld)
 	{
@@ -69,12 +71,19 @@ void FCameraShakeManager::Trigger(UWorld* InWorld, float Duration, float Intensi
 		return;
 	}
 
+	const float ClampedScale = ClampGlobalScale(Scale);
+	const float ScaledIntensity = FMath::Max(0.0f, Intensity) * ClampedScale;
+	if (ScaledIntensity <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
 	// 重置相机引用（新世界或新一局时重新查找）
 	CachedCamera.Reset();
 	ShakeWorld = InWorld;
 
 	ShakeRemaining = Duration;
-	ShakeIntensity = Intensity;
+	ShakeIntensity = ScaledIntensity;
 	bIsShaking = true;
 
 	// 引擎核心 Ticker：真实帧时间，不受世界时间膨胀（顿帧）影响
@@ -84,7 +93,51 @@ void FCameraShakeManager::Trigger(UWorld* InWorld, float Duration, float Intensi
 			FTickerDelegate::CreateStatic(&FCameraShakeManager::OnShakeTick));
 	}
 
-	UE_LOG(LogRiverOfInk, Log, TEXT("CameraShake: Shaking for %.2f s, intensity %.1f."), Duration, Intensity);
+	UE_LOG(LogRiverOfInk, Log,
+		TEXT("CameraShake: Shaking for %.2f s, intensity %.1f, scale %.2f."),
+		Duration,
+		ShakeIntensity,
+		ClampedScale);
+}
+
+bool FCameraShakeManager::TriggerAttackHit(
+	UWorld* InWorld,
+	const FAttackHitShakeBinding& Binding,
+	float FinalDamage)
+{
+	if (!InWorld || !Binding.IsEnabled() || FinalDamage <= 0.0f)
+	{
+		return false;
+	}
+
+	const FCameraShakePreset* Preset = FindAttackHitPreset(Binding.PresetId);
+	if (!Preset)
+	{
+		UE_LOG(LogRiverOfInk, Warning,
+			TEXT("CameraShake: Attack preset '%s' is missing; hit feedback skipped."),
+			*Binding.PresetId.ToString());
+		return false;
+	}
+
+	const UCameraShakeSettings* Settings = GetDefault<UCameraShakeSettings>();
+	const double CurrentTime = FPlatformTime::Seconds();
+	const double GlobalMinimumInterval = Settings
+		? static_cast<double>(FMath::Max(0.0f, Settings->PlayerAttackGlobalMinimumInterval))
+		: 0.0;
+	if (CurrentTime - LastPlayerAttackShakeTime < GlobalMinimumInterval)
+	{
+		return false;
+	}
+
+	const float Scale = ResolveAttackHitScale(Binding, *Preset, FinalDamage);
+	if (Scale <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	Trigger(InWorld, Preset->Duration, Preset->BaseIntensity, Scale);
+	LastPlayerAttackShakeTime = CurrentTime;
+	return true;
 }
 
 bool FCameraShakeManager::OnShakeTick(float DeltaTime)
@@ -168,4 +221,55 @@ ACameraManager* FCameraShakeManager::GetCameraManager(UWorld* World)
 		UE_LOG(LogRiverOfInk, Log, TEXT("CameraShake: CameraManager found: %s"), *Found->GetName());
 	}
 	return Found;
+}
+
+const FCameraShakePreset* FCameraShakeManager::FindAttackHitPreset(FName PresetId)
+{
+	if (PresetId == NAME_None)
+	{
+		return nullptr;
+	}
+
+	const UCameraShakeSettings* Settings = GetDefault<UCameraShakeSettings>();
+	if (!Settings)
+	{
+		return nullptr;
+	}
+
+	return Settings->AttackHitPresets.FindByPredicate(
+		[PresetId](const FCameraShakePreset& Candidate)
+		{
+			return Candidate.PresetId == PresetId;
+		});
+}
+
+float FCameraShakeManager::ResolveAttackHitScale(
+	const FAttackHitShakeBinding& Binding,
+	const FCameraShakePreset& Preset,
+	float FinalDamage)
+{
+	float Scale = 0.0f;
+	if (Binding.ScaleMode == EAttackHitShakeScaleMode::Fixed)
+	{
+		Scale = Binding.FixedScale;
+	}
+	else if (Binding.ScaleMode == EAttackHitShakeScaleMode::DamageFallback)
+	{
+		const FDamageShakeFallbackScale& Rule = Preset.DamageFallback;
+		const float DamageAtMax = FMath::Max(KINDA_SMALL_NUMBER, Rule.DamageAtMaxScale);
+		const float DamageAlpha = FMath::Clamp(FinalDamage / DamageAtMax, 0.0f, 1.0f);
+		const float CurvedAlpha = FMath::Pow(DamageAlpha, FMath::Max(KINDA_SMALL_NUMBER, Rule.CurveExponent));
+		Scale = FMath::Lerp(Rule.MinScale, Rule.MaxScale, CurvedAlpha);
+	}
+
+	return ClampGlobalScale(Scale);
+}
+
+float FCameraShakeManager::ClampGlobalScale(float Scale)
+{
+	const UCameraShakeSettings* Settings = GetDefault<UCameraShakeSettings>();
+	const float GlobalMaxScale = Settings
+		? FMath::Max(0.0f, Settings->GlobalMaxScale)
+		: 1.0f;
+	return FMath::Clamp(Scale, 0.0f, GlobalMaxScale);
 }

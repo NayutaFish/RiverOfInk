@@ -3,6 +3,7 @@
 #include "Player/Skill/PlayerSkill_CircleDamageArea.h"
 
 #include "Common/AttackAreaBase.h"
+#include "CameraManager/CameraShakeManager.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/GlobalStructs.h"
@@ -13,6 +14,7 @@
 #include "Enemy/EnemyBase/EnemyBase.h"
 #include "NiagaraComponent.h"
 #include "Player/Skill/SkillComponent.h"
+#include "Player/PlayerCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 APlayerSkill_CircleDamageArea::APlayerSkill_CircleDamageArea()
@@ -248,6 +250,46 @@ void APlayerSkill_CircleDamageArea::NullifyEnemyProjectilesInRange()
 		NullifiedCount);
 }
 
+void APlayerSkill_CircleDamageArea::TryTriggerPlayerHitShake(const AEnemyBase* Enemy)
+{
+	if (!Enemy || !HitShakeBinding.IsEnabled() || !Cast<APlayerCharacter>(DamageInstigator))
+	{
+		return;
+	}
+
+	const FEnemyDamageResult& DamageResult = Enemy->LastDamageResult;
+	if (!DamageResult.ResolvedDamage.bDamageApplied || DamageResult.FinalDamage <= 0)
+	{
+		return;
+	}
+
+	if (HitShakeBinding.bOnlyTriggerOncePerAttackArea && bHitShakeTriggered)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	if (!HitShakeBinding.bOnlyTriggerOncePerAttackArea
+		&& CurrentTime - LastHitShakeTriggerTime < FMath::Max(0.0f, HitShakeBinding.MinimumInterval))
+	{
+		return;
+	}
+
+	if (FCameraShakeManager::TriggerAttackHit(
+		World,
+		HitShakeBinding,
+		static_cast<float>(DamageResult.FinalDamage)))
+	{
+		bHitShakeTriggered = true;
+		LastHitShakeTriggerTime = CurrentTime;
+	}
+}
 void APlayerSkill_CircleDamageArea::UpdateVisualPlaneScale()
 {
 	if (VisualPlane)
@@ -317,6 +359,7 @@ void APlayerSkill_CircleDamageArea::TryDamageActor(AActor* OtherActor)
 	DamageInfo.bIgnoreInvincible = bIgnoreInvincible;
 
 	Enemy->TakeDamage(DamageInfo);
+	TryTriggerPlayerHitShake(Enemy);
 	OnHitConfirmed.Broadcast(Enemy);
 	UE_LOG(LogSkill, Display, TEXT("Circular Slash Hit Enemy: %s"), *GetNameSafe(Enemy));
 }

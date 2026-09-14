@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/SphereComponent.h"
 #include "Core/GlobalStructs.h"
+#include "CameraManager/CameraShakeTypes.h"
 #include "Common/ProjectileTypes.h"
 #include "AttackAreaBase.generated.h"
 
@@ -57,6 +58,10 @@ public:
 	/** Per-damage-event type and BaseAttackPower conversion profile. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Damage")
 	FAttackDamageProfile AttackDamageProfile;
+
+	/** Optional player-hit camera feedback. Disabled is the default for every attack. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Feedback")
+	FAttackHitShakeBinding HitShakeBinding;
 
 	/** 只伤害敌对目标？
 	 *  true  → 玩家打敌人，敌人打玩家（不会误伤自己人）
@@ -205,12 +210,21 @@ private:
 	/** 扇形角度过滤；CollisionSphere 负责粗筛，最终命中由此函数决定。 */
 	bool IsTargetWithinFanHitbox(const AActor* Target) const;
 
+	/** Sends this player-owned area’s resolved hit through its optional shake binding. */
+	void TryTriggerPlayerHitShake(const class AEnemyBase* Enemy);
+
 	/** 使用 UE 内置 WireframeMaterial 的可视化球体；DrawDebugSphere 负责颜色和高亮。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug|Hitbox", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMeshComponent> DebugHitboxMesh;
 
 	/** Prevent a persistent melee area from resolving its attack more than once. */
 	bool bAttackDamageResolved = false;
+
+	/** Runtime gate: a multi-target attack area normally creates only one shake. */
+	bool bHitShakeTriggered = false;
+
+	/** World time at which this area last successfully requested feedback. */
+	float LastHitShakeTriggerTime = -1000000.0f;
 
 	/** 在出生后延迟指定时间播放的音效（在 BeginPlay 的定时器回调中使用） */
 	UFUNCTION()

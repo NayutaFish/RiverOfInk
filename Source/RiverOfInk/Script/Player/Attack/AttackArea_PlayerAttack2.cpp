@@ -17,6 +17,8 @@ AAttackArea_PlayerAttack2::AAttackArea_PlayerAttack2()
 	bUseFanHitbox = false;
 	bIsMeleeAttack = false;
 	AttackDamageProfile.AttackType = EAttackType::PlayerRightClick;
+	HitShakeBinding.PresetId = TEXT("Player.SkillHit");
+	HitShakeBinding.ScaleMode = EAttackHitShakeScaleMode::DamageFallback;
 	bFollowTargetRotation = false;
 	bDetectObstacle = true;
 	LifeTime = 1.5f;

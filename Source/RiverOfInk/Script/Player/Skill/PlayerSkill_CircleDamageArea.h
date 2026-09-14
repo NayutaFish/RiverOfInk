@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/GlobalEnums.h"
+#include "CameraManager/CameraShakeTypes.h"
 #include "PlayerSkill_CircleDamageArea.generated.h"
 
 class USphereComponent;
@@ -89,6 +90,9 @@ public:
 	/** False only when a dedicated skill form supplies its own VFX. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SkillArea|Visual")
 	bool bUseLegacyCircularSlashVFX = true;
+	/** Optional hit feedback for this E damage area. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SkillArea|Feedback")
+	FAttackHitShakeBinding HitShakeBinding;
 
 protected:
 	virtual void BeginPlay() override;
@@ -108,10 +112,13 @@ private:
 	void DrawDebugFanHitbox() const;
 	void SuppressLegacyCircularSlashVFX();
 	void TryDamageActor(AActor* OtherActor);
+	void TryTriggerPlayerHitShake(const class AEnemyBase* Enemy);
 	void NullifyEnemyProjectilesInRange();
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> DamageInstigator;
 
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+	bool bHitShakeTriggered = false;
+	float LastHitShakeTriggerTime = -1000000.0f;
 };
